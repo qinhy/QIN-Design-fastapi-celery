@@ -1,9 +1,12 @@
+from typing import Dict
+
+from pydantic import BaseModel
 from customs import Fibonacci,FibonacciAction
 
 ######################################### Celery connect to local rabbitmq and mongo backend
 import os
 os.environ.setdefault('CELERY_TASK_SERIALIZER', 'json')
-from fastapi import FastAPI
+from fastapi import Body, FastAPI
 from pymongo import MongoClient
 from celery import Celery
 from celery.app import task as Task
@@ -28,7 +31,22 @@ class CeleryTask:
         """Celery task to calculate the nth Fibonacci number."""
         return FibonacciAction(n)()
     
+    @celery_app.task(bind=True)
+    def perform_action(self: Task, action_name: str, action_data: dict) -> int:
+        """Generic Celery task to execute any registered action."""
+        ACTION_REGISTRY = {'FibonacciAction':(FibonacciAction,Fibonacci)}
+        if action_name not in ACTION_REGISTRY:
+            raise ValueError(f"Action '{action_name}' is not registered.")
+
+        # Initialize the action model and action handler
+        action_class,action_model = ACTION_REGISTRY[action_name]
+        action_instance = action_class(action_model(**action_data))
+        return action_instance()
+    
 ######################################### Create FastAPI app instance
+class PerformAction(BaseModel):
+    name:str
+    data:dict
 
 class RESTapi:
     api = FastAPI()
@@ -42,6 +60,13 @@ class RESTapi:
     def fibonacci(fib_task: Fibonacci):
         """Endpoint to calculate Fibonacci number asynchronously using Celery."""        
         task = CeleryTask.fibonacci.delay(fib_task.model_dump())
+        return {'task_id': task.id}
+
+
+    @api.post("/perform_action/")
+    def perform_action(action: PerformAction=PerformAction(name='FibonacciAction', data=dict(n=10))):
+        """Endpoint to calculate Fibonacci number asynchronously using Celery."""        
+        task = CeleryTask.perform_action.delay(action.name,action.data)
         return {'task_id': task.id}
 
     @staticmethod

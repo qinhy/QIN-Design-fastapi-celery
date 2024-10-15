@@ -30,8 +30,8 @@ class FibonacciAction:
             return b
 
 # Usage example
-if __name__ == "__main__":
-    fib_task = Fibonacci(n=10)
-    action = FibonacciAction(fib_task)
-    result = action()
-    print(f"The 10th Fibonacci number is: {result}")
+# if __name__ == "__main__":
+#     fib_task = Fibonacci(n=10)
+#     action = FibonacciAction(fib_task)
+#     result = action()
+#     print(f"The 10th Fibonacci number is: {result}")
