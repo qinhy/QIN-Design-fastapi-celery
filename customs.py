@@ -1,3 +1,4 @@
+from typing import Any
 from pydantic import BaseModel
 
 class Fibonacci(BaseModel):
@@ -11,6 +12,9 @@ class FibonacciAction:
             model = Fibonacci(**model)
         
         self.fib_task = model
+
+    def __call__(self, *args: Any, **kwds: Any):
+        return self.calculate()
 
     def calculate(self) -> int:
         """Calculates the nth Fibonacci number."""
@@ -29,5 +33,5 @@ class FibonacciAction:
 if __name__ == "__main__":
     fib_task = Fibonacci(n=10)
     action = FibonacciAction(fib_task)
-    result = action.calculate()
+    result = action()
     print(f"The 10th Fibonacci number is: {result}")

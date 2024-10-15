@@ -1,6 +1,5 @@
 from customs import Fibonacci,FibonacciAction
 
-
 ######################################### Celery connect to local rabbitmq and mongo backend
 import os
 os.environ.setdefault('CELERY_TASK_SERIALIZER', 'json')
@@ -16,18 +15,18 @@ celery_broker = 'amqp://localhost'
 celery_app = Celery('tasks', broker = celery_broker, backend = f'{mongo_URL}/{mongo_DB}')
 
 class CeleryTask:
+
     @staticmethod
     @celery_app.task(bind=True)
     def revoke(t:Task, task_id: str):
         """Method to revoke a task."""
-        return CeleryTask.celery_app.control.revoke(task_id, terminate=True)
+        return celery_app.control.revoke(task_id, terminate=True)
 
     @staticmethod
     @celery_app.task(bind=True)
     def fibonacci(t:Task, n: Fibonacci) -> int:
         """Celery task to calculate the nth Fibonacci number."""
-        fib_task = FibonacciAction(n)
-        return fib_task.calculate()
+        return FibonacciAction(n)()
     
 ######################################### Create FastAPI app instance
 
