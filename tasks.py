@@ -65,8 +65,14 @@ class RESTapi:
 
     @api.post("/perform_action/")
     def perform_action(action: PerformAction=PerformAction(name='FibonacciAction', data=dict(n=10))):
-        """Endpoint to calculate Fibonacci number asynchronously using Celery."""        
         task = CeleryTask.perform_action.delay(action.name,action.data)
+        return {'task_id': task.id}
+
+
+    @api.post("/actions/fibonacci")
+    def actions_fibonacci(data: Fibonacci):
+        """Endpoint to calculate Fibonacci number asynchronously using Celery."""  
+        task = CeleryTask.perform_action.delay(PerformAction(name='FibonacciAction', data=data.model_dump()))
         return {'task_id': task.id}
 
     @staticmethod
