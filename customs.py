@@ -4,13 +4,13 @@ class Fibonacci(BaseModel):
     n: int = 1
 
 class FibonacciAction:
-    def __init__(self, fib_task: Fibonacci):
+    def __init__(self, model: Fibonacci):
         
         # Ensure fib_task is a Fibonacci instance, even if a dict is passed
-        if isinstance(fib_task, dict):
-            fib_task = Fibonacci(**fib_task)
+        if isinstance(model, dict):
+            model = Fibonacci(**model)
         
-        self.fib_task = fib_task
+        self.fib_task = model
 
     def calculate(self) -> int:
         """Calculates the nth Fibonacci number."""
