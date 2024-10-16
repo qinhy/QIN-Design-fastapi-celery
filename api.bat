@@ -1,1 +1,1 @@
-uvicorn tasks:RESTapi.api
+uvicorn tasks:CeleryTask.api

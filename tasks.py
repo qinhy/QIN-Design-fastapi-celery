@@ -17,7 +17,17 @@ celery_broker = 'amqp://localhost'
 
 celery_app = Celery('tasks', broker = celery_broker, backend = f'{mongo_URL}/{mongo_DB}')
 
+class PerformAction(BaseModel):
+    name:str
+    data:dict
+    
 class CeleryTask:
+    api = FastAPI()
+    
+    @api.get("/tasks/stop/{task_id}")
+    def api_task_stop(task_id:str):
+        task = CeleryTask.revoke.delay(task_id=task_id)
+        return {'id':task.id}
 
     @staticmethod
     @celery_app.task(bind=True)
@@ -25,63 +35,61 @@ class CeleryTask:
         """Method to revoke a task."""
         return celery_app.control.revoke(task_id, terminate=True)
 
+    ########################### basic function
     @staticmethod
     @celery_app.task(bind=True)
-    def fibonacci(t:Task, n: Fibonacci) -> int:
-        """Celery task to calculate the nth Fibonacci number."""
-        return FibonacciAction(n)()
+    def fibonacci(t:Task, fib_task_model_dump: dict) -> int:
+        """Celery task to calculate the nth Fibonacci number."""        
+        res:int = FibonacciAction(Fibonacci(**fib_task_model_dump))()
+        # make sure that res is dict or other primitive objects for json serialization
+        if not isinstance(res, (int, float, bool, str, list, dict, set, tuple)) and res is not None:
+            raise ValueError('object is not support json serialization')
+        return res
     
+    @api.post("/fibonacci/")
+    def api_fibonacci(fib_task: Fibonacci):
+        task = CeleryTask.fibonacci.delay(fib_task.model_dump())
+        return {'task_id': task.id}
+    
+    ##########################################
     @celery_app.task(bind=True)
     def perform_action(self: Task, action_name: str, action_data: dict) -> int:
         """Generic Celery task to execute any registered action."""
+
         ACTION_REGISTRY = {'FibonacciAction':(FibonacciAction,Fibonacci)}
         if action_name not in ACTION_REGISTRY:
             raise ValueError(f"Action '{action_name}' is not registered.")
 
         # Initialize the action model and action handler
-        action_class,action_model = ACTION_REGISTRY[action_name]
+        action_class, action_model = ACTION_REGISTRY[action_name]
         action_instance = action_class(action_model(**action_data))
-        return action_instance()
-    
-######################################### Create FastAPI app instance
-class PerformAction(BaseModel):
-    name:str
-    data:dict
-
-class RESTapi:
-    api = FastAPI()
-    
-    @api.get("/tasks/stop/{task_id}")
-    def task_stop(task_id:str):
-        task = CeleryTask.revoke.delay(task_id=task_id)
-        return {'id':task.id}    
-
-    @api.post("/fibonacci/")
-    def fibonacci(fib_task: Fibonacci):
-        """Endpoint to calculate Fibonacci number asynchronously using Celery."""        
-        task = CeleryTask.fibonacci.delay(fib_task.model_dump())
-        return {'task_id': task.id}
-
+        res = action_instance()
+        
+        if not isinstance(res, (int, float, bool, str, list, dict, set, tuple)) and res is not None:
+            raise ValueError('object is not support json serialization')
+        
+        return res
 
     @api.post("/perform_action/")
-    def perform_action(action: PerformAction=PerformAction(name='FibonacciAction', data=dict(n=10))):
+    def api_perform_action(action: PerformAction=PerformAction(
+                                    name='FibonacciAction', data=dict(n=10))):
         task = CeleryTask.perform_action.delay(action.name,action.data)
         return {'task_id': task.id}
 
-
     @api.post("/actions/fibonacci")
-    def actions_fibonacci(data: Fibonacci):
+    def api_actions_fibonacci(data: Fibonacci):
         """Endpoint to calculate Fibonacci number asynchronously using Celery."""  
-        task = CeleryTask.perform_action.delay(PerformAction(name='FibonacciAction', data=data.model_dump()))
+        task = CeleryTask.perform_action.delay(PerformAction(
+                                        name='FibonacciAction', data=data.model_dump()))
         return {'task_id': task.id}
 
     @staticmethod
     @api.get("/tasks/status/{task_id}")
-    def task_status(task_id: str):
+    def api_task_status(task_id: str):
         """Endpoint to check the status of a task."""
         client = MongoClient(mongo_URL)
         db = client.get_database(f'{mongo_DB}')
         collection = db.get_collection(f'{celery_META}')
         res = collection.find_one({'_id': task_id})
         if res: del res['_id']
-        return res
+        return res    
