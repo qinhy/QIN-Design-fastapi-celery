@@ -23,28 +23,32 @@ class PerformAction(BaseModel):
     
 class CeleryTask:
     api = FastAPI()
-    
-    @api.get("/tasks/stop/{task_id}")
-    def api_task_stop(task_id:str):
-        task = CeleryTask.revoke.delay(task_id=task_id)
-        return {'id':task.id}
 
+    @staticmethod
+    def is_json_serializable(value) -> bool:
+        res = isinstance(value, (int, float, bool, str,
+                                  list, dict, set, tuple)) or value is None
+        if not res : raise ValueError("Result is not JSON serializable")
+        return value
+    
     @staticmethod
     @celery_app.task(bind=True)
     def revoke(t:Task, task_id: str):
-        """Method to revoke a task."""
         return celery_app.control.revoke(task_id, terminate=True)
 
+    @api.get("/tasks/stop/{task_id}")
+    def api_task_stop(task_id:str):
+        task = CeleryTask.revoke.delay(task_id=task_id)
+        return {'id': task.id}
+        
     ########################### basic function
     @staticmethod
     @celery_app.task(bind=True)
     def fibonacci(t:Task, fib_task_model_dump: dict) -> int:
-        """Celery task to calculate the nth Fibonacci number."""        
+        """Celery task to calculate the nth Fibonacci number."""
         res:int = FibonacciAction(Fibonacci(**fib_task_model_dump))()
         # make sure that res is dict or other primitive objects for json serialization
-        if not isinstance(res, (int, float, bool, str, list, dict, set, tuple)) and res is not None:
-            raise ValueError('object is not support json serialization')
-        return res
+        return CeleryTask.is_json_serializable(res)
     
     @api.post("/fibonacci/")
     def api_fibonacci(fib_task: Fibonacci):
@@ -63,12 +67,8 @@ class CeleryTask:
         # Initialize the action model and action handler
         action_class, action_model = ACTION_REGISTRY[action_name]
         action_instance = action_class(action_model(**action_data))
-        res = action_instance()
-        
-        if not isinstance(res, (int, float, bool, str, list, dict, set, tuple)) and res is not None:
-            raise ValueError('object is not support json serialization')
-        
-        return res
+        res = action_instance()        
+        return CeleryTask.is_json_serializable(res)
 
     @api.post("/perform_action/")
     def api_perform_action(action: PerformAction=PerformAction(
