@@ -1,12 +1,12 @@
 from typing import Dict
 
 from pydantic import BaseModel
-from customs import Fibonacci,FibonacciAction
+from customs import Fibonacci,FibonacciAction, ServiceOrientedArchitecture
 
 ######################################### Celery connect to local rabbitmq and mongo backend
 import os
 os.environ.setdefault('CELERY_TASK_SERIALIZER', 'json')
-from fastapi import Body, FastAPI
+from fastapi import FastAPI
 from pymongo import MongoClient
 from celery import Celery
 from celery.app import task as Task
@@ -46,12 +46,12 @@ class CeleryTask:
     @celery_app.task(bind=True)
     def fibonacci(t:Task, fib_task_model_dump: dict) -> int:
         """Celery task to calculate the nth Fibonacci number."""
-        res:int = FibonacciAction(Fibonacci(**fib_task_model_dump))()
+        res:int = FibonacciAction(Fibonacci.Action(**fib_task_model_dump))()
         # make sure that res is dict or other primitive objects for json serialization
         return CeleryTask.is_json_serializable(res)
     
     @api.post("/fibonacci/")
-    def api_fibonacci(fib_task: Fibonacci):
+    def api_fibonacci(fib_task: Fibonacci.Model):
         task = CeleryTask.fibonacci.delay(fib_task.model_dump())
         return {'task_id': task.id}
     
@@ -60,19 +60,19 @@ class CeleryTask:
     def perform_action(self: Task, action_name: str, action_data: dict) -> int:
         """Generic Celery task to execute any registered action."""
 
-        ACTION_REGISTRY = {'FibonacciAction':(FibonacciAction,Fibonacci)}
+        ACTION_REGISTRY:Dict[str,ServiceOrientedArchitecture] = {'Fibonacci':Fibonacci}
         if action_name not in ACTION_REGISTRY:
             raise ValueError(f"Action '{action_name}' is not registered.")
 
         # Initialize the action model and action handler
-        action_class, action_model = ACTION_REGISTRY[action_name]
-        action_instance = action_class(action_model(**action_data))
-        res = action_instance()        
+        class_space = ACTION_REGISTRY[action_name]
+        action_instance = class_space.Action(class_space.Model(**action_data))
+        res = action_instance().model_dump()      
         return CeleryTask.is_json_serializable(res)
 
     @api.post("/perform_action/")
     def api_perform_action(action: PerformAction=PerformAction(
-                                    name='FibonacciAction', data=dict(n=10))):
+                                    name='Fibonacci', data=dict(n=10))):
         task = CeleryTask.perform_action.delay(action.name,action.data)
         return {'task_id': task.id}
 
@@ -80,7 +80,7 @@ class CeleryTask:
     def api_actions_fibonacci(data: Fibonacci):
         """Endpoint to calculate Fibonacci number asynchronously using Celery."""  
         task = CeleryTask.perform_action.delay(PerformAction(
-                                        name='FibonacciAction', data=data.model_dump()))
+                                        name='Fibonacci', data=data.model_dump()))
         return {'task_id': task.id}
 
     @staticmethod
