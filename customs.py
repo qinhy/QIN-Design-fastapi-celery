@@ -14,33 +14,39 @@ class ServiceOrientedArchitecture:
 class Fibonacci(ServiceOrientedArchitecture):
 
     class Model(BaseModel):
-        n: int = 1
-    class Result(BaseModel):
-        n: int = 1        
+        class Input(BaseModel):
+            n: int = 1
+        class Output(BaseModel):
+            n: int = 1
+
+        args:Input
+        ret:Output = None
     class Action:
         def __init__(self, model):
             # Ensure fib_task is a Fibonacci instance, even if a dict is passed
             if isinstance(model, dict):
-                model = Fibonacci(**model)
+                model = Fibonacci.Model(**model)
             
-            model: Fibonacci.Model = model
-            self.fib_task = model
+            self.model: Fibonacci.Model = model
 
         def __call__(self, *args: Any, **kwds: Any):
             return self.calculate()
 
         def calculate(self):
             """Calculates the nth Fibonacci number."""
-            n = self.fib_task.n
+            n = self.model.Input.n
             if n <= 0:
-                return Fibonacci.Result(n=0)
+                self.model.Output.n = n
+                return self.model
             elif n == 1:
-                return Fibonacci.Result(n=1)
+                self.model.Output.n = n
+                return self.model
             else:
                 a, b = 0, 1
                 for _ in range(2, n + 1):
                     a, b = b, a + b
-                return Fibonacci.Result(n=b)
+                self.model.Output.n = b
+                return self.model
 
 # Usage example
 # if __name__ == "__main__":
