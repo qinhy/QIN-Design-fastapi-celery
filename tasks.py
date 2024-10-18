@@ -72,15 +72,8 @@ class CeleryTask:
 
     @api.post("/action/perform")
     def api_perform_action(action: PerformAction=PerformAction(
-                                    name='Fibonacci', data=dict(n=10))):
+                                    name='Fibonacci', data=dict(args=dict(n=10)))):
         task = CeleryTask.perform_action.delay(action.name,action.data)
-        return {'task_id': task.id}
-
-    @api.post("/actions/fibonacci")
-    def api_actions_fibonacci(data: Fibonacci.Model):
-        """Endpoint to calculate Fibonacci number asynchronously using Celery."""  
-        act = PerformAction(name='Fibonacci', data=data.model_dump())
-        task = CeleryTask.perform_action.delay(**act.model_dump())
         return {'task_id': task.id}
 
     @staticmethod
@@ -93,3 +86,12 @@ class CeleryTask:
         res = collection.find_one({'_id': task_id})
         if res: del res['_id']
         return res    
+
+    ############################# general function specific api
+
+    @api.post("/actions/fibonacci")
+    def api_actions_fibonacci(data: Fibonacci.Model):
+        """Endpoint to calculate Fibonacci number asynchronously using Celery."""  
+        act = PerformAction(name='Fibonacci', data=data.model_dump())
+        task = CeleryTask.perform_action.delay(**act.model_dump())
+        return {'task_id': task.id}
