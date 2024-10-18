@@ -1,7 +1,8 @@
 from typing import Dict
 
+import cv2
 from pydantic import BaseModel
-from customs import Fibonacci, ServiceOrientedArchitecture
+from customs import CvCameraSharedMemoryService, Fibonacci, ServiceOrientedArchitecture
 
 ######################################### Celery connect to local rabbitmq and mongo backend
 import os
@@ -16,10 +17,6 @@ celery_META = 'celery_taskmeta'
 celery_broker = 'amqp://localhost'
 
 celery_app = Celery('tasks', broker = celery_broker, backend = f'{mongo_URL}/{mongo_DB}')
-
-class PerformAction(BaseModel):
-    name:str
-    data:dict
     
 class CeleryTask:
     api = FastAPI()
@@ -57,10 +54,13 @@ class CeleryTask:
     
     ############################# general function
     @celery_app.task(bind=True)
-    def perform_action(self: Task, name: str, data: dict) -> int:
+    def perform_action(t: Task, name: str, data: dict) -> int:
         """Generic Celery task to execute any registered action."""
         action_name,action_data = name,data
-        ACTION_REGISTRY:Dict[str,ServiceOrientedArchitecture] = {'Fibonacci':Fibonacci}
+        ACTION_REGISTRY:Dict[str,ServiceOrientedArchitecture] = {
+            'Fibonacci':Fibonacci,
+            'CvCameraSharedMemoryService':CvCameraSharedMemoryService,
+            }
         if action_name not in ACTION_REGISTRY:
             raise ValueError(f"Action '{action_name}' is not registered.")
 
@@ -71,9 +71,9 @@ class CeleryTask:
         return CeleryTask.is_json_serializable(res)
 
     @api.post("/action/perform")
-    def api_perform_action(action: PerformAction=PerformAction(
+    def api_perform_action(action: dict=dict(
                                     name='Fibonacci', data=dict(args=dict(n=10)))):
-        task = CeleryTask.perform_action.delay(action.name,action.data)
+        task = CeleryTask.perform_action.delay(action['name'],action['data'])
         return {'task_id': task.id}
 
     @staticmethod
@@ -92,6 +92,28 @@ class CeleryTask:
     @api.post("/actions/fibonacci")
     def api_actions_fibonacci(data: Fibonacci.Model):
         """Endpoint to calculate Fibonacci number asynchronously using Celery."""  
-        act = PerformAction(name='Fibonacci', data=data.model_dump())
-        task = CeleryTask.perform_action.delay(**act.model_dump())
+        act = dict(name='Fibonacci', data=data.model_dump())
+        task = CeleryTask.perform_action.delay(**act)
+        return {'task_id': task.id}
+
+    CCModel = CvCameraSharedMemoryService.Model
+
+    @api.post("/actions/camera/write")
+    def api_actions_camera_write(data:dict=dict(param=dict(
+                                    shm_name="camera_0", array_shape=(480, 640)),
+                                args=dict(camera=0))):
+        data['param']['create']=True
+        data['param']['mode']='write'
+        act = dict(name='CvCameraSharedMemoryService', data=data)
+        task = CeleryTask.perform_action.delay(**act)
+        return {'task_id': task.id}
+    
+    @api.post("/actions/camera/read")
+    def api_actions_camera_read(data:dict=dict(param=dict(
+                                    shm_name="camera_0", array_shape=(480, 640)),
+                                args=dict(camera=0))):
+        data['param']['create']=False
+        data['param']['mode']='read'
+        act = dict(name='CvCameraSharedMemoryService', data=data)
+        task = CeleryTask.perform_action.delay(**act)
         return {'task_id': task.id}

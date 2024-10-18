@@ -53,11 +53,19 @@ class Fibonacci(ServiceOrientedArchitecture):
         
 
 
-class CvCameraSharedMemoryWriteService:
+class CvCameraSharedMemoryService:
     class Model(BaseModel):
         
         class Param(NumpyUInt8SharedMemoryIO.Writer):
-            pass
+            mode:str='write'
+
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                if not self.is_write():
+                    self.close()
+            
+            def is_write(self):
+                return self.mode=='write'
 
         class Args(BaseModel):
             camera:int = 0
@@ -73,87 +81,111 @@ class CvCameraSharedMemoryWriteService:
         
         @staticmethod
         def build_ret(camera_service_model):
-            return CvCameraSharedMemoryWriteService.Model.Return(
+            return CvCameraSharedMemoryService.Model.Return(
                 **camera_service_model['param'])
     class Action:
         def __init__(self, model):
             if isinstance(model, dict):
                 nones = [k for k,v in model.items() if v is None]
                 for i in nones:del model[i]
-                model = CvCameraSharedMemoryWriteService.Model(**model)            
-            self.model: CvCameraSharedMemoryWriteService.Model = model
+                model = CvCameraSharedMemoryService.Model(**model)
+            self.model: CvCameraSharedMemoryService.Model = model
         
         def __call__(self, *args, **kwds):
-            # Open the camera using OpenCV
-            cap = cv2.VideoCapture(self.model.args.camera)
-            if not cap.isOpened():
-                raise ValueError(f"Unable to open camera {self.model.args.camera}")
             
-            writer = self.model.param  # Shared memory writer
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    print("Failed to grab frame")
-                    continue
-
-                # Convert the frame to grayscale and resize to match shared memory size
-                gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                resized_frame = cv2.resize(gray_frame, (writer.array_shape[1], writer.array_shape[0]))
-
-                # Write the frame to shared memory
-                writer.write(resized_frame)
-
-                # Display the frame (optional, for debugging)
-                # cv2.imshow('Shared Memory Camera Frame', resized_frame)
-                # if cv2.waitKey(1) & 0xFF == ord('q'):
-                #     break
+            if self.model.param.is_write():
+                # Open the camera using OpenCV
+                cap = cv2.VideoCapture(self.model.args.camera)
+                if not cap.isOpened():
+                    raise ValueError(f"Unable to open camera {self.model.args.camera}")
                 
-            # cap.release()
-            # cv2.destroyAllWindows()
+                writer = self.model.param  # Shared memory writer
+                print("writing")
+                while True:
+                    ret, frame = cap.read()
+                    if not ret:
+                        print("Failed to grab frame")
+                        continue
 
-def camera_writer_process(camera_service_model):    
-    action = CvCameraSharedMemoryWriteService.Action(camera_service_model)
-    action()  # Start capturing and writing to shared memory
+                    # Convert the frame to grayscale and resize to match shared memory size
+                    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    resized_frame = cv2.resize(gray_frame, (writer.array_shape[1], writer.array_shape[0]))
 
-def camera_reader_process(camera_service_model):
-    # Create a reader for the same shared memory used by the writer
-    reader = CvCameraSharedMemoryWriteService.Model.build_ret(camera_service_model)
+                    # Write the frame to shared memory
+                    writer.write(resized_frame)
 
-    while True:
-        # Read the frame from shared memory
-        frame = reader.read()
-        if frame is None:
-            print("No frame read from shared memory.")
-            continue
+                    # Display the frame (optional, for debugging)
+                #     cv2.imshow('Shared Memory Camera Frame', resized_frame)
+                #     if cv2.waitKey(1) & 0xFF == ord('q'):
+                #         break
+                    
+                # cap.release()
+                # cv2.destroyAllWindows()
 
-        # Display the frame
-        cv2.imshow('Shared Memory Reader Frame', frame)
+            else:
+                # reading
+                reader = self.model.build_ret(self.model.model_dump())
+                print("reading")
+                while True:
+                    # Read the frame from shared memory
+                    frame = reader.read()
+                    if frame is None:
+                        print("No frame read from shared memory.")
+                        continue
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+                    # Display the frame
+                    cv2.imshow('Shared Memory Reader Frame', frame)
 
-    cv2.destroyAllWindows()
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        break
+
+                cv2.destroyAllWindows()
+            
+            return self.model
+
+# def camera_writer_process(camera_service_model):    
+#     action = CvCameraSharedMemoryService.Action(camera_service_model)
+#     action()  # Start capturing and writing to shared memory
+
+# def camera_reader_process(camera_service_model):
+#     # Create a reader for the same shared memory used by the writer
+#     reader = CvCameraSharedMemoryService.Model.build_ret(camera_service_model)
+
+#     while True:
+#         # Read the frame from shared memory
+#         frame = reader.read()
+#         if frame is None:
+#             print("No frame read from shared memory.")
+#             continue
+
+#         # Display the frame
+#         cv2.imshow('Shared Memory Reader Frame', frame)
+
+#         if cv2.waitKey(1) & 0xFF == ord('q'):
+#             break
+
+#     cv2.destroyAllWindows()
 
 
-if __name__ == "__main__":
-    CCWS = CvCameraSharedMemoryWriteService
-    camera_service_model = CCWS.Model(
-                            param=CCWS.Model.Param(
-                                shm_name="camera_shm", create=True, array_shape=(480, 640)),
-                            args=CCWS.Model.Args(camera=0)
-                        ).model_dump()
+# if __name__ == "__main__":
+#     CCWS = CvCameraSharedMemoryService
+#     camera_service_model = CCWS.Model(
+#                             param=CCWS.Model.Param(
+#                                 shm_name="camera_shm", create=True, array_shape=(480, 640)),
+#                             args=CCWS.Model.Args(camera=0)
+#                         ).model_dump()
     
-    print(camera_service_model)
+#     print(camera_service_model)
     
-    # Start the writer process in a separate process
-    writer_process = Process(target=camera_writer_process,args=(camera_service_model,))
-    writer_process.start()
+#     # Start the writer process in a separate process
+#     writer_process = Process(target=camera_writer_process,args=(camera_service_model,))
+#     writer_process.start()
 
-    # Allow the writer some time to initialize and start capturing frames
-    time.sleep(2)
+#     # Allow the writer some time to initialize and start capturing frames
+#     time.sleep(2)
 
-    # Start the reader process
-    camera_reader_process(camera_service_model)
+#     # Start the reader process
+#     camera_reader_process(camera_service_model)
 
-    # Wait for the writer process to finish (if needed)
-    writer_process.join()
+#     # Wait for the writer process to finish (if needed)
+#     writer_process.join()
