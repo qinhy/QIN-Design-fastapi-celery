@@ -1,1 +1,2 @@
-uvicorn tasks:CeleryTask.api
+@REM uvicorn tasks:CeleryTask.api
+uvicorn tasksNew:api
