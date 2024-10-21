@@ -1,15 +1,17 @@
 from multiprocessing import Process
+import threading
 import time
 from typing import Any
 import cv2
 import numpy as np
 from pydantic import BaseModel
-from basic import NumpyUInt8SharedMemoryIO, ServiceOrientedArchitecture
+from basic import NumpyUInt8SharedMemoryIO, ServiceOrientedArchitecture, get_tasks_collection
 
 
 class Fibonacci(ServiceOrientedArchitecture):
 
-    class Model(BaseModel):        
+    class Model(BaseModel):
+        task_id:str = 'NULL'
         class Param(BaseModel):
             mode: str = 'fast'
             def is_fast(self):
@@ -55,6 +57,7 @@ class Fibonacci(ServiceOrientedArchitecture):
 
 class CvCameraSharedMemoryService:
     class Model(BaseModel):
+        task_id:str = 'NULL'
         
         class Param(NumpyUInt8SharedMemoryIO.Writer):
             mode:str='write'
@@ -91,8 +94,34 @@ class CvCameraSharedMemoryService:
                 model = CvCameraSharedMemoryService.Model(**model)
             self.model: CvCameraSharedMemoryService.Model = model
         
-        def __call__(self, *args, **kwds):
-            
+        def __call__(self, *args, **kwds):            
+
+            # A shared flag to communicate between threads
+            stop_flag = threading.Event()
+
+            # Function to check if the task should be stopped, running in a separate thread
+            def check_task_status(task_id):
+                collection = get_tasks_collection()
+                
+                while True:
+                    task = collection.find_one({'_id': task_id})
+                    if task:
+                        break
+                    time.sleep(1)
+
+                while not stop_flag.is_set():
+                    task = collection.find_one({'_id': task_id})
+                    if task['status'] == 'REVOKED':
+                        print("Task marked as 'REVOKED', setting stop flag.")
+                        stop_flag.set()
+                        break
+                    time.sleep(1)  # Delay between checks to reduce load on MongoDB
+
+            # Start the status-checking thread
+            status_thread = threading.Thread(target=check_task_status, args=(self.model.task_id,))
+            status_thread.start()
+
+
             if self.model.param.is_write():
                 # Open the camera using OpenCV
                 cap = cv2.VideoCapture(self.model.args.camera)
@@ -101,7 +130,7 @@ class CvCameraSharedMemoryService:
                 
                 writer = self.model.param  # Shared memory writer
                 print("writing")
-                while True:
+                while not stop_flag.is_set():
                     ret, frame = cap.read()
                     if not ret:
                         print("Failed to grab frame")
@@ -126,7 +155,7 @@ class CvCameraSharedMemoryService:
                 # reading
                 reader = self.model.build_ret(self.model.model_dump())
                 print("reading")
-                while True:
+                while not stop_flag.is_set():
                     # Read the frame from shared memory
                     frame = reader.read()
                     if frame is None:

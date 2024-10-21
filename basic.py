@@ -2,6 +2,21 @@
 from multiprocessing import shared_memory
 import numpy as np
 from pydantic import BaseModel, Field
+from pymongo import MongoClient
+
+# Constants
+mongo_URL = 'mongodb://localhost:27017'
+mongo_DB = 'tasks'
+celery_META = 'celery_taskmeta'
+celery_broker = 'amqp://localhost'
+
+# Function to get a document by task_id
+def get_tasks_collection():
+    # Reusable MongoDB client setup
+    client = MongoClient(mongo_URL)
+    db = client.get_database(mongo_DB)
+    collection = db.get_collection(celery_META)
+    return collection#.find_one({'_id': task_id})
 
 
 class CommonIO:
@@ -190,6 +205,7 @@ except Exception as e:
 
 class ServiceOrientedArchitecture:
     class Model(BaseModel):
+        task_id:str = 'NULL'
         class Param(BaseModel):
             pass
         class Args(BaseModel):

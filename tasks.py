@@ -2,6 +2,7 @@ from typing import Dict
 
 import cv2
 from pydantic import BaseModel
+from basic import get_tasks_collection
 from customs import CvCameraSharedMemoryService, Fibonacci, ServiceOrientedArchitecture
 
 ######################################### Celery connect to local rabbitmq and mongo backend
@@ -13,9 +14,7 @@ from celery import Celery
 from celery.app import task as Task
 mongo_URL = 'mongodb://localhost:27017'
 mongo_DB = 'tasks'
-celery_META = 'celery_taskmeta'
 celery_broker = 'amqp://localhost'
-
 celery_app = Celery('tasks', broker = celery_broker, backend = f'{mongo_URL}/{mongo_DB}')
     
 class CeleryTask:
@@ -34,16 +33,30 @@ class CeleryTask:
         return celery_app.control.revoke(task_id, terminate=True)
 
     @api.get("/tasks/stop/{task_id}")
-    def api_task_stop(task_id:str):
-        task = CeleryTask.revoke.delay(task_id=task_id)
-        return {'id': task.id}
+    def api_task_stop(task_id: str):        
+        # task = CeleryTask.revoke.delay(task_id=task_id)
+        # return {'id': task.id}
+    
+        # Update the status in MongoDB
+        collection = get_tasks_collection()
+        # Update the status of the task to 'REVOKED'
+        update_result = collection.update_one({'_id': task_id}, {'$set': {'status': 'REVOKED'}})
+
+        if update_result.matched_count > 0:
+            res = collection.find_one({'_id': task_id})
+        else:
+            res = {'error': 'Task not found'}
+        
+        return res
         
     ########################### basic function
     @staticmethod
     @celery_app.task(bind=True)
     def fibonacci(t:Task, fib_task_model_dump: dict) -> int:
         """Celery task to calculate the nth Fibonacci number."""
-        res:int = Fibonacci.Model(Fibonacci.Action(**fib_task_model_dump))()
+        fib_task_model_dump['task_id']=t.request.id
+        model = Fibonacci.Model(**fib_task_model_dump)
+        res:int = Fibonacci.Action(model)()
         # make sure that res is dict or other primitive objects for json serialization
         return CeleryTask.is_json_serializable(res)
     
@@ -66,7 +79,9 @@ class CeleryTask:
 
         # Initialize the action model and action handler
         class_space = ACTION_REGISTRY[action_name]
-        action_instance = class_space.Action(class_space.Model(**action_data))
+        model_instance = class_space.Model(**action_data)
+        model_instance.task_id = t.request.id
+        action_instance = class_space.Action(model_instance)
         res = action_instance().model_dump()      
         return CeleryTask.is_json_serializable(res)
 
@@ -80,9 +95,7 @@ class CeleryTask:
     @api.get("/tasks/status/{task_id}")
     def api_task_status(task_id: str):
         """Endpoint to check the status of a task."""
-        client = MongoClient(mongo_URL)
-        db = client.get_database(f'{mongo_DB}')
-        collection = db.get_collection(f'{celery_META}')
+        collection = get_tasks_collection()
         res = collection.find_one({'_id': task_id})
         if res: del res['_id']
         return res    
