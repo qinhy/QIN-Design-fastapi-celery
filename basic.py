@@ -1,5 +1,7 @@
 
 from multiprocessing import shared_memory
+import celery
+import celery.states
 import numpy as np
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
@@ -217,8 +219,20 @@ class ServiceOrientedArchitecture:
         args:Args = Args()
         ret:Return = Return()
     class Action:
+        def __init__(self, model):
+            if isinstance(model, dict):
+                nones = [k for k,v in model.items() if v is None]
+                for i in nones:del model[i]
+                model = ServiceOrientedArchitecture.Model(**model)
+            self.model: ServiceOrientedArchitecture.Model = model
+
         def __call__(self, *args, **kwargs):
-            return ServiceOrientedArchitecture.Model.Return()
+            
+            collection = get_tasks_collection()
+            collection.update_one({'_id': self.model.task_id},
+                            {'$set': {'status': celery.states.STARTED}},upsert=True)
+            
+            return self.model
 
         
 ########################## test 

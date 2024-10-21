@@ -2,6 +2,8 @@ from multiprocessing import Process
 import threading
 import time
 from typing import Any
+import celery
+import celery.states
 import cv2
 import numpy as np
 from pydantic import BaseModel
@@ -10,8 +12,8 @@ from basic import NumpyUInt8SharedMemoryIO, ServiceOrientedArchitecture, get_tas
 
 class Fibonacci(ServiceOrientedArchitecture):
 
-    class Model(BaseModel):
-        task_id:str = 'NULL'
+    class Model(ServiceOrientedArchitecture.Model):
+        
         class Param(BaseModel):
             mode: str = 'fast'
             def is_fast(self):
@@ -25,15 +27,15 @@ class Fibonacci(ServiceOrientedArchitecture):
         args:Args
         ret:Return = Return()
 
-    class Action:
+    class Action(ServiceOrientedArchitecture.Action):
         def __init__(self, model):
             # Ensure model is a Fibonacci instance, even if a dict is passed
             if isinstance(model, dict):
-                model = Fibonacci.Model(**model)
-            
+                model = Fibonacci.Model(**model)            
             self.model: Fibonacci.Model = model
 
-        def __call__(self, *args: Any, **kwds: Any):
+        def __call__(self, *args, **kwargs):
+            super().__call__(*args, **kwargs)
             return self.calculate()
 
         def calculate(self):
@@ -52,13 +54,10 @@ class Fibonacci(ServiceOrientedArchitecture):
                     res = fib_r(n)
                 self.model.ret.n = res
             return self.model
-        
 
 
 class CvCameraSharedMemoryService:
-    class Model(BaseModel):
-        task_id:str = 'NULL'
-        
+    class Model(ServiceOrientedArchitecture.Model):        
         class Param(NumpyUInt8SharedMemoryIO.Writer):
             mode:str='write'
 
@@ -86,16 +85,15 @@ class CvCameraSharedMemoryService:
         def build_ret(camera_service_model):
             return CvCameraSharedMemoryService.Model.Return(
                 **camera_service_model['param'])
-    class Action:
+    class Action(ServiceOrientedArchitecture.Action):
         def __init__(self, model):
             if isinstance(model, dict):
                 nones = [k for k,v in model.items() if v is None]
                 for i in nones:del model[i]
                 model = CvCameraSharedMemoryService.Model(**model)
             self.model: CvCameraSharedMemoryService.Model = model
-        
-        def __call__(self, *args, **kwds):            
-
+        def __call__(self, *args, **kwargs):
+            super().__call__(*args, **kwargs)
             # A shared flag to communicate between threads
             stop_flag = threading.Event()
 
@@ -111,8 +109,8 @@ class CvCameraSharedMemoryService:
 
                 while not stop_flag.is_set():
                     task = collection.find_one({'_id': task_id})
-                    if task['status'] == 'REVOKED':
-                        print("Task marked as 'REVOKED', setting stop flag.")
+                    if task['status'] == celery.states.REVOKED:
+                        print(f"Task marked as {celery.states.REVOKED}, setting stop flag.")
                         stop_flag.set()
                         break
                     time.sleep(1)  # Delay between checks to reduce load on MongoDB
