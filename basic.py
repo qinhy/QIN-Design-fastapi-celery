@@ -221,7 +221,7 @@ except Exception as e:
 
 class ServiceOrientedArchitecture:
     class Model(BaseModel):
-        task_id:str = 'NULL'
+        task_id:str = 'NO_NEED_INPUT'
         class Param(BaseModel):
             pass
         class Args(BaseModel):
