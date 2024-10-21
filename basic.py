@@ -20,6 +20,20 @@ def get_tasks_collection():
     collection = db.get_collection(celery_META)
     return collection#.find_one({'_id': task_id})
 
+def set_task_started(task_id):
+    collection = get_tasks_collection()
+    return collection.update_one({'_id': task_id},
+                {'$set': {'status': celery.states.STARTED}},upsert=True)
+
+def set_task_revoked(task_id):
+    collection = get_tasks_collection()
+    # Update the status of the task to 'REVOKED'
+    update_result = collection.update_one({'_id': task_id}, {'$set': {'status': 'REVOKED'}})
+    if update_result.matched_count > 0:
+        res = collection.find_one({'_id': task_id})
+    else:
+        res = {'error': 'Task not found'}    
+    return res
 
 class CommonIO:
     class Base:            
@@ -227,11 +241,7 @@ class ServiceOrientedArchitecture:
             self.model: ServiceOrientedArchitecture.Model = model
 
         def __call__(self, *args, **kwargs):
-            
-            collection = get_tasks_collection()
-            collection.update_one({'_id': self.model.task_id},
-                            {'$set': {'status': celery.states.STARTED}},upsert=True)
-            
+            set_task_started(self.model.task_id)            
             return self.model
 
         

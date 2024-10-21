@@ -2,7 +2,7 @@ from typing import Dict
 
 import cv2
 from pydantic import BaseModel
-from basic import get_tasks_collection
+from basic import get_tasks_collection, set_task_revoked
 from customs import CvCameraSharedMemoryService, Fibonacci, ServiceOrientedArchitecture
 
 ######################################### Celery connect to local rabbitmq and mongo backend
@@ -20,6 +20,7 @@ celery_app = Celery('tasks', broker = celery_broker, backend = f'{mongo_URL}/{mo
 class CeleryTask:
     api = FastAPI()
 
+    ########################### essential function
     @staticmethod
     def is_json_serializable(value) -> bool:
         res = isinstance(value, (int, float, bool, str,
@@ -28,26 +29,17 @@ class CeleryTask:
         return value
     
     @staticmethod
-    @celery_app.task(bind=True)
-    def revoke(t:Task, task_id: str):
-        return celery_app.control.revoke(task_id, terminate=True)
-
+    @api.get("/tasks/status/{task_id}")
+    def api_task_status(task_id: str):
+        """Endpoint to check the status of a task."""
+        collection = get_tasks_collection()
+        res = collection.find_one({'_id': task_id})
+        if res: del res['_id']
+        return res
+    
     @api.get("/tasks/stop/{task_id}")
     def api_task_stop(task_id: str):        
-        # task = CeleryTask.revoke.delay(task_id=task_id)
-        # return {'id': task.id}
-    
-        # Update the status in MongoDB
-        collection = get_tasks_collection()
-        # Update the status of the task to 'REVOKED'
-        update_result = collection.update_one({'_id': task_id}, {'$set': {'status': 'REVOKED'}})
-
-        if update_result.matched_count > 0:
-            res = collection.find_one({'_id': task_id})
-        else:
-            res = {'error': 'Task not found'}
-        
-        return res
+        return set_task_revoked(task_id)
         
     ########################### basic function
     @staticmethod
@@ -90,15 +82,6 @@ class CeleryTask:
                                     name='Fibonacci', data=dict(args=dict(n=10)))):
         task = CeleryTask.perform_action.delay(action['name'],action['data'])
         return {'task_id': task.id}
-
-    @staticmethod
-    @api.get("/tasks/status/{task_id}")
-    def api_task_status(task_id: str):
-        """Endpoint to check the status of a task."""
-        collection = get_tasks_collection()
-        res = collection.find_one({'_id': task_id})
-        if res: del res['_id']
-        return res    
 
     ############################# general function specific api
 
