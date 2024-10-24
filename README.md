@@ -3,4 +3,4 @@
 
 ## Target
 - working at both win and linux
-- Object-oriented, MCV model.
+- Object-oriented, MVC model.

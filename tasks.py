@@ -1,7 +1,4 @@
 from typing import Dict
-
-import cv2
-from pydantic import BaseModel
 from basic import get_tasks_collection, set_task_revoked
 from customs import CvCameraSharedMemoryService, Fibonacci, ServiceOrientedArchitecture
 
@@ -9,7 +6,6 @@ from customs import CvCameraSharedMemoryService, Fibonacci, ServiceOrientedArchi
 import os
 os.environ.setdefault('CELERY_TASK_SERIALIZER', 'json')
 from fastapi import FastAPI
-from pymongo import MongoClient
 from celery import Celery
 from celery.app import task as Task
 mongo_URL = 'mongodb://localhost:27017'
@@ -48,9 +44,10 @@ class CeleryTask:
         """Celery task to calculate the nth Fibonacci number."""
         fib_task_model_dump['task_id']=t.request.id
         model = Fibonacci.Model(**fib_task_model_dump)
-        res:int = Fibonacci.Action(model)()
+        model = Fibonacci.Action(model)()
+        res:Fibonacci.Model.Return = model.ret
         # make sure that res is dict or other primitive objects for json serialization
-        return CeleryTask.is_json_serializable(res)
+        return CeleryTask.is_json_serializable(res.model_dump())
     
     @api.post("/fibonacci/")
     def api_fibonacci(fib_task: Fibonacci.Model):
