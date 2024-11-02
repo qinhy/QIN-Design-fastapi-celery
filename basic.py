@@ -9,13 +9,14 @@ from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 
 # Constants
+rabbitmq_URL = 'localhost:15672'
 mongo_URL = 'mongodb://localhost:27017'
 mongo_DB = 'tasks'
 celery_META = 'celery_taskmeta'
 celery_broker = 'amqp://localhost'
 
-def check_rabbitmq_health(host='localhost', port=15672, user='guest', password='guest') -> bool:
-    url = f'http://{host}:{port}/api/health/checks/alarms'
+def check_rabbitmq_health(url=rabbitmq_URL, user='guest', password='guest') -> bool:
+    url = f'http://{rabbitmq_URL}/api/health/checks/alarms'
     try:
         response = requests.get(url, auth=(user, password), timeout=5)
         if response.status_code == 200:
@@ -33,9 +34,9 @@ def check_mongodb_health(url=mongo_URL) -> bool:
     except ConnectionFailure as e:
         return False
 
-def check_services() -> bool:
-    rabbitmq_health = check_rabbitmq_health()
-    mongodb_health = check_mongodb_health()
+def check_services(rabbitmq_URL=rabbitmq_URL,mongo_URL=mongo_URL) -> bool:
+    rabbitmq_health = check_rabbitmq_health(rabbitmq_URL)
+    mongodb_health = check_mongodb_health(mongo_URL)
     if rabbitmq_health and mongodb_health:
         return True
     else:
