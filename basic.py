@@ -1,10 +1,12 @@
 
 from multiprocessing import shared_memory
+import requests
 import celery
 import celery.states
 import numpy as np
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure
 
 # Constants
 mongo_URL = 'mongodb://localhost:27017'
@@ -12,6 +14,33 @@ mongo_DB = 'tasks'
 celery_META = 'celery_taskmeta'
 celery_broker = 'amqp://localhost'
 
+def check_rabbitmq_health(host='localhost', port=15672, user='guest', password='guest') -> bool:
+    url = f'http://{host}:{port}/api/health/checks/alarms'
+    try:
+        response = requests.get(url, auth=(user, password), timeout=5)
+        if response.status_code == 200:
+            return True
+        else:
+            return False
+    except requests.exceptions.RequestException as e:
+        return False
+
+def check_mongodb_health(url=mongo_URL) -> bool:
+    try:
+        client = MongoClient(url, serverSelectionTimeoutMS=2000)
+        client.admin.command('ping')
+        return True
+    except ConnectionFailure as e:
+        return False
+
+def check_services() -> bool:
+    rabbitmq_health = check_rabbitmq_health()
+    mongodb_health = check_mongodb_health()
+    if rabbitmq_health and mongodb_health:
+        return True
+    else:
+        return False
+    
 # Function to get a document by task_id
 def get_tasks_collection():
     # Reusable MongoDB client setup
