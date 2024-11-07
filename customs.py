@@ -7,7 +7,7 @@ import celery.states
 import cv2
 import numpy as np
 from pydantic import BaseModel
-from basic import NumpyUInt8SharedMemoryIO, ServiceOrientedArchitecture, get_tasks_collection
+from basic import NumpyUInt8SharedMemoryIO, NumpyUInt8SharedMemoryStreamIO, ServiceOrientedArchitecture, get_tasks_collection
 
 
 class Fibonacci(ServiceOrientedArchitecture):
@@ -55,7 +55,6 @@ class Fibonacci(ServiceOrientedArchitecture):
                 self.model.ret.n = res
             return self.model
 
-
 class CvCameraSharedMemoryService:
     class Model(ServiceOrientedArchitecture.Model):        
         class Param(NumpyUInt8SharedMemoryIO.Writer):
@@ -72,7 +71,7 @@ class CvCameraSharedMemoryService:
         class Args(BaseModel):
             camera:int = 0
 
-        class Return(NumpyUInt8SharedMemoryIO.Reader):
+        class Return(NumpyUInt8SharedMemoryStreamIO.StreamReader):
             def __init__(self, **kwargs):
                 kwargs['create'] = False
                 super().__init__(**kwargs)
@@ -155,7 +154,7 @@ class CvCameraSharedMemoryService:
                 print("reading")
                 while not stop_flag.is_set():
                     # Read the frame from shared memory
-                    frame = reader.read()
+                    frame,_ = reader.read()
                     if frame is None:
                         print("No frame read from shared memory.")
                         continue
@@ -170,28 +169,29 @@ class CvCameraSharedMemoryService:
             
             return self.model
 
-# def camera_writer_process(camera_service_model):    
-#     action = CvCameraSharedMemoryService.Action(camera_service_model)
-#     action()  # Start capturing and writing to shared memory
+def camera_writer_process(camera_service_model):    
+    action = CvCameraSharedMemoryService.Action(camera_service_model)
+    action()  # Start capturing and writing to shared memory
 
-# def camera_reader_process(camera_service_model):
-#     # Create a reader for the same shared memory used by the writer
-#     reader = CvCameraSharedMemoryService.Model.build_ret(camera_service_model)
+def camera_reader_process(camera_service_model):
+    # Create a reader for the same shared memory used by the writer
+    reader = CvCameraSharedMemoryService.Model.build_ret(camera_service_model)
+    print('camera_service_model')
 
-#     while True:
-#         # Read the frame from shared memory
-#         frame = reader.read()
-#         if frame is None:
-#             print("No frame read from shared memory.")
-#             continue
+    while True:
+        # Read the frame from shared memory
+        frame,_ = reader.read()
+        if frame is None:
+            print("No frame read from shared memory.")
+            continue
 
-#         # Display the frame
-#         cv2.imshow('Shared Memory Reader Frame', frame)
+        # Display the frame
+        cv2.imshow('Shared Memory Reader Frame', frame)
 
-#         if cv2.waitKey(1) & 0xFF == ord('q'):
-#             break
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
 
-#     cv2.destroyAllWindows()
+    cv2.destroyAllWindows()
 
 
 # if __name__ == "__main__":

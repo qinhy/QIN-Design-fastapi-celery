@@ -1,5 +1,7 @@
 
 from multiprocessing import shared_memory
+import time
+from typing import Any
 import requests
 import celery
 import celery.states
@@ -65,48 +67,50 @@ def set_task_revoked(task_id):
         res = {'error': 'Task not found'}    
     return res
 
+
+class ServiceOrientedArchitecture:
+    class Model(BaseModel):
+        task_id:str = 'NO_NEED_INPUT'
+        class Param(BaseModel):
+            pass
+        class Args(BaseModel):
+            pass
+        class Return(BaseModel):
+            pass
+
+        param:Param = Param()
+        args:Args = Args()
+        ret:Return = Return()
+    class Action:
+        def __init__(self, model):
+            if isinstance(model, dict):
+                nones = [k for k,v in model.items() if v is None]
+                for i in nones:del model[i]
+                model = ServiceOrientedArchitecture.Model(**model)
+            self.model: ServiceOrientedArchitecture.Model = model
+
+        def __call__(self, *args, **kwargs):
+            set_task_started(self.model.task_id)            
+            return self.model
+
+##################### IO 
 class CommonIO:
-    class Base:            
+    class Base(BaseModel):            
         def write(self,data):
             raise ValueError("[CommonIO.Reader]: This is Reader can not write")
         def read(self):
             raise ValueError("[CommonIO.Writer]: This is Writer can not read") 
         def close(self):
-            raise ValueError("[CommonIO.Base]: not implemented")            
+            raise ValueError("[CommonIO.Base]: 'close' not implemented")
     class Reader(Base):
-        def read(self):
-            raise ValueError("[CommonIO.Reader]: not implemented")      
+        def read(self)->Any:
+            raise ValueError("[CommonIO.Reader]: 'read' not implemented")
     class Writer(Base):
         def write(self,data):
-            raise ValueError("[CommonIO.Writer]: not implemented")
-
-class CommonStreamIO(CommonIO):
-    class Base(CommonIO.Base):
-        def write(self, data, metadata={}):
-            raise ValueError("[CommonStreamIO.Reader]: This is Reader can not write")
-        
-        def read(self):
-            raise ValueError("[CommonStreamIO.Writer]: This is Writer can not read") 
-        
-        def __iter__(self):
-            return self
-
-        def __next__(self):
-            return self.read()
-        
-        def stop(self):
-            raise ValueError("[StreamWriter]: not implemented")
-        
-    class StreamReader(CommonIO.Reader, Base):
-        def read(self):
-            return super().read(),{}
-        
-    class StreamWriter(CommonIO.Writer, Base):
-        def write(self, data, metadata={}):
-            raise ValueError("[StreamWriter]: not implemented")
+            raise ValueError("[CommonIO.Writer]: 'write' not implemented")
 
 class GeneralSharedMemoryIO(CommonIO):
-    class Base(CommonIO.Base, BaseModel):
+    class Base(CommonIO.Base):
         shm_name: str = Field(..., description="The name of the shared memory segment")
         create: bool = Field(default=False, description="Flag indicating whether to create or attach to shared memory")
         shm_size: int = Field(..., description="The size of the shared memory segment in bytes")
@@ -155,12 +159,12 @@ class GeneralSharedMemoryIO(CommonIO):
             if hasattr(self,'_shm'):
                 self._shm.unlink()  # Unlink (remove) the shared memory segment after writing
     
-    def reader(self, shm_name: str, shm_size: int):
-        """Helper function to create a Reader instance."""
+    @staticmethod
+    def reader(shm_name: str, shm_size: int):
         return GeneralSharedMemoryIO.Reader(shm_name=shm_name, create=False, shm_size=shm_size)
     
-    def writer(self, shm_name: str, shm_size: int):
-        """Helper function to create a Writer instance."""
+    @staticmethod
+    def writer(shm_name: str, shm_size: int):
         return GeneralSharedMemoryIO.Writer(shm_name=shm_name, create=True, shm_size=shm_size)
              
 class NumpyUInt8SharedMemoryIO(GeneralSharedMemoryIO):
@@ -190,19 +194,178 @@ class NumpyUInt8SharedMemoryIO(GeneralSharedMemoryIO):
             # Write the NumPy array to shared memory as binary data
             super().write(data.tobytes())
 
-    def reader(self, shm_name: str, array_shape: tuple):
-        """Helper function to create a Reader instance for reading NumPy int8 arrays."""
+    @staticmethod
+    def reader(shm_name: str, array_shape: tuple):
         return NumpyUInt8SharedMemoryIO.Reader(shm_name=shm_name, create=False, array_shape=array_shape,shm_size=1)
     
-    def writer(self, shm_name: str, array_shape: tuple):
-        """Helper function to create a Writer instance for writing NumPy int8 arrays."""
+    @staticmethod
+    def writer(shm_name: str, array_shape: tuple):
         return NumpyUInt8SharedMemoryIO.Writer(shm_name=shm_name, create=True, array_shape=array_shape,shm_size=1)
+
+##################### stream IO 
+class CommonStreamIO(CommonIO):
+    class Base(CommonIO.Base):
+        stream_key: str = 'NULL'
+        is_close: bool = False
+
+        def write(self, data, metadata={}):
+            raise ValueError("[CommonStreamIO.Reader]: This is Reader can not write")
+        
+        def read(self):
+            raise ValueError("[CommonStreamIO.Writer]: This is Writer can not read") 
+        
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            return self.read()
+        
+        def close(self):
+            raise ValueError("[StreamWriter]: 'close' not implemented")
+        
+        def get_steam_info(self)->dict:
+            raise ValueError("[StreamWriter]: 'get_steam_info' not implemented")
+            
+        def set_steam_info(self,data):
+            raise ValueError("[StreamWriter]: 'set_steam_info' not implemented")
+    class StreamReader(CommonIO.Reader, Base):
+        def read(self)->tuple[Any,dict]:
+            return super().read(),{}
+        
+    class StreamWriter(CommonIO.Writer, Base):
+        def write(self, data, metadata={}):
+            raise ValueError("[StreamWriter]: 'write' not implemented")
+
+class NumpyUInt8SharedMemoryStreamIO(NumpyUInt8SharedMemoryIO,CommonStreamIO):
+    class Base(NumpyUInt8SharedMemoryIO.Base,CommonStreamIO.Base):
+        def get_steam_info(self)->dict:
+            return self.model_dump()            
+        def set_steam_info(self,data):
+            pass        
+    class StreamReader(NumpyUInt8SharedMemoryIO.Reader, CommonStreamIO.StreamReader, Base):
+        def read(self)->tuple[Any,dict]:
+            return super().read(),{}
+    class StreamWriter(NumpyUInt8SharedMemoryIO.Writer, CommonStreamIO.StreamWriter, Base):        
+        def write(self, data: np.ndarray, metadata={}):
+            return super().write(data),{}
+        
+    @staticmethod
+    def reader(shm_name: str, array_shape: tuple):
+        return NumpyUInt8SharedMemoryStreamIO.StreamReader(shm_name=shm_name, create=False, array_shape=array_shape,shm_size=1)
+    
+    @staticmethod
+    def writer(shm_name: str, array_shape: tuple):
+        return NumpyUInt8SharedMemoryStreamIO.StreamWriter(shm_name=shm_name, create=True, array_shape=array_shape,shm_size=1)
+
+class BidirectionalStream:
+    class Bidirectional:
+        def __init__(self, frame_processor=lambda i,frame,frame_metadata:(frame,frame_metadata),
+                        stream_reader:CommonStreamIO.StreamReader=None,stream_writer:CommonStreamIO.StreamWriter=None):
+            
+            self.frame_processor = frame_processor
+            self.stream_writer = stream_writer
+            self.stream_reader = stream_reader
+            self.streams:list[CommonStreamIO.Base] = [self.stream_reader, self.stream_writer]
+            
+        def run(self):
+            for s in self.streams:
+                if s is None:raise ValueError('stream is None')
+                
+            res = {'msg':''}
+            try:
+                for frame_count,(image,frame_metadata) in enumerate(self.stream_reader):
+                    if frame_count%100==0:
+                        start_time = time.time()
+                    else:
+                        elapsed_time = time.time() - start_time + 1e-5
+                        frame_metadata['fps'] = fps = (frame_count%100) / elapsed_time
+                    
+
+                    image,frame_processor_metadata = self.frame_processor(frame_count,image,frame_metadata)
+                    frame_metadata.update(frame_processor_metadata)
+                    self.stream_writer.write(image,frame_metadata)
+
+                    if frame_count%1000==100:
+                        metadata = self.stream_writer.get_steam_info()
+                        if metadata.get('is_close',False):
+                            for s in self.streams:
+                                s.close()
+                            break
+                        metadata['fps'] = fps
+                        self.stream_writer.set_steam_info(metadata)
+
+            except Exception as e:
+                    res['error'] = str(e)
+                    print(res)
+            finally:
+                for s in self.streams:
+                    s.close()
+                return res
+
+    class WriteOnly(Bidirectional):
+        def __init__(self, frame_processor=lambda i,frame,frame_metadata:(frame,frame_metadata),
+                    stream_writer:CommonStreamIO.StreamWriter=None):
+            self.frame_processor = frame_processor
+            self.stream_writer = stream_writer
+            self.streams:list[CommonStreamIO.Base] = [self.stream_writer]
+            
+            def mock_stream():
+                while True:
+                    yield None,{}
+            self.stream_reader = mock_stream()
+
+    class ReadOnly(Bidirectional):
+        def __init__(self, frame_processor=lambda i,frame,frame_metadata:(frame,frame_metadata),
+                    stream_reader:CommonStreamIO.StreamReader=None):
+            
+            self.frame_processor = frame_processor
+            self.stream_reader = stream_reader
+
+        def run(self):
+            if self.stream_reader is None:raise ValueError('stream_reader is None')
+            res = {'msg':''}
+            try:
+                for frame_count,(image,frame_metadata) in enumerate(self.stream_reader):
+                    if frame_count%100==0:
+                        start_time = time.time()
+                    else:
+                        elapsed_time = time.time() - start_time + 1e-5
+                        frame_metadata['fps'] = fps = (frame_count%100) / elapsed_time
+
+                    image,frame_metadata = self.frame_processor(frame_count,image,frame_metadata)
+
+                    if frame_count%1000==100:
+                        if self.stream_reader.get_steam_info().get('is_close',False):
+                            self.stream_reader.close()
+                            break
+                        
+            except Exception as e:
+                    res['error'] = str(e)
+                    print(res)
+            finally:
+                self.stream_reader.close()
+                res['msg'] += f'\nstream {self.stream_reader.stream_key} reader.close()'
+                return res
+
+    @staticmethod
+    def bidirectional(frame_processor,stream_reader:CommonStreamIO.Reader,stream_writer:CommonStreamIO.Writer):
+        return BidirectionalStream.Bidirectional(frame_processor,stream_reader,stream_writer)
+
+    @staticmethod
+    def readOnly(frame_processor,stream_reader:CommonStreamIO.Reader):
+        return BidirectionalStream.ReadOnly(frame_processor,stream_reader)
+
+    @staticmethod
+    def writeOnly(frame_processor,stream_writer:CommonStreamIO.Writer):
+        return BidirectionalStream.WriteOnly(frame_processor,stream_writer)
+
+
 
 try:
     import redis   
 
     class RedisIO(CommonIO):
-        class Base(CommonIO.Base, BaseModel):
+        class Base(CommonIO.Base):
             redis_host: str = Field(default='localhost', description="The Redis server hostname")
             redis_port: int = Field(default=6379, description="The Redis server port")
             redis_db: int = Field(default=0, description="The Redis database index")
@@ -223,7 +386,6 @@ try:
             key: str
             
             def read(self):
-                """Read binary data from Redis."""
                 data = self._redis_client.get(self.key)
                 if data is None:
                     raise ValueError(f"No data found for key: {self.key}")
@@ -233,48 +395,23 @@ try:
             key: str
             
             def write(self, data: bytes):
-                """Write binary data to Redis."""
                 if not isinstance(data, bytes):
                     raise ValueError("Data must be in binary format (bytes)")
                 self._redis_client.set(self.key, data)  # Store binary data under the given key
 
-        def reader(self, key: str, redis_host: str = 'localhost', redis_port: int = 6379, redis_db: int = 0):
-            """Helper function to create a Reader instance."""
+        @staticmethod
+        def reader(key: str, redis_host: str = 'localhost', redis_port: int = 6379, redis_db: int = 0):
             return RedisIO.Reader(key=key, redis_host=redis_host, redis_port=redis_port, redis_db=redis_db)
 
-        def writer(self, key: str, redis_host: str = 'localhost', redis_port: int = 6379, redis_db: int = 0):
-            """Helper function to create a Writer instance."""
+        @staticmethod
+        def writer(key: str, redis_host: str = 'localhost', redis_port: int = 6379, redis_db: int = 0):
             return RedisIO.Writer(key=key, redis_host=redis_host, redis_port=redis_port, redis_db=redis_db)
 
 except Exception as e:
     print('No redis support')
+except Exception as e:
+    print('No redis support')
 
-class ServiceOrientedArchitecture:
-    class Model(BaseModel):
-        task_id:str = 'NO_NEED_INPUT'
-        class Param(BaseModel):
-            pass
-        class Args(BaseModel):
-            pass
-        class Return(BaseModel):
-            pass
-
-        param:Param = Param()
-        args:Args = Args()
-        ret:Return = Return()
-    class Action:
-        def __init__(self, model):
-            if isinstance(model, dict):
-                nones = [k for k,v in model.items() if v is None]
-                for i in nones:del model[i]
-                model = ServiceOrientedArchitecture.Model(**model)
-            self.model: ServiceOrientedArchitecture.Model = model
-
-        def __call__(self, *args, **kwargs):
-            set_task_started(self.model.task_id)            
-            return self.model
-
-        
 ########################## test 
 def test_NumpyUInt8SharedMemoryIO():
     # Initialize the mock shared memory IO
@@ -329,5 +466,15 @@ def test_redisIO():
     reader.close()
     writer.close()
 
+def test_BidirectionalStream():
+    shm_io = NumpyUInt8SharedMemoryStreamIO()
+    writer = shm_io.writer(shm_name="numpy_uint8_shm", array_shape=(10, 10))
+    
+    bwriter = BidirectionalStream.WriteOnly(
+        lambda  i,frame,frame_metadata:(np.random.randint(0, 256, size=(10, 10), dtype=np.uint8),{'No':print(i)}),
+        writer)    
+    bwriter.run()
+
 # test_NumpyUInt8SharedMemoryIO()
 # test_redisIO()
+# test_BidirectionalStream()
