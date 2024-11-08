@@ -9,64 +9,182 @@ import numpy as np
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
+import redis
+import json
+import celery.states
 
-# Constants
-rabbitmq_URL = 'localhost:15672'
-mongo_URL = 'mongodb://localhost:27017'
-mongo_DB = 'tasks'
-celery_META = 'celery_taskmeta'
-celery_broker = 'amqp://localhost'
+import celery
+import requests
+from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure
 
-def check_rabbitmq_health(url=rabbitmq_URL, user='guest', password='guest') -> bool:
-    url = f'http://{rabbitmq_URL}/api/health/checks/alarms'
-    try:
-        response = requests.get(url, auth=(user, password), timeout=5)
-        if response.status_code == 200:
-            return True
-        else:
-            return False
-    except requests.exceptions.RequestException as e:
-        return False
+class RabbitmqMongoApp:
+    rabbitmq_URL = 'localhost:15672'
+    mongo_URL = 'mongodb://localhost:27017'
+    mongo_DB = 'tasks'
+    celery_META = 'celery_taskmeta'
+    celery_broker = 'amqp://localhost'
 
-def check_mongodb_health(url=mongo_URL) -> bool:
-    try:
-        client = MongoClient(url, serverSelectionTimeoutMS=2000)
-        client.admin.command('ping')
-        return True
-    except ConnectionFailure as e:
-        return False
-
-def check_services(rabbitmq_URL=rabbitmq_URL,mongo_URL=mongo_URL) -> bool:
-    rabbitmq_health = check_rabbitmq_health(rabbitmq_URL)
-    mongodb_health = check_mongodb_health(mongo_URL)
-    if rabbitmq_health and mongodb_health:
-        return True
-    else:
-        return False
+    @staticmethod
+    def get_celery_app():
+        return celery.Celery('tasks', broker=RabbitmqMongoApp.celery_broker, backend=f'{RabbitmqMongoApp.mongo_URL}/{RabbitmqMongoApp.mongo_DB}')
     
-# Function to get a document by task_id
-def get_tasks_collection():
-    # Reusable MongoDB client setup
-    client = MongoClient(mongo_URL)
-    db = client.get_database(mongo_DB)
-    collection = db.get_collection(celery_META)
-    return collection#.find_one({'_id': task_id})
+    @staticmethod
+    def check_rabbitmq_health(url=None, user='guest', password='guest') -> bool:
+        if url is None:
+            url = f'http://{RabbitmqMongoApp.rabbitmq_URL}/api/health/checks/alarms'
+        try:
+            response = requests.get(url, auth=(user, password), timeout=5)
+            return response.status_code == 200
+        except requests.exceptions.RequestException:
+            return False
 
-def set_task_started(task_id):
-    collection = get_tasks_collection()
-    return collection.update_one({'_id': task_id},
-                {'$set': {'status': celery.states.STARTED}},upsert=True)
+    @staticmethod
+    def check_mongodb_health(url=None) -> bool:
+        if url is None:
+            url = RabbitmqMongoApp.mongo_URL
+        try:
+            client = MongoClient(url, serverSelectionTimeoutMS=2000)
+            client.admin.command('ping')
+            return True
+        except ConnectionFailure:
+            return False
 
-def set_task_revoked(task_id):
-    collection = get_tasks_collection()
-    # Update the status of the task to 'REVOKED'
-    update_result = collection.update_one({'_id': task_id}, {'$set': {'status': 'REVOKED'}})
-    if update_result.matched_count > 0:
+    @classmethod
+    def check_services(cls) -> bool:
+        rabbitmq_health = cls.check_rabbitmq_health()
+        mongodb_health = cls.check_mongodb_health()
+        return rabbitmq_health and mongodb_health
+
+    @staticmethod
+    def get_tasks_collection():
+        client = MongoClient(RabbitmqMongoApp.mongo_URL)
+        db = client.get_database(RabbitmqMongoApp.mongo_DB)
+        collection = db.get_collection(RabbitmqMongoApp.celery_META)
+        return collection
+
+    @staticmethod
+    def get_tasks_list():
+        collection = RabbitmqMongoApp.get_tasks_collection()
+        tasks = []
+        for task in collection.find():
+            task_data = {
+                "task_id": task.get('_id'),
+                "status": task.get('status'),
+                "result": task.get('result'),
+                "date_done": task.get('date_done')
+            }
+            tasks.append(task_data)
+        return tasks
+
+    @staticmethod
+    def get_task_status(task_id: str):
+        collection = RabbitmqMongoApp.get_tasks_collection()
         res = collection.find_one({'_id': task_id})
-    else:
-        res = {'error': 'Task not found'}    
-    return res
+        if res:
+            del res['_id']
+        return res
 
+    @staticmethod
+    def set_task_started(task_model: 'ServiceOrientedArchitecture.Model'):
+        collection = RabbitmqMongoApp.get_tasks_collection()
+        collection.update_one(
+            {'_id': task_model.task_id},
+            {'$set': {
+                'status': celery.states.STARTED,
+                'result': task_model.model_dump_json()
+            }},
+            upsert=True
+        )
+
+    @staticmethod
+    def set_task_revoked(task_id):
+        collection = RabbitmqMongoApp.get_tasks_collection()
+        update_result = collection.update_one({'_id': task_id}, {'$set': {'status': 'REVOKED'}})
+        if update_result.matched_count > 0:
+            res = collection.find_one({'_id': task_id})
+        else:
+            res = {'error': 'Task not found'}
+        return res
+
+
+class RedisApp:
+    # Redis URL configuration
+    redis_URL = 'redis://localhost:6379/0'
+    redis_client = redis.Redis.from_url(redis_URL)
+
+    @staticmethod
+    def get_celery_app():
+        return celery.Celery('tasks', broker=RedisApp.redis_URL, backend=RedisApp.redis_URL)
+
+    @staticmethod    
+    def check_services() -> bool:
+        """Check Redis connection health."""
+        try:
+            return RedisApp.redis_client.ping()
+        except redis.ConnectionError:
+            return False
+
+    @staticmethod        
+    def get_tasks_collection():
+        """Returns a list of keys representing tasks in Redis."""
+        return RedisApp.redis_client.keys(pattern='celery-task-meta-*')
+
+    @staticmethod
+    def get_tasks_list():    
+        """Fetches a list of all tasks stored in Redis."""
+        task_keys = RedisApp.get_tasks_collection()
+        tasks = []
+
+        for key in task_keys:
+            task_data_json = RedisApp.redis_client.get(key)
+            if task_data_json:
+                task:dict = json.loads(task_data_json)
+                task_data = {
+                    "task_id": task.get('task_id'),
+                    "status": task.get('status'),
+                    "result": json.dumps(task.get('result')),
+                    "date_done": task.get('date_done')
+                }
+                tasks.append(task_data)
+        return tasks
+
+    @staticmethod
+    def get_task_status(task_id: str):
+        """Fetches the status of a task by task_id from Redis."""
+        task_key = f'celery-task-meta-{task_id}'
+        task_data_json = RedisApp.redis_client.get(task_key)
+        if task_data_json:
+            task_data = json.loads(task_data_json)
+            return task_data
+        return None
+
+    @staticmethod
+    def set_task_started(task_model:'ServiceOrientedArchitecture.Model'):
+        """Marks a task as started in Redis."""
+        task_key = f'celery-task-meta-{task_model.task_id}'
+        task_data = {
+            'task_id': task_model.task_id,
+            'status': celery.states.STARTED,
+            'result': task_model.model_dump_json()  # Assuming `task_model` has this method
+        }
+        RedisApp.redis_client.set(task_key, json.dumps(task_data))
+
+    @staticmethod
+    def set_task_revoked(task_id):
+        """Marks a task as revoked in Redis."""
+        task_key = f'celery-task-meta-{task_id}'
+        task_data_json = RedisApp.redis_client.get(task_key)
+        if task_data_json:
+            task_data = json.loads(task_data_json)
+            task_data['status'] = 'REVOKED'
+            RedisApp.redis_client.set(task_key, json.dumps(task_data))
+            return task_data
+        else:
+            return {'error': 'Task not found'}
+
+get_task_status = RedisApp.get_task_status
+set_task_started = RedisApp.set_task_started
 
 class ServiceOrientedArchitecture:
     class Model(BaseModel):
@@ -90,7 +208,7 @@ class ServiceOrientedArchitecture:
             self.model: ServiceOrientedArchitecture.Model = model
 
         def __call__(self, *args, **kwargs):
-            set_task_started(self.model.task_id)            
+            set_task_started(self.model)
             return self.model
 
 ##################### IO 

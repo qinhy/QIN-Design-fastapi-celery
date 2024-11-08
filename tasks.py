@@ -1,24 +1,19 @@
 from typing import Dict
-from basic import get_tasks_collection, set_task_revoked, check_services
+from basic import RabbitmqMongoApp,RedisApp
 from customs import CvCameraSharedMemoryService, Fibonacci, ServiceOrientedArchitecture
 
 ######################################### Celery connect to local rabbitmq and mongo backend
 import os
 os.environ.setdefault('CELERY_TASK_SERIALIZER', 'json')
 from fastapi import FastAPI, HTTPException
-from celery import Celery
 from celery.app import task as Task
 
-rabbitmq_URL = 'localhost:15672'
-mongo_URL = 'mongodb://localhost:27017'
-mongo_DB = 'tasks'
-celery_broker = 'amqp://localhost'
-celery_app = Celery('tasks', broker = celery_broker, backend = f'{mongo_URL}/{mongo_DB}')
-
+App = RedisApp
+celery_app = App.get_celery_app()
 def api_ok():
-    if not check_services(rabbitmq_URL,mongo_URL):
+    if not App.check_services():
         raise HTTPException(status_code=503, detail={'error':'service not healthy'})
-    
+        
 class CeleryTask:
     api = FastAPI()
 
@@ -30,21 +25,39 @@ class CeleryTask:
         if not res : raise ValueError("Result is not JSON serializable")
         return value
     
-    @staticmethod
+    @api.get("/tasks/")
+    def api_list_tasks():
+        api_ok()
+        return App.get_tasks_list()
+    
     @api.get("/tasks/status/{task_id}")
     def api_task_status(task_id: str):
         api_ok()
-        """Endpoint to check the status of a task."""
-        collection = get_tasks_collection()
-        res = collection.find_one({'_id': task_id})
-        if res: del res['_id']
-        return res
+        return App.get_task_status()
     
     @api.get("/tasks/stop/{task_id}")
     def api_task_stop(task_id: str):        
         api_ok()
-        return set_task_revoked(task_id)
-        
+        return App.set_task_revoked(task_id)
+
+    @api.get("/workers/")
+    def get_workers():
+        api_ok()
+        """Retrieve the status of all Celery workers."""
+        inspector = celery_app.control.inspect()
+        active_workers = inspector.active() or {}
+        stats = inspector.stats() or {}
+
+        workers = []
+        for worker_name, data in stats.items():
+            workers.append({
+                "worker_name": worker_name,
+                "status": "online" if worker_name in active_workers else "offline",
+                "active_tasks": len(active_workers.get(worker_name, [])),
+                "total_tasks": data.get('total', 0)
+            })
+        return workers
+
     ########################### basic function
     @staticmethod
     @celery_app.task(bind=True)
