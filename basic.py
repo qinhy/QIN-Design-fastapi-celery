@@ -114,17 +114,15 @@ class GeneralSharedMemoryIO(CommonIO):
         shm_name: str = Field(..., description="The name of the shared memory segment")
         create: bool = Field(default=False, description="Flag indicating whether to create or attach to shared memory")
         shm_size: int = Field(..., description="The size of the shared memory segment in bytes")
-        
+
         _shm:shared_memory.SharedMemory
         _buffer:memoryview
 
-        def __init__(self, **kwargs):
-            # Initialize Pydantic BaseModel to validate and set fields
-            super().__init__(**kwargs)
-            
+        def build_buffer(self):
             # Initialize shared memory with the validated size and sanitized name
             self._shm = shared_memory.SharedMemory(name=self.shm_name, create=self.create, size=self.shm_size)
             self._buffer = memoryview(self._shm.buf)  # View into the shared memory buffer
+            return self
                 
         def close(self):
             """Detach from the shared memory."""
@@ -161,15 +159,15 @@ class GeneralSharedMemoryIO(CommonIO):
     
     @staticmethod
     def reader(shm_name: str, shm_size: int):
-        return GeneralSharedMemoryIO.Reader(shm_name=shm_name, create=False, shm_size=shm_size)
+        return GeneralSharedMemoryIO.Reader(shm_name=shm_name, create=False, shm_size=shm_size).build_buffer()
     
     @staticmethod
     def writer(shm_name: str, shm_size: int):
-        return GeneralSharedMemoryIO.Writer(shm_name=shm_name, create=True, shm_size=shm_size)
+        return GeneralSharedMemoryIO.Writer(shm_name=shm_name, create=True, shm_size=shm_size).build_buffer()
              
 class NumpyUInt8SharedMemoryIO(GeneralSharedMemoryIO):
     class Base(GeneralSharedMemoryIO.Base):
-        array_shape: tuple = Field(..., description="Shape of the NumPy array to store in shared memory")        
+        array_shape: tuple = Field(..., description="Shape of the NumPy array to store in shared memory")    
         _dtype: np.dtype = np.uint8        
         def __init__(self, **kwargs):
             kwargs['shm_size'] = np.prod(kwargs['array_shape']) * np.dtype(np.uint8).itemsize
@@ -190,11 +188,15 @@ class NumpyUInt8SharedMemoryIO(GeneralSharedMemoryIO):
 
     @staticmethod
     def reader(shm_name: str, array_shape: tuple):
-        return NumpyUInt8SharedMemoryIO.Reader(shm_name=shm_name, create=False, array_shape=array_shape,shm_size=1)
+        shm_size = np.prod(array_shape) * np.dtype(np.uint8).itemsize
+        return NumpyUInt8SharedMemoryIO.Reader(shm_size=shm_size,
+                                    shm_name=shm_name, create=False, array_shape=array_shape).build_buffer()
     
     @staticmethod
     def writer(shm_name: str, array_shape: tuple):
-        return NumpyUInt8SharedMemoryIO.Writer(shm_name=shm_name, create=True, array_shape=array_shape,shm_size=1)
+        shm_size = np.prod(array_shape) * np.dtype(np.uint8).itemsize
+        return NumpyUInt8SharedMemoryIO.Writer(shm_size=shm_size,
+                                    shm_name=shm_name, create=True, array_shape=array_shape).build_buffer()
 
 ##################### stream IO 
 class CommonStreamIO(CommonIO):
@@ -216,6 +218,7 @@ class CommonStreamIO(CommonIO):
             
         def set_steam_info(self,data):
             raise ValueError("[StreamWriter]: 'set_steam_info' not implemented")
+        
     class StreamReader(CommonIO.Reader, Base):
         def read(self)->tuple[Any,dict]:
             return super().read(),{}
@@ -245,11 +248,15 @@ class NumpyUInt8SharedMemoryStreamIO(NumpyUInt8SharedMemoryIO,CommonStreamIO):
         
     @staticmethod
     def reader(shm_name: str, array_shape: tuple):
-        return NumpyUInt8SharedMemoryStreamIO.StreamReader(shm_name=shm_name, create=False, array_shape=array_shape,shm_size=1)
+        shm_size = np.prod(array_shape) * np.dtype(np.uint8).itemsize
+        return NumpyUInt8SharedMemoryStreamIO.StreamReader(
+            shm_name=shm_name, create=False, array_shape=array_shape,shm_size=shm_size).build_buffer()
     
     @staticmethod
     def writer(shm_name: str, array_shape: tuple):
-        return NumpyUInt8SharedMemoryStreamIO.StreamWriter(shm_name=shm_name, create=True, array_shape=array_shape,shm_size=1)
+        shm_size = np.prod(array_shape) * np.dtype(np.uint8).itemsize
+        return NumpyUInt8SharedMemoryStreamIO.StreamWriter(
+            shm_name=shm_name, create=True, array_shape=array_shape,shm_size=shm_size).build_buffer()
 
 class BidirectionalStream:
     class Bidirectional:
@@ -462,6 +469,6 @@ def test_BidirectionalStream():
         writer)    
     bwriter.run()
 
-test_NumpyUInt8SharedMemoryIO()
-test_redisIO()
-test_BidirectionalStream()
+# test_NumpyUInt8SharedMemoryIO()
+# test_redisIO()
+# test_BidirectionalStream()
