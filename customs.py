@@ -76,9 +76,19 @@ class CvCameraSharedMemoryService:
                 kwargs['create'] = False
                 super().__init__(**kwargs)
 
-        param:Param
+        param:Param = None
         args:Args = Args()
         ret:Return = None
+        
+
+        def set_param(self, shm_name="camera_shm", create=True, array_shape=(480, 640), mode = 'write'):
+            self.param = CvCameraSharedMemoryService.Model.Param(
+                            mode=mode,shm_name=shm_name, create=create, array_shape=array_shape)
+            return self
+
+        def set_args(self, camera=0):
+            self.args = CvCameraSharedMemoryService.Model.Args(camera=camera)
+            return self
         
         @staticmethod
         def build_ret(camera_service_model):
@@ -169,50 +179,30 @@ class CvCameraSharedMemoryService:
             
             return self.model
 
-def camera_writer_process(camera_service_model):    
+if __name__ == "__main__":
+    camera_service_model = CvCameraSharedMemoryService.Model(
+        ).set_param(shm_name="camera_shm", create=True, array_shape=(480, 640)
+        ).set_args(camera=0).model_dump()
+    
+    print(camera_service_model)    
+    # Start the writer process in a separate process
+
+    def camera_writer_process(camera_service_model):
+        action = CvCameraSharedMemoryService.Action(camera_service_model)
+        action()  # Start capturing and writing to shared memory
+
+    writer_process = Process(target=camera_writer_process,args=(camera_service_model,))
+    writer_process.start()
+
+    # Allow the writer some time to initialize and start capturing frames
+    time.sleep(2)
+
+    # Start the reader process
+    camera_service_model = CvCameraSharedMemoryService.Model(
+        ).set_param(mode='read',shm_name="camera_shm", create=False, array_shape=(480, 640)
+        ).set_args(camera=0).model_dump()
     action = CvCameraSharedMemoryService.Action(camera_service_model)
-    action()  # Start capturing and writing to shared memory
+    action()
 
-def camera_reader_process(camera_service_model):
-    # Create a reader for the same shared memory used by the writer
-    reader = CvCameraSharedMemoryService.Model.build_ret(camera_service_model)
-    print('camera_service_model')
-
-    while True:
-        # Read the frame from shared memory
-        frame,_ = reader.read()
-        if frame is None:
-            print("No frame read from shared memory.")
-            continue
-
-        # Display the frame
-        cv2.imshow('Shared Memory Reader Frame', frame)
-
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    cv2.destroyAllWindows()
-
-
-# if __name__ == "__main__":
-#     CCWS = CvCameraSharedMemoryService
-#     camera_service_model = CCWS.Model(
-#                             param=CCWS.Model.Param(
-#                                 shm_name="camera_shm", create=True, array_shape=(480, 640)),
-#                             args=CCWS.Model.Args(camera=0)
-#                         ).model_dump()
-    
-#     print(camera_service_model)
-    
-#     # Start the writer process in a separate process
-#     writer_process = Process(target=camera_writer_process,args=(camera_service_model,))
-#     writer_process.start()
-
-#     # Allow the writer some time to initialize and start capturing frames
-#     time.sleep(2)
-
-#     # Start the reader process
-#     camera_reader_process(camera_service_model)
-
-#     # Wait for the writer process to finish (if needed)
-#     writer_process.join()
+    # Wait for the writer process to finish (if needed)
+    writer_process.join()

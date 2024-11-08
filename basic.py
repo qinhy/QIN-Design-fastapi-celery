@@ -173,25 +173,19 @@ class NumpyUInt8SharedMemoryIO(GeneralSharedMemoryIO):
         _dtype: np.dtype = np.uint8        
         def __init__(self, **kwargs):
             kwargs['shm_size'] = np.prod(kwargs['array_shape']) * np.dtype(np.uint8).itemsize
-            super().__init__(**kwargs)  # Initialize Pydantic BaseModel and validate fields
+            super().__init__(**kwargs)
         
     class Reader(GeneralSharedMemoryIO.Reader, Base):
         def read(self) -> np.ndarray:
-            """Read binary data from shared memory and return it as a NumPy array."""
-            # Read the binary data from the shared memory buffer
             binary_data = super().read(size=self.shm_size)
-            # Convert the binary data into a NumPy array with the original shape and dtype
             return np.frombuffer(binary_data, dtype=self._dtype).reshape(self.array_shape)
     
     class Writer(GeneralSharedMemoryIO.Writer, Base):
         def write(self, data: np.ndarray):
-            """Write NumPy int8 array to shared memory."""
-            # Ensure the data being written is a NumPy array with the correct shape and dtype
             if data.shape != self.array_shape:
                 raise ValueError(f"Data shape {data.shape} does not match expected shape {self.array_shape}.")
             if data.dtype != self._dtype:
                 raise ValueError(f"Data type {data.dtype} does not match expected type {self._dtype}.")
-            # Write the NumPy array to shared memory as binary data
             super().write(data.tobytes())
 
     @staticmethod
@@ -214,12 +208,6 @@ class CommonStreamIO(CommonIO):
         def read(self):
             raise ValueError("[CommonStreamIO.Writer]: This is Writer can not read") 
         
-        def __iter__(self):
-            return self
-
-        def __next__(self):
-            return self.read()
-        
         def close(self):
             raise ValueError("[StreamWriter]: 'close' not implemented")
         
@@ -231,6 +219,12 @@ class CommonStreamIO(CommonIO):
     class StreamReader(CommonIO.Reader, Base):
         def read(self)->tuple[Any,dict]:
             return super().read(),{}
+        
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            return self.read()        
         
     class StreamWriter(CommonIO.Writer, Base):
         def write(self, data, metadata={}):
@@ -310,8 +304,7 @@ class BidirectionalStream:
             self.streams:list[CommonStreamIO.Base] = [self.stream_writer]
             
             def mock_stream():
-                while True:
-                    yield None,{}
+                while True: yield None,{}
             self.stream_reader = mock_stream()
 
     class ReadOnly(Bidirectional):
@@ -366,25 +359,21 @@ try:
 
     class RedisIO(CommonIO):
         class Base(CommonIO.Base):
+            key: str
+
             redis_host: str = Field(default='localhost', description="The Redis server hostname")
             redis_port: int = Field(default=6379, description="The Redis server port")
             redis_db: int = Field(default=0, description="The Redis database index")
             _redis_client:redis.Redis = None
             
             def __init__(self, **kwargs):
-                # Initialize BaseModel to validate and set fields
                 super().__init__(**kwargs)
-                
-                # Create Redis connection
                 self._redis_client = redis.Redis(host=self.redis_host, port=self.redis_port, db=self.redis_db)
             
             def close(self):
-                # Optionally close Redis connections if needed
                 del self._redis_client
-        
-        class Reader(CommonIO.Reader, Base):
-            key: str
-            
+                
+        class Reader(CommonIO.Reader, Base):            
             def read(self):
                 data = self._redis_client.get(self.key)
                 if data is None:
@@ -392,8 +381,6 @@ try:
                 return data  # Returning the raw binary data stored under the key
         
         class Writer(CommonIO.Writer, Base):
-            key: str
-            
             def write(self, data: bytes):
                 if not isinstance(data, bytes):
                     raise ValueError("Data must be in binary format (bytes)")
@@ -475,6 +462,6 @@ def test_BidirectionalStream():
         writer)    
     bwriter.run()
 
-# test_NumpyUInt8SharedMemoryIO()
-# test_redisIO()
-# test_BidirectionalStream()
+test_NumpyUInt8SharedMemoryIO()
+test_redisIO()
+test_BidirectionalStream()
