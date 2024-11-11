@@ -1,5 +1,5 @@
 from typing import Dict
-from basic import RabbitmqMongoApp,RedisApp
+from basic import BasicApp
 from customs import CvCameraSharedMemoryService, Fibonacci, ServiceOrientedArchitecture
 
 ######################################### Celery connect to local rabbitmq and mongo backend
@@ -8,10 +8,9 @@ os.environ.setdefault('CELERY_TASK_SERIALIZER', 'json')
 from fastapi import FastAPI, HTTPException
 from celery.app import task as Task
 
-App = RedisApp
-celery_app = App.get_celery_app()
+celery_app = BasicApp.get_celery_app()
 def api_ok():
-    if not App.check_services():
+    if not BasicApp.check_services():
         raise HTTPException(status_code=503, detail={'error':'service not healthy'})
         
 class CeleryTask:
@@ -28,17 +27,17 @@ class CeleryTask:
     @api.get("/tasks/")
     def api_list_tasks():
         api_ok()
-        return App.get_tasks_list()
+        return BasicApp.get_tasks_list()
     
     @api.get("/tasks/status/{task_id}")
     def api_task_status(task_id: str):
         api_ok()
-        return App.get_task_status()
+        return BasicApp.get_task_status()
     
     @api.get("/tasks/stop/{task_id}")
     def api_task_stop(task_id: str):        
         api_ok()
-        return App.set_task_revoked(task_id)
+        return BasicApp.set_task_revoked(task_id)
 
     @api.get("/workers/")
     def get_workers():

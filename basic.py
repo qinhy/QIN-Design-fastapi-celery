@@ -1,12 +1,16 @@
 
+from datetime import datetime
 from multiprocessing import shared_memory
 import time
 from typing import Any
+from uuid import uuid4
+from zoneinfo import ZoneInfo
+from typing_extensions import Unpack
 import requests
 import celery
 import celery.states
 import numpy as np
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 import redis
@@ -18,7 +22,10 @@ import requests
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 
+from Storage import SingletonKeyValueStorage
+
 class RabbitmqMongoApp:
+    store = SingletonKeyValueStorage()
     rabbitmq_URL = 'localhost:15672'
     mongo_URL = 'mongodb://localhost:27017'
     mongo_DB = 'tasks'
@@ -107,8 +114,8 @@ class RabbitmqMongoApp:
             res = {'error': 'Task not found'}
         return res
 
-
 class RedisApp:
+    store = SingletonKeyValueStorage()
     # Redis URL configuration
     redis_URL = 'redis://localhost:6379/0'
     redis_client = redis.Redis.from_url(redis_URL)
@@ -183,8 +190,8 @@ class RedisApp:
         else:
             return {'error': 'Task not found'}
 
-get_task_status = RedisApp.get_task_status
-set_task_started = RedisApp.set_task_started
+class BasicApp(RedisApp):
+    pass
 
 class ServiceOrientedArchitecture:
     class Model(BaseModel):
@@ -208,12 +215,36 @@ class ServiceOrientedArchitecture:
             self.model: ServiceOrientedArchitecture.Model = model
 
         def __call__(self, *args, **kwargs):
-            set_task_started(self.model)
+            BasicApp.set_task_started(self.model)
             return self.model
 
 ##################### IO 
+
+def now_utc():
+    return datetime.now().replace(tzinfo=ZoneInfo("UTC"))
+
+class AbstractObj(BaseModel):
+    id: str= Field(default_factory=lambda:f"AbstractObj:{uuid4()}")
+    rank: list = [0]
+    create_time: datetime = Field(default_factory=now_utc)
+    update_time: datetime = Field(default_factory=now_utc)
+    status: str = ""
+    metadata: dict = {}
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        print(f'BasicApp.store.set({self.id},self.model_dump_json_dict())')
+        BasicApp.store.set(self.id,self.model_dump_json_dict())
+    
+    def __del__(self):
+        print(f'BasicApp.store.delete({self.id})')
+        BasicApp.store.delete(self.id)
+
+    def model_dump_json_dict(self):
+        return json.loads(self.model_dump_json())
+         
 class CommonIO:
-    class Base(BaseModel):            
+    class Base(AbstractObj):            
         def write(self,data):
             raise ValueError("[CommonIO.Reader]: This is Reader can not write")
         def read(self):
@@ -252,9 +283,11 @@ class GeneralSharedMemoryIO(CommonIO):
                 self._shm.close()  # Detach from shared memory
 
         def __del__(self):
+            super().__del__()
             self.close()
 
     class Reader(CommonIO.Reader, Base):
+        id: str= Field(default_factory=lambda:f"GeneralSharedMemoryIO.Reader:{uuid4()}")
         def read(self, size: int = None) -> bytes:
             """Read binary data from shared memory."""
             if size is None or size > self.shm_size:
@@ -262,6 +295,7 @@ class GeneralSharedMemoryIO(CommonIO):
             return bytes(self._buffer[:size])  # Convert memoryview to bytes
   
     class Writer(CommonIO.Writer, Base):
+        id: str= Field(default_factory=lambda:f"GeneralSharedMemoryIO.Writer:{uuid4()}")
         def write(self, data: bytes):
             """Write binary data to shared memory."""
             if len(data) > self.shm_size:
@@ -282,7 +316,7 @@ class GeneralSharedMemoryIO(CommonIO):
     @staticmethod
     def writer(shm_name: str, shm_size: int):
         return GeneralSharedMemoryIO.Writer(shm_name=shm_name, create=True, shm_size=shm_size).build_buffer()
-             
+   
 class NumpyUInt8SharedMemoryIO(GeneralSharedMemoryIO):
     class Base(GeneralSharedMemoryIO.Base):
         array_shape: tuple = Field(..., description="Shape of the NumPy array to store in shared memory")    
@@ -292,11 +326,13 @@ class NumpyUInt8SharedMemoryIO(GeneralSharedMemoryIO):
             super().__init__(**kwargs)
         
     class Reader(GeneralSharedMemoryIO.Reader, Base):
+        id: str= Field(default_factory=lambda:f"NumpyUInt8SharedMemoryIO.Reader:{uuid4()}")
         def read(self) -> np.ndarray:
             binary_data = super().read(size=self.shm_size)
             return np.frombuffer(binary_data, dtype=self._dtype).reshape(self.array_shape)
     
     class Writer(GeneralSharedMemoryIO.Writer, Base):
+        id: str= Field(default_factory=lambda:f"NumpyUInt8SharedMemoryIO.Writer:{uuid4()}")
         def write(self, data: np.ndarray):
             if data.shape != self.array_shape:
                 raise ValueError(f"Data shape {data.shape} does not match expected shape {self.array_shape}.")
@@ -358,9 +394,11 @@ class NumpyUInt8SharedMemoryStreamIO(NumpyUInt8SharedMemoryIO,CommonStreamIO):
         def set_steam_info(self,data):
             pass        
     class StreamReader(NumpyUInt8SharedMemoryIO.Reader, CommonStreamIO.StreamReader, Base):
+        id: str= Field(default_factory=lambda:f"NumpyUInt8SharedMemoryStreamIO.StreamReader:{uuid4()}")
         def read(self)->tuple[Any,dict]:
             return super().read(),{}
-    class StreamWriter(NumpyUInt8SharedMemoryIO.Writer, CommonStreamIO.StreamWriter, Base):        
+    class StreamWriter(NumpyUInt8SharedMemoryIO.Writer, CommonStreamIO.StreamWriter, Base):
+        id: str= Field(default_factory=lambda:f"NumpyUInt8SharedMemoryStreamIO.StreamWriter:{uuid4()}")
         def write(self, data: np.ndarray, metadata={}):
             return super().write(data),{}
         
@@ -378,6 +416,7 @@ class NumpyUInt8SharedMemoryStreamIO(NumpyUInt8SharedMemoryIO,CommonStreamIO):
 
 class BidirectionalStream:
     class Bidirectional:
+        id: str= Field(default_factory=lambda:f"BidirectionalStream.Bidirectional:{uuid4()}")
         def __init__(self, frame_processor=lambda i,frame,frame_metadata:(frame,frame_metadata),
                         stream_reader:CommonStreamIO.StreamReader=None,stream_writer:CommonStreamIO.StreamWriter=None):
             
@@ -422,6 +461,7 @@ class BidirectionalStream:
                 return res
 
     class WriteOnly(Bidirectional):
+        id: str= Field(default_factory=lambda:f"BidirectionalStream.WriteOnly:{uuid4()}")
         def __init__(self, frame_processor=lambda i,frame,frame_metadata:(frame,frame_metadata),
                     stream_writer:CommonStreamIO.StreamWriter=None):
             self.frame_processor = frame_processor
@@ -433,6 +473,7 @@ class BidirectionalStream:
             self.stream_reader = mock_stream()
 
     class ReadOnly(Bidirectional):
+        id: str= Field(default_factory=lambda:f"BidirectionalStream.ReadOnly:{uuid4()}")
         def __init__(self, frame_processor=lambda i,frame,frame_metadata:(frame,frame_metadata),
                     stream_reader:CommonStreamIO.StreamReader=None):
             
@@ -476,8 +517,6 @@ class BidirectionalStream:
     @staticmethod
     def writeOnly(frame_processor,stream_writer:CommonStreamIO.Writer):
         return BidirectionalStream.WriteOnly(frame_processor,stream_writer)
-
-
 
 try:
     import redis   

@@ -7,7 +7,7 @@ import celery.states
 import cv2
 import numpy as np
 from pydantic import BaseModel
-from basic import NumpyUInt8SharedMemoryIO, NumpyUInt8SharedMemoryStreamIO, ServiceOrientedArchitecture, get_task_status
+from basic import NumpyUInt8SharedMemoryIO, NumpyUInt8SharedMemoryStreamIO, ServiceOrientedArchitecture, BasicApp
 
 
 class Fibonacci(ServiceOrientedArchitecture):
@@ -110,12 +110,12 @@ class CvCameraSharedMemoryService:
             def check_task_status(task_id):
                 
                 while True:
-                    task = get_task_status(task_id)
+                    task = BasicApp.get_task_status(task_id)
                     if task: break
                     time.sleep(1)
 
                 while not stop_flag.is_set():
-                    task = get_task_status(task_id)
+                    task = BasicApp.get_task_status(task_id)
                     if task['status'] == celery.states.REVOKED:
                         print(f"Task marked as {celery.states.REVOKED}, setting stop flag.")
                         stop_flag.set()
