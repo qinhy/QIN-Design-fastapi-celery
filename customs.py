@@ -1,17 +1,14 @@
-from multiprocessing import Process
 import threading
 import time
-from typing import Any
 import celery
 import celery.states
 import cv2
 import numpy as np
 from pydantic import BaseModel, Field
-from basic import NumpyUInt8SharedMemoryIO, NumpyUInt8SharedMemoryStreamIO, ServiceOrientedArchitecture, BasicApp
+from basic import NumpyUInt8SharedMemoryStreamIO, ServiceOrientedArchitecture, BasicApp
 
 
 class Fibonacci(ServiceOrientedArchitecture):
-
     class Model(ServiceOrientedArchitecture.Model):
         
         class Param(BaseModel):
@@ -103,6 +100,54 @@ class CvCameraSharedMemoryService:
                 for i in nones:del model[i]
                 model = CvCameraSharedMemoryService.Model(**model)
             self.model: CvCameraSharedMemoryService.Model = model
+        
+
+        def cv2_VideoCapture_gen(self,src,writer:NumpyUInt8SharedMemoryStreamIO.Writer
+                                 ,stop_flag:threading.Event):
+            # Open the camera using OpenCV
+            cap = cv2.VideoCapture(src)
+            if not cap.isOpened():
+                raise ValueError(f"Unable to open camera {src}")
+            print("writing")
+            while not stop_flag.is_set():
+                ret, frame = cap.read()
+                if not ret:
+                    print("Failed to grab frame")
+                    continue
+                # Convert the frame to grayscale and resize to match shared memory size
+                gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                resized_frame = cv2.resize(gray_frame, (writer.array_shape[1], writer.array_shape[0]))
+                yield resized_frame
+
+
+        def cv2_Random_gen(self, stop_flag:threading.Event, array_shape=(7680, 4320), fps=30):
+            # Define common resolutions
+            # resolutions = {
+            #     '8k': (7680, 4320),
+            #     '4k': (3840, 2160),
+            #     '1080p': (1920, 1080),
+            #     '720p': (1280, 720),
+            #     '480p': (640, 480)
+            # }
+
+            # # Get the resolution or default to 4k if size is not found
+            # resolution = resolutions.get(size, resolutions['4k'])
+
+            frame_time = 1.0 / fps  # Time per frame in seconds
+            random_frame:np.ndarray = np.random.randint(0, 256, array_shape, dtype=np.uint8)
+
+            while not stop_flag.is_set():
+                # Generate a random grayscale frame (values between 0-255)
+                # random_frame = np.random.randint(0, 256, (resolution[1], resolution[0]), dtype=np.uint8)
+                
+                # # Resize frame to match writer array shape
+                # resized_frame = cv2.resize(random_frame, (writer.array_shape[1], writer.array_shape[0]))
+
+                # Yield the random frame
+                yield random_frame
+
+                # Sleep to control frame rate
+                # time.sleep(frame_time)
 
         def __call__(self, *args, **kwargs):
             super().__call__(*args, **kwargs)
@@ -131,37 +176,32 @@ class CvCameraSharedMemoryService:
 
 
             if self.model.param.is_write():
-                # Open the camera using OpenCV
-                cap = cv2.VideoCapture(self.model.args.camera)
-                if not cap.isOpened():
-                    raise ValueError(f"Unable to open camera {self.model.args.camera}")
-                
                 writer = self.model.param.writer()
-                print("writing")
-                while not stop_flag.is_set():
-                    ret, frame = cap.read()
-                    if not ret:
-                        print("Failed to grab frame")
-                        continue
 
-                    # Convert the frame to grayscale and resize to match shared memory size
-                    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                    resized_frame = cv2.resize(gray_frame, (writer.array_shape[1], writer.array_shape[0]))
+                frame_gen = self.cv2_Random_gen(stop_flag,writer.array_shape)
+                start_time = time.time()
+                # Add FPS text to the frame
+                position = (10, 30)  # Top-left corner
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                font_scale = 1
+                color = (255, 255, 255)  # White color (use (0, 0, 0) for black on a grayscale image)
+                thickness = 2
+                for i,frame in enumerate(frame_gen):
+                    if i%100==0:
+                        fps = 100/(time.time()-start_time+1e-5)
+                        print(f"FPS: {fps:.2f} , {writer.id}")
+                        start_time = time.time()
+                        
+                    # Put text on the frame (converted to 3-channel to allow color text if needed)
+                    # text = f"FPS: {fps:.2f}"
+                    # frame_with_text = cv2.putText(frame, text, position, font, font_scale, color, thickness, cv2.LINE_AA)
 
-                    # Write the frame to shared memory
-                    writer.write(resized_frame)
-
-                    # Display the frame (optional, for debugging)
-                #     cv2.imshow('Shared Memory Camera Frame', resized_frame)
-                #     if cv2.waitKey(1) & 0xFF == ord('q'):
-                #         break
-                    
-                # cap.release()
-                # cv2.destroyAllWindows()
+                    writer.write(frame)
 
             else:
                 # reading
                 reader = self.model.param.reader()
+                title = f'Shared Memory Reader Frame:{reader.id}'
                 print("reading")
                 while not stop_flag.is_set():
                     # Read the frame from shared memory
@@ -171,7 +211,7 @@ class CvCameraSharedMemoryService:
                         continue
 
                     # Display the frame
-                    cv2.imshow('Shared Memory Reader Frame', frame)
+                    cv2.imshow(title, frame)
 
                     if cv2.waitKey(1) & 0xFF == ord('q'):
                         break

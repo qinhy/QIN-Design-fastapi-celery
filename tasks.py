@@ -114,7 +114,7 @@ class CeleryTask:
 
 
     @api.get("/streams/write")
-    def api_actions_camera_write(stream_key:str='camera:0',h:int=480,w:int=640):
+    def api_actions_camera_write(stream_key:str='camera:0',h:int=2160*2*2,w:int=3840*2*2):#3840, 2160  480,640
         api_ok()
         info = BasicApp.store.get(f'streams:{stream_key}')
         if info is not None:
@@ -133,7 +133,7 @@ class CeleryTask:
         if info is None:
             raise HTTPException(status_code=503, detail={'error':f'not such stream of [streams:{stream_key}]'})
         
-        CCModel = CvCameraSharedMemoryService.Model        
+        CCModel = CvCameraSharedMemoryService.Model
         data_model=CCModel(param=CCModel.Param(mode='read',stream_key=stream_key,array_shape=info['array_shape']))
         act = dict(name='CvCameraSharedMemoryService', data=data_model.model_dump())
         task = CeleryTask.perform_action.delay(**act)
