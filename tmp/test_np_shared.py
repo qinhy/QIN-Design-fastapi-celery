@@ -40,6 +40,38 @@ def test_shared_memory_performance():
     shm.unlink()
     shm2.close()
     shm2.unlink()
+    
+def test_shared_memory_with_pytorch():
+    # Define an 8K resolution frame size (7680x4320) with 3 channels (RGB)
+    width, height, channels = 7680, 4320, 3
+    frame_size = width * height * channels
+
+    # Create random tensors to simulate an 8K frame and a smaller frame
+    original_tensor = torch.randint(0, 256, (frame_size,), dtype=torch.uint8)
+    small_tensor = torch.randint(0, 256, (frame_size // 100,), dtype=torch.uint8)
+
+    # Move the tensors to shared memory
+    shared_large_tensor = original_tensor.clone().share_memory_()
+    shared_small_tensor = small_tensor.clone().share_memory_()
+
+    # Example operation using shared memory
+    num_iterations = 1000
+    start_time = time.time()
+    for _ in range(num_iterations):
+        # Copy data into another tensor (simulate usage)
+        shared_large_tensor[:] = original_tensor[:]
+        shared_small_tensor[:] = original_tensor[::100]
+
+        # Optional: Move the copied tensors to the GPU (if needed)
+        copied_large_tensor_gpu = shared_large_tensor.to('cuda')
+        # copied_small_tensor_gpu = copied_small_tensor.to('cuda')
+
+    end_time = time.time()
+    total_time = end_time - start_time
+    fps = num_iterations / total_time
+    print(f"Cloned {num_iterations} frames in {total_time:.4f} seconds")
+    print(f"Approximate FPS: {fps:.2f}")
 
 if __name__ == "__main__":
+    # test_shared_memory_with_pytorch()
     test_shared_memory_performance()
