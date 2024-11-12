@@ -320,16 +320,23 @@ class GeneralSharedMemoryIO(CommonIO):
 class NumpyUInt8SharedMemoryIO(GeneralSharedMemoryIO):
     class Base(GeneralSharedMemoryIO.Base):
         array_shape: tuple = Field(..., description="Shape of the NumPy array to store in shared memory")
-        _dtype: np.dtype = np.uint8        
+        _dtype: np.dtype = np.uint8
+        _shared_array: np.ndarray
         def __init__(self, **kwargs):
             kwargs['shm_size'] = np.prod(kwargs['array_shape']) * np.dtype(np.uint8).itemsize
             super().__init__(**kwargs)
-        
+            
+        def build_buffer(self):
+            super().build_buffer()
+            self._shared_array = np.ndarray(self.array_shape, dtype=self._dtype, buffer=self._buffer)
+            return self
+
     class Reader(GeneralSharedMemoryIO.Reader, Base):
         id: str= Field(default_factory=lambda:f"NumpyUInt8SharedMemoryIO.Reader:{uuid4()}")
-        def read(self) -> np.ndarray:
-            binary_data = super().read(size=self.shm_size)
-            return np.frombuffer(binary_data, dtype=self._dtype).reshape(self.array_shape)
+        def read(self,copy=True) -> np.ndarray:
+            return self._shared_array.copy() if copy else self._shared_array
+            # binary_data = super().read(size=self.shm_size)
+            # return np.frombuffer(binary_data, dtype=self._dtype).reshape(self.array_shape)
     
     class Writer(GeneralSharedMemoryIO.Writer, Base):
         id: str= Field(default_factory=lambda:f"NumpyUInt8SharedMemoryIO.Writer:{uuid4()}")
@@ -337,8 +344,9 @@ class NumpyUInt8SharedMemoryIO(GeneralSharedMemoryIO):
             if data.shape != self.array_shape:
                 raise ValueError(f"Data shape {data.shape} does not match expected shape {self.array_shape}.")
             if data.dtype != self._dtype:
-                raise ValueError(f"Data type {data.dtype} does not match expected type {self._dtype}.")
-            super().write(data.tobytes())
+                raise ValueError(f"Data type {data.dtype} does not match expected type {self._dtype}.")            
+            self._shared_array[:] = data[:]
+            # super().write(data.tobytes())
 
     @staticmethod
     def reader(shm_name: str, array_shape: tuple):
@@ -410,8 +418,8 @@ class NumpyUInt8SharedMemoryStreamIO(NumpyUInt8SharedMemoryIO,CommonStreamIO):
             pass        
     class StreamReader(NumpyUInt8SharedMemoryIO.Reader, CommonStreamIO.StreamReader, Base):
         id: str= Field(default_factory=lambda:f"NumpyUInt8SharedMemoryStreamIO.StreamReader:{uuid4()}")
-        def read(self)->tuple[Any,dict]:
-            return super().read(),{}
+        def read(self,copy=True)->tuple[Any,dict]:
+            return super().read(copy),{}
     class StreamWriter(NumpyUInt8SharedMemoryIO.Writer, CommonStreamIO.StreamWriter, Base):
         id: str= Field(default_factory=lambda:f"NumpyUInt8SharedMemoryStreamIO.StreamWriter:{uuid4()}")
         def write(self, data: np.ndarray, metadata={}):
@@ -638,10 +646,10 @@ def test_redisIO():
 
 def test_BidirectionalStream():
     shm_io = NumpyUInt8SharedMemoryStreamIO()
-    writer = shm_io.writer(shm_name="numpy_uint8_shm", array_shape=(10, 10))
-    
+    writer = shm_io.writer(stream_key="numpy:uint8:shm", array_shape=(7680, 4320, 3))
+    img = np.random.randint(0, 256, size=(7680, 4320, 3), dtype=np.uint8)
     bwriter = BidirectionalStream.WriteOnly(
-        lambda  i,frame,frame_metadata:(np.random.randint(0, 256, size=(10, 10), dtype=np.uint8),{'No':print(i)}),
+        lambda  i,frame,frame_metadata:(img,{'No':print(frame_metadata.get('fps',0))}),
         writer)    
     bwriter.run()
 
