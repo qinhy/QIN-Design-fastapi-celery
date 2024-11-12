@@ -22,10 +22,10 @@ import requests
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 
-from Storage import SingletonKeyValueStorage
+from Storages import SingletonKeyValueStorage
 
 class RabbitmqMongoApp:
-    store = SingletonKeyValueStorage()
+    store = SingletonKeyValueStorage().redis_backend()
     rabbitmq_URL = 'localhost:15672'
     mongo_URL = 'mongodb://localhost:27017'
     mongo_DB = 'tasks'
@@ -115,7 +115,7 @@ class RabbitmqMongoApp:
         return res
 
 class RedisApp:
-    store = SingletonKeyValueStorage()
+    store = SingletonKeyValueStorage().redis_backend()
     # Redis URL configuration
     redis_URL = 'redis://localhost:6379/0'
     redis_client = redis.Redis.from_url(redis_URL)
@@ -233,14 +233,14 @@ class AbstractObj(BaseModel):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        print(f'BasicApp.store.set({self.id},self.model_dump_json_dict())')
+        print(f'BasicApp.store.set({self.id},{self.__class__.__name__})')
         BasicApp.store.set(self.id,self.model_dump_json_dict())
     
     def __del__(self):
         print(f'BasicApp.store.delete({self.id})')
         BasicApp.store.delete(self.id)
 
-    def model_dump_json_dict(self):
+    def model_dump_json_dict(self)->dict:
         return json.loads(self.model_dump_json())
          
 class CommonIO:
@@ -319,7 +319,7 @@ class GeneralSharedMemoryIO(CommonIO):
    
 class NumpyUInt8SharedMemoryIO(GeneralSharedMemoryIO):
     class Base(GeneralSharedMemoryIO.Base):
-        array_shape: tuple = Field(..., description="Shape of the NumPy array to store in shared memory")    
+        array_shape: tuple = Field(..., description="Shape of the NumPy array to store in shared memory")
         _dtype: np.dtype = np.uint8        
         def __init__(self, **kwargs):
             kwargs['shm_size'] = np.prod(kwargs['array_shape']) * np.dtype(np.uint8).itemsize
@@ -358,6 +358,19 @@ class CommonStreamIO(CommonIO):
         stream_key: str = 'NULL'
         is_close: bool = False
 
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            tmp = self.model_dump_json_dict()
+            tmp['id'] = self.stream_id()
+            BasicApp.store.set(self.stream_id(),tmp)
+        
+        def __del__(self):
+            super().__del__()
+            BasicApp.store.delete(self.stream_id())
+
+        def stream_id(self):
+            return f'streams:{self.stream_key}'
+
         def write(self, data, metadata={}):
             raise ValueError("[CommonStreamIO.Reader]: This is Reader can not write")
         
@@ -374,6 +387,7 @@ class CommonStreamIO(CommonIO):
             raise ValueError("[StreamWriter]: 'set_steam_info' not implemented")
         
     class StreamReader(CommonIO.Reader, Base):
+        id: str= Field(default_factory=lambda:f"CommonStreamIO.StreamReader:{uuid4()}")
         def read(self)->tuple[Any,dict]:
             return super().read(),{}
         
@@ -384,6 +398,7 @@ class CommonStreamIO(CommonIO):
             return self.read()        
         
     class StreamWriter(CommonIO.Writer, Base):
+        id: str= Field(default_factory=lambda:f"CommonStreamIO.StreamWriter:{uuid4()}")
         def write(self, data, metadata={}):
             raise ValueError("[StreamWriter]: 'write' not implemented")
 
@@ -403,16 +418,20 @@ class NumpyUInt8SharedMemoryStreamIO(NumpyUInt8SharedMemoryIO,CommonStreamIO):
             return super().write(data),{}
         
     @staticmethod
-    def reader(shm_name: str, array_shape: tuple):
+    def reader(stream_key: str, array_shape: tuple):
         shm_size = np.prod(array_shape) * np.dtype(np.uint8).itemsize
+        shm_name = stream_key.replace(':','_')
         return NumpyUInt8SharedMemoryStreamIO.StreamReader(
-            shm_name=shm_name, create=False, array_shape=array_shape,shm_size=shm_size).build_buffer()
+            shm_name=shm_name, create=False, stream_key=stream_key,
+            array_shape=array_shape,shm_size=shm_size).build_buffer()
     
     @staticmethod
-    def writer(shm_name: str, array_shape: tuple):
+    def writer(stream_key: str, array_shape: tuple):
         shm_size = np.prod(array_shape) * np.dtype(np.uint8).itemsize
+        shm_name = stream_key.replace(':','_')
         return NumpyUInt8SharedMemoryStreamIO.StreamWriter(
-            shm_name=shm_name, create=True, array_shape=array_shape,shm_size=shm_size).build_buffer()
+            shm_name=shm_name, create=True, stream_key=stream_key,
+            array_shape=array_shape,shm_size=shm_size).build_buffer()
 
 class BidirectionalStream:
     class Bidirectional:

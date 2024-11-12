@@ -6,7 +6,7 @@ import celery
 import celery.states
 import cv2
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from basic import NumpyUInt8SharedMemoryIO, NumpyUInt8SharedMemoryStreamIO, ServiceOrientedArchitecture, BasicApp
 
 
@@ -57,43 +57,45 @@ class Fibonacci(ServiceOrientedArchitecture):
 
 class CvCameraSharedMemoryService:
     class Model(ServiceOrientedArchitecture.Model):        
-        class Param(NumpyUInt8SharedMemoryIO.Writer):
+        class Param(BaseModel):
+            stream_key: str = Field(default='camera:0', description="The name of the stream")
+            array_shape: tuple = Field(default=(480, 640), description="Shape of the NumPy array to store in shared memory")
             mode:str='write'
-
-            def __init__(self, **kwargs):
-                super().__init__(**kwargs)
-                if not self.is_write():
-                    self.close()
+            _writer:NumpyUInt8SharedMemoryStreamIO.Writer=None
+            _reader:NumpyUInt8SharedMemoryStreamIO.Reader=None
             
             def is_write(self):
                 return self.mode=='write'
+            
+            def writer(self):
+                if self._writer is None:
+                    self._writer = NumpyUInt8SharedMemoryStreamIO.writer(
+                        self.stream_key,self.array_shape)
+                return self._writer
+
+            def reader(self):
+                if self._reader is None:
+                    self._reader = NumpyUInt8SharedMemoryStreamIO.reader(
+                        self.stream_key,self.array_shape)
+                return self._reader
 
         class Args(BaseModel):
             camera:int = 0
 
-        class Return(NumpyUInt8SharedMemoryStreamIO.StreamReader):
-            def __init__(self, **kwargs):
-                kwargs['create'] = False
-                super().__init__(**kwargs)
-
-        param:Param = None
+        param:Param = Param()
         args:Args = Args()
-        ret:Return = None
+        ret:str = 'NO_NEED_INPUT'
         
-
-        def set_param(self, shm_name="camera_shm", create=True, array_shape=(480, 640), mode = 'write'):
+        
+        def set_param(self, stream_key="camera_shm", array_shape=(480, 640), mode = 'write'):
             self.param = CvCameraSharedMemoryService.Model.Param(
-                            mode=mode,shm_name=shm_name, create=create, array_shape=array_shape)
+                            mode=mode,stream_key=stream_key,array_shape=array_shape)
             return self
 
         def set_args(self, camera=0):
             self.args = CvCameraSharedMemoryService.Model.Args(camera=camera)
             return self
         
-        @staticmethod
-        def build_ret(camera_service_model):
-            return CvCameraSharedMemoryService.Model.Return(
-                **camera_service_model['param'])
     class Action(ServiceOrientedArchitecture.Action):
         def __init__(self, model):
             if isinstance(model, dict):
@@ -101,6 +103,7 @@ class CvCameraSharedMemoryService:
                 for i in nones:del model[i]
                 model = CvCameraSharedMemoryService.Model(**model)
             self.model: CvCameraSharedMemoryService.Model = model
+
         def __call__(self, *args, **kwargs):
             super().__call__(*args, **kwargs)
             # A shared flag to communicate between threads
@@ -128,13 +131,12 @@ class CvCameraSharedMemoryService:
 
 
             if self.model.param.is_write():
-                self.model.param.build_buffer()
                 # Open the camera using OpenCV
                 cap = cv2.VideoCapture(self.model.args.camera)
                 if not cap.isOpened():
                     raise ValueError(f"Unable to open camera {self.model.args.camera}")
                 
-                writer = self.model.param  # Shared memory writer
+                writer = self.model.param.writer()
                 print("writing")
                 while not stop_flag.is_set():
                     ret, frame = cap.read()
@@ -159,8 +161,7 @@ class CvCameraSharedMemoryService:
 
             else:
                 # reading
-                reader = self.model.build_ret(self.model.model_dump())
-                reader.build_buffer()
+                reader = self.model.param.reader()
                 print("reading")
                 while not stop_flag.is_set():
                     # Read the frame from shared memory
@@ -185,7 +186,7 @@ class CvCameraSharedMemoryService:
 
 # if __name__ == "__main__":
 #     camera_service_model = CvCameraSharedMemoryService.Model(
-#         ).set_param(shm_name="camera_shm", create=True, array_shape=(480, 640)
+#         ).set_param(stream_key="camera:0", array_shape=(480, 640)
 #         ).set_args(camera=0)
     
 #     print(camera_service_model)    
@@ -195,12 +196,11 @@ class CvCameraSharedMemoryService:
 #     writer_process.start()
 
 #     # Allow the writer some time to initialize and start capturing frames
-#     time.sleep(2)
+#     time.sleep(5)
 
 #     # Start the reader process
 #     camera_service_model = CvCameraSharedMemoryService.Model(
-#         ).set_param(mode='read',shm_name="camera_shm", create=False, array_shape=(480, 640)
-#         ).set_args(camera=0)
+#         ).set_param(mode='read',stream_key="camera:0", array_shape=(480, 640))
 #     action = CvCameraSharedMemoryService.Action(camera_service_model)
 #     action()
 

@@ -112,26 +112,29 @@ class CeleryTask:
         task = CeleryTask.perform_action.delay(**act)
         return {'task_id': task.id}
 
-    CCModel = CvCameraSharedMemoryService.Model
 
-    @api.post("/actions/camera/write")
-    def api_actions_camera_write(data:dict=dict(param=dict(
-                                    shm_name="camera_0", array_shape=(480, 640)),
-                                args=dict(camera=0))):
+    @api.get("/streams/write")
+    def api_actions_camera_write(stream_key:str='camera:0',h:int=480,w:int=640):
         api_ok()
-        data['param']['create']=True
-        data['param']['mode']='write'
-        act = dict(name='CvCameraSharedMemoryService', data=data)
+        info = BasicApp.store.get(f'streams:{stream_key}')
+        if info is not None:
+            raise HTTPException(status_code=503, detail={'error':f'stream of [streams:{stream_key}] has created'})
+        
+        CCModel = CvCameraSharedMemoryService.Model
+        data_model=CCModel(param=CCModel.Param(mode='write',stream_key=stream_key,array_shape=(h,w)))
+        act = dict(name='CvCameraSharedMemoryService', data=data_model.model_dump())
         task = CeleryTask.perform_action.delay(**act)
         return {'task_id': task.id}
     
-    @api.post("/actions/camera/read")
-    def api_actions_camera_read(data:dict=dict(param=dict(
-                                    shm_name="camera_0", array_shape=(480, 640)),
-                                args=dict(camera=0))):
+    @api.get("/streams/read")
+    def api_actions_camera_read(stream_key:str='camera:0'):
         api_ok()
-        data['param']['create']=False
-        data['param']['mode']='read'
-        act = dict(name='CvCameraSharedMemoryService', data=data)
+        info = BasicApp.store.get(f'streams:{stream_key}')
+        if info is None:
+            raise HTTPException(status_code=503, detail={'error':f'not such stream of [streams:{stream_key}]'})
+        
+        CCModel = CvCameraSharedMemoryService.Model        
+        data_model=CCModel(param=CCModel.Param(mode='read',stream_key=stream_key,array_shape=info['array_shape']))
+        act = dict(name='CvCameraSharedMemoryService', data=data_model.model_dump())
         task = CeleryTask.perform_action.delay(**act)
         return {'task_id': task.id}
