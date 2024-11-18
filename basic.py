@@ -25,7 +25,7 @@ from pymongo.errors import ConnectionFailure
 from Storages import SingletonKeyValueStorage
 
 class RabbitmqMongoApp:
-    store = SingletonKeyValueStorage().redis_backend()
+    store = SingletonKeyValueStorage().mongo_backend()
     rabbitmq_URL = 'localhost:15672'
     mongo_URL = 'mongodb://localhost:27017'
     mongo_DB = 'tasks'
