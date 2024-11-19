@@ -1,6 +1,7 @@
 
 from datetime import datetime
 from multiprocessing import shared_memory
+import threading
 import time
 from typing import Any
 from uuid import uuid4
@@ -216,7 +217,29 @@ class ServiceOrientedArchitecture:
 
         def __call__(self, *args, **kwargs):
             BasicApp.set_task_started(self.model)
-            return self.model
+            # A shared flag to communicate between threads
+            stop_flag = threading.Event()
+
+            # Function to check if the task should be stopped, running in a separate thread
+            def check_task_status(task_id):
+                
+                while True:
+                    task = BasicApp.get_task_status(task_id)
+                    if task: break
+                    time.sleep(1)
+
+                while not stop_flag.is_set():
+                    task = BasicApp.get_task_status(task_id)
+                    if task['status'] == celery.states.REVOKED:
+                        print(f"Task marked as {celery.states.REVOKED}, setting stop flag.")
+                        stop_flag.set()
+                        break
+                    time.sleep(1)  # Delay between checks to reduce load on MongoDB
+
+            # Start the status-checking thread
+            status_thread = threading.Thread(target=check_task_status, args=(self.model.task_id,))
+            status_thread.start()
+            return stop_flag
 
 ##################### IO 
 

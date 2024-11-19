@@ -1,12 +1,9 @@
 import threading
 import time
-import celery
-import celery.states
 import cv2
 import numpy as np
 from pydantic import BaseModel, Field
-from basic import NumpyUInt8SharedMemoryStreamIO, ServiceOrientedArchitecture, BasicApp
-
+from basic import NumpyUInt8SharedMemoryStreamIO, ServiceOrientedArchitecture
 
 class Fibonacci(ServiceOrientedArchitecture):
     class Model(ServiceOrientedArchitecture.Model):
@@ -32,10 +29,7 @@ class Fibonacci(ServiceOrientedArchitecture):
             self.model: Fibonacci.Model = model
 
         def __call__(self, *args, **kwargs):
-            super().__call__(*args, **kwargs)
-            return self.calculate()
-
-        def calculate(self):
+            stop_flag = super().__call__(*args, **kwargs)
             n = self.model.args.n
             if n <= 1:
                 self.model.ret.n = n
@@ -47,6 +41,7 @@ class Fibonacci(ServiceOrientedArchitecture):
                     res = b
                 else:
                     def fib_r(n):
+                        if stop_flag.is_set(): return 0
                         return(fib_r(n-1) + fib_r(n-2))                    
                     res = fib_r(n)
                 self.model.ret.n = res
@@ -150,30 +145,7 @@ class CvCameraSharedMemoryService:
                 # time.sleep(frame_time)
 
         def __call__(self, *args, **kwargs):
-            super().__call__(*args, **kwargs)
-            # A shared flag to communicate between threads
-            stop_flag = threading.Event()
-
-            # Function to check if the task should be stopped, running in a separate thread
-            def check_task_status(task_id):
-                
-                while True:
-                    task = BasicApp.get_task_status(task_id)
-                    if task: break
-                    time.sleep(1)
-
-                while not stop_flag.is_set():
-                    task = BasicApp.get_task_status(task_id)
-                    if task['status'] == celery.states.REVOKED:
-                        print(f"Task marked as {celery.states.REVOKED}, setting stop flag.")
-                        stop_flag.set()
-                        break
-                    time.sleep(1)  # Delay between checks to reduce load on MongoDB
-
-            # Start the status-checking thread
-            status_thread = threading.Thread(target=check_task_status, args=(self.model.task_id,))
-            status_thread.start()
-
+            stop_flag = super().__call__(*args, **kwargs)
 
             if self.model.param.is_write():
                 writer = self.model.param.writer()
@@ -187,8 +159,8 @@ class CvCameraSharedMemoryService:
                 color = (255, 255, 255)  # White color (use (0, 0, 0) for black on a grayscale image)
                 thickness = 2
                 for i,frame in enumerate(frame_gen):
-                    if i%100==0:
-                        fps = 100/(time.time()-start_time+1e-5)
+                    if i%10000==0:
+                        fps = 10000/(time.time()-start_time+1e-5)
                         print(f"FPS: {fps:.2f} , {writer.id}")
                         start_time = time.time()
                         
@@ -225,6 +197,7 @@ class CvCameraSharedMemoryService:
 #     action()  # Start capturing and writing to shared memory
 
 # if __name__ == "__main__":
+#     from multiprocessing import Process
 #     camera_service_model = CvCameraSharedMemoryService.Model(
 #         ).set_param(stream_key="camera:0", array_shape=(480, 640)
 #         ).set_args(camera=0)

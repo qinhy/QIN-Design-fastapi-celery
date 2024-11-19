@@ -1,3 +1,4 @@
+import secrets
 from typing import Dict
 from basic import BasicApp
 from customs import CvCameraSharedMemoryService, Fibonacci, ServiceOrientedArchitecture
@@ -5,8 +6,12 @@ from customs import CvCameraSharedMemoryService, Fibonacci, ServiceOrientedArchi
 ######################################### Celery connect to local rabbitmq and mongo backend
 import os
 os.environ.setdefault('CELERY_TASK_SERIALIZER', 'json')
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from celery.app import task as Task
+
+from users import AuthService, UserModels, router as users_router
 
 celery_app = BasicApp.get_celery_app()
 def api_ok():
@@ -14,7 +19,24 @@ def api_ok():
         raise HTTPException(status_code=503, detail={'error':'service not healthy'})
         
 class CeleryTask:
+
+    ALGORITHM = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES = 30
+    SECRET_KEY = secrets.token_urlsafe(32)
+    SESSION_DURATION = ACCESS_TOKEN_EXPIRE_MINUTES *60
+
     api = FastAPI()
+
+    api.add_middleware(
+        CORSMiddleware,
+        allow_origins=[ '*',],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    api.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, max_age=SESSION_DURATION)
+
+    api.include_router(users_router, prefix="", tags=["users"])
 
     ########################### essential function
     @staticmethod
@@ -25,7 +47,7 @@ class CeleryTask:
         return value
     
     @api.get("/tasks/")
-    def api_list_tasks():
+    def api_list_tasks():#current_user: UserModels.User = Depends(AuthService.get_current_user)):
         api_ok()
         return BasicApp.get_tasks_list()
     
@@ -35,7 +57,7 @@ class CeleryTask:
         return BasicApp.get_task_status()
     
     @api.get("/tasks/stop/{task_id}")
-    def api_task_stop(task_id: str):        
+    def api_task_stop(task_id: str):
         api_ok()
         return BasicApp.set_task_revoked(task_id)
 
