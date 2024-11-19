@@ -1,1 +1,0 @@
-uvicorn users:app --reload
