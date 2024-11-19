@@ -59,6 +59,7 @@ def print_char(content: str) -> str:
 # OPENAI_API_KEY =
 # FILEBROWSERPASS = 'admin password'
 
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -90,6 +91,7 @@ init_db()
 router = APIRouter()
 # docker_client = docker.from_env()
 #######################################################################################
+
 
 class UserModels:
     class User(BaseModel):
@@ -216,11 +218,13 @@ class AuthService:
         user = UserService.get_user_by_email(email)
         if user.disabled:
             raise HTTPException(status_code=400, detail="Inactive user")
-        
+
         if user is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
         return user
+
+
 class OAuthRoutes:
     @staticmethod
     @router.get("/register", response_class=HTMLResponse)
