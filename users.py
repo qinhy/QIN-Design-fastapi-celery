@@ -214,18 +214,13 @@ class AuthService:
                                 detail="Invalid authentication credentials")
 
         user = UserService.get_user_by_email(email)
+        if user.disabled:
+            raise HTTPException(status_code=400, detail="Inactive user")
+        
         if user is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
         return user
-
-    @staticmethod
-    async def is_current_user_active(current_user: UserModels.User = Depends(get_current_user)):
-        if current_user.disabled:
-            raise HTTPException(status_code=400, detail="Inactive user")
-        return current_user
-
-
 class OAuthRoutes:
     @staticmethod
     @router.get("/register", response_class=HTMLResponse)
