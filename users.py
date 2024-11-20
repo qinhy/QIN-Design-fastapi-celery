@@ -114,6 +114,14 @@ class UserModels:
         def from_list(l):
             data = dict(zip(UserModels.User().model_dump().keys(), l))
             return UserModels.User(**data)
+        
+        @staticmethod
+        def new_user(username: str,full_name: str,email: str,password: str,disabled=False):
+            formatted_email = UserService.format_email(email)
+            hashed_password = UserService.hash_password(password)
+            user_uuid = remove_hyphen(hash2uuid(f'{formatted_email}'))  # str(uuid.uuid4())
+            return UserModels.User(username=username,full_name=full_name,email=formatted_email,
+                            hashed_password=hashed_password,user_uuid=user_uuid,disabled=disabled)
 
     class RegisterRequest(BaseModel):
         username: str
@@ -234,18 +242,13 @@ class OAuthRoutes:
     @staticmethod
     @router.post("/register")
     async def register_user(request: UserModels.RegisterRequest):
-        formatted_email = UserService.format_email(request.email)
-        hashed_password = UserService.hash_password(request.password)
-        user_uuid = remove_hyphen(
-            hash2uuid(f'{formatted_email}{hashed_password}'))  # str(uuid.uuid4())
-        if request.invite_code != INVITE_CODE:
-            raise HTTPException(
-                status_code=400, detail="invite code not valid")
-
+        data = request.model_dump()
+        if data.pop('invite_code') != INVITE_CODE:
+            raise HTTPException(status_code=400, detail="invite code not valid")
         try:
+            user = UserModels.User.new_user(**data)
             res = []
-            res.append(UserService.insert_user(
-                request.username, request.full_name, formatted_email, hashed_password, user_uuid))
+            res.append(UserService.insert_user(**user.model_dump()))
             return {"status": "success", "message": "User registered successfully"}
         except sqlite3.IntegrityError:
             raise HTTPException(
@@ -260,11 +263,10 @@ class OAuthRoutes:
             raise HTTPException(status_code=400, detail="Incorrect password")
         try:
             # Update user info
-            if request.new_password == '':
-                request.new_password = request.password
-            hashed_password = UserService.hash_password(request.new_password)
-            UserService.update_user_info(
-                request.full_name, current_user.email, hashed_password, current_user.disabled)
+            if request.new_password == '': request.new_password = request.password
+            user = UserModels.User.new_user(current_user.username,request.full_name,
+                                            current_user.email,request.new_password,current_user.disabled)
+            UserService.update_user_info(user.full_name,user.email,user.hashed_password,user.disabled)
             return {"status": "success", "message": "User info updated successfully"}
         except Exception as e:
             raise HTTPException(
