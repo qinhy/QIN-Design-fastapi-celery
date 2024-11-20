@@ -1,0 +1,12 @@
+numpy
+gradio
+pandas
+requests
+celery
+redis
+cv2
+fastapi
+pydantic
+starlette
+pymongo
+jose

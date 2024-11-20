@@ -6,7 +6,6 @@ import time
 from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo
-from typing_extensions import Unpack
 import requests
 import celery
 import celery.states

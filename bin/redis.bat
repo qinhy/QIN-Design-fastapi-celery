@@ -1,1 +1,1 @@
-.\redis\redis-server.exe
+.\bin\redis\redis-server.exe
