@@ -1,13 +1,20 @@
+from base64 import b64encode
+from io import BytesIO
+import json
+import uuid
+
+import pyotp
+import qrcode
 from Config import APP_INVITE_CODE, APP_SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, USER_DB
 
 from pydantic import BaseModel, EmailStr, Field
 from fastapi.security import OAuth2PasswordRequestForm
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, RedirectResponse
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status, Request
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
 import os
-from .UserModel import Model4User
+from .UserModel import Model4User, text2hash2base32Str
 
 router = APIRouter()
 #######################################################################################
@@ -47,6 +54,10 @@ class UserModels:
         token_type: str = 'bearer'
         app_access_token: str
         user_uuid: str
+        exp: datetime = Field(..., description="The expiration time of the token as a datetime object")
+
+        def model_dump_json_dict(self)->dict:
+            return json.loads(self.model_dump_json())
         
 # AuthService for managing authentication
 class AuthService:
@@ -54,7 +65,7 @@ class AuthService:
     def create_access_token(email: str, expires_delta: timedelta = None, role:str = 'user'):
         expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
         payload = UserModels.PayloadModel(email=email,exp=expire,role=role)
-        return jwt.encode(payload.model_dump(), APP_SECRET_KEY, algorithm=ALGORITHM)
+        return jwt.encode(payload.model_dump(), APP_SECRET_KEY, algorithm=ALGORITHM),payload
 
     @staticmethod
     async def get_current_payload(request: Request): 
@@ -67,6 +78,10 @@ class AuthService:
             payload = UserModels.PayloadModel(**jwt.decode(session.app_access_token, APP_SECRET_KEY, algorithms=[ALGORITHM]))
         except JWTError:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
+        
+        # Expiration check
+        if datetime.now(timezone.utc) > payload.exp:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired")
 
         return payload
 
@@ -85,6 +100,63 @@ class AuthService:
         if not payload.is_root():
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User is not root")
         return payload
+
+    @staticmethod
+    def generate_otp_secret(email: str) -> str:
+        secret = pyotp.random_base32()
+        user = USER_DB.find_user_by_email(email)
+        if user:
+            USER_DB.update_user_otp_secret(email, secret)
+        return secret
+
+    @staticmethod
+    def generate_otp_qr_code(user:UserModels.User) -> str:
+        secret = text2hash2base32Str(user.email)
+        totp = pyotp.TOTP(secret)
+        uri = totp.provisioning_uri(name=user.email, issuer_name="APP")
+        qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
+        qr.add_data(uri)
+        qr.make(fit=True)
+        img = qr.make_image(fill='black', back_color='white')
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        # img_b64 = b64encode(buf.getvalue()).decode('utf-8')
+        # return f"data:image/png;base64,{img_b64}"
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        return buf
+    
+    @staticmethod
+    async def verify_otp(otp_code:str, email:str) -> bool:
+        secret = text2hash2base32Str(email)
+        if not secret or len(secret)!=32: return False
+        totp = pyotp.TOTP(secret)
+        return totp.verify(otp_code)
+    
+    @staticmethod    
+    def generate_session(user:UserModels.User):
+        access_token,payload = AuthService.create_access_token(email=user.email,role=user.role)
+        data = UserModels.SessionModel(app_access_token=access_token,user_uuid=user.get_id(),
+                                       exp=payload.exp).model_dump_json_dict()
+        return data
+    
+    @staticmethod
+    def generate_login_qr(uid):
+        # Generate a unique token or code for login, this could be based on user session or a one-time code
+        uri = f"/qr?token={uid}"
+        
+        # Generate QR Code
+        qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
+        qr.add_data(uri)
+        qr.make(fit=True)
+        img = qr.make_image(fill='black', back_color='white')
+
+        # Save image to buffer
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        return buf
+
     
 # OAuth routes
 class OAuthRoutes:
@@ -121,15 +193,12 @@ class OAuthRoutes:
     @router.post("/token")
     def get_token(form_data: OAuth2PasswordRequestForm = Depends(), request: Request = None):
         email = form_data.username
-
         user = USER_DB.find_user_by_email(email)        
         if user is None  or not user.check_password(form_data.password):
             raise HTTPException(status_code=400, detail="Incorrect username or password")
-
-        access_token = AuthService.create_access_token(email=email,role=user.role)
-        data = UserModels.SessionModel(app_access_token=access_token,user_uuid=user.get_id()).model_dump()
-        request.session.update(data)
         
+        data = AuthService.generate_session(user)
+        request.session.update(data)        
         return data
         
     @staticmethod
@@ -184,7 +253,49 @@ class OAuthRoutes:
     @staticmethod
     @router.get("/session")
     def read_session(request: Request, current_user: UserModels.User = Depends(AuthService.get_current_user)):
-        return dict(**current_user.model_dump(),app_access_token=request.session.get("app_access_token", ""))
+        session = UserModels.SessionModel(**request.session)
+        return dict(**current_user.model_dump(),app_access_token=session.app_access_token,
+                    timeout=session.exp-datetime.now(timezone.utc))
+    
+    @router.get("/otp/qr")
+    async def get_otp_qr(current_user: UserModels.User = Depends(AuthService.get_current_user)):
+        return StreamingResponse(AuthService.generate_otp_qr_code(current_user), media_type="image/png")
+    
+    @router.get("/qr/{uid}")
+    async def get_login_qr(uid:str, request: Request = None):
+        data = USER_DB.get(uid)
+        try:
+            user = await AuthService.get_current_user(request)
+            return RedirectResponse('/')
+        except Exception as e:
+            pass
+
+        if data is None:
+            uid = uuid.UUID(uid)
+            return StreamingResponse(AuthService.generate_login_qr(uid), media_type="image/png")
+        else:
+            session = UserModels.SessionModel(**data)
+            user = USER_DB.find(session.user_uuid)
+            data = AuthService.generate_session(user)
+            request.session.update(data)
+            USER_DB.delete(uid)
+            return RedirectResponse('/')
+            # return {"status": "success", "message": "Logged in successfully"}
+    
+    @router.get("/qr/login/{uid}")
+    async def login_qr(uid:str, request: Request, current_user: UserModels.User = Depends(AuthService.get_current_user)):
+        session = UserModels.SessionModel(**request.session)
+        USER_DB.set(uid,session.model_dump_json_dict())
+        return {"status": "success", "message": "Logged in successfully"}
+    
+    @router.get("/otp/token/{email}/{code}")
+    async def get_otp_token(code:str,email:str, request: Request = None):        
+        if not AuthService.verify_otp(code,email): 
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
+        user = USER_DB.find_user_by_email(email)
+        data = AuthService.generate_session(user)
+        request.session.update(data)        
+        return data
 
     @router.get("/icon/{icon_name}", response_class=HTMLResponse)
     async def read_icon(icon_name: str, current_user: UserModels.User = Depends(AuthService.get_current_payload)):

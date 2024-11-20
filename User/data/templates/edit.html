@@ -61,9 +61,7 @@
     </style>
 
     <script>
-        var apiurl = window.location.href.replace('edit', '');
-        if (apiurl[apiurl.length - 1] == '/') { apiurl = apiurl.substring(0, apiurl.length - 1) }
-
+        var apiurl = window.location.protocol + "//" +window.location.host;
         window.onload = function () {
             // Fetch current user data
             fetch(apiurl + '/me', {

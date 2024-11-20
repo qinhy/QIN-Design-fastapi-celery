@@ -10,3 +10,5 @@ pydantic
 starlette
 pymongo
 jose
+pyotp
+qrcode

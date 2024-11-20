@@ -13,6 +13,12 @@ import uuid,hashlib
 
 import numpy as np
 
+
+
+def text2hash2base32Str(text:str):
+    hash_uuid = hashlib.sha256(text.encode()).digest()
+    return base64.b32encode(hash_uuid).decode('utf-8').strip('=')
+
 def text2hash2base64Str(text:str,salt:bytes = b'',ite:int = 10**6):
     return base64.b64encode(hashlib.pbkdf2_hmac('sha256', text.encode(), salt, ite, dklen=16)).decode()
 
