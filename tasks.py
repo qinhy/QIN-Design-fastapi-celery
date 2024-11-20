@@ -1,33 +1,22 @@
+from Config import SESSION_DURATION, APP_SECRET_KEY
+
 from User.UserAPIs import AuthService, UserModels, router as users_router
 from celery.app import task as Task
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Depends, FastAPI, HTTPException
-import secrets
 from typing import Dict
 from Task.Basic import BasicApp
 from Task.Customs import CvCameraSharedMemoryService, Fibonacci, ServiceOrientedArchitecture
 
-# Celery connect to local rabbitmq and mongo backend
-import os
-os.environ.setdefault('CELERY_TASK_SERIALIZER', 'json')
-
-
 celery_app = BasicApp.get_celery_app()
-
 
 def api_ok():
     if not BasicApp.check_services():
         raise HTTPException(status_code=503, detail={
                             'error': 'service not healthy'})
 
-
 class CeleryTask:
-
-    ALGORITHM = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES = 30
-    SECRET_KEY = secrets.token_urlsafe(32)
-    SESSION_DURATION = ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
     api = FastAPI()
 
@@ -39,7 +28,7 @@ class CeleryTask:
         allow_headers=["*"],
     )
     api.add_middleware(SessionMiddleware,
-                       secret_key=SECRET_KEY, max_age=SESSION_DURATION)
+                       secret_key=APP_SECRET_KEY, max_age=SESSION_DURATION)
 
     api.include_router(users_router, prefix="", tags=["users"])
 
@@ -69,6 +58,7 @@ class CeleryTask:
 
     @api.get("/workers/")
     def get_workers():
+        # current_user: UserModels.User = Depends(AuthService.get_current_root_user)):
         api_ok()
         """Retrieve the status of all Celery workers."""
         inspector = celery_app.control.inspect()
@@ -187,7 +177,7 @@ class CeleryTask:
 
     @api.post("/auth/fibonacci/")
     def api_fibonacci(fib_task: Fibonacci.Model,
-                      current_user: UserModels.User = Depends(AuthService.get_current_user)):
+                      current_user: UserModels.User = Depends(AuthService.get_current_payload)):
         api_ok()
         task = CeleryTask.fibonacci.delay(fib_task.model_dump())
         return {'task_id': task.id}

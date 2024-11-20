@@ -1,1 +1,1 @@
-python -m celery -A tasks.celery_app flower --url_prefix=flower --port=50002
+python -m celery -A tasks.celery_app flower --url_prefix=flower --port=%FLOWER_PORT%

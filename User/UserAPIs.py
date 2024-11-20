@@ -1,34 +1,13 @@
+from Config import APP_INVITE_CODE, APP_SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, USER_DB
+
 from pydantic import BaseModel, EmailStr, Field
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status, Request
 from jose import JWTError, jwt
-import requests
 from datetime import datetime, timedelta, timezone
-import secrets
 import os
-from .UserModel import UsersStore,Model4User
-
-# INVITE_CODE = os.environ.get('APP_INVITE_CODE', '123')
-# SECRET_KEY = os.environ.get('APP_SECRET_KEY', secrets.token_urlsafe(32))
-APP_BACK_END = os.environ['APP_BACK_END']
-
-APP_INVITE_CODE = os.environ['APP_INVITE_CODE']
-APP_SECRET_KEY = os.environ['APP_SECRET_KEY']
-
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-SESSION_DURATION = ACCESS_TOKEN_EXPIRE_MINUTES * 60
-UVICORN_PORT = 8000
-EX_IP = requests.get('https://v4.ident.me/').text
-
-db = UsersStore()
-if APP_BACK_END=='redis':
-    db.redis_backend()
-elif APP_BACK_END=='mongodbrabbitmq':
-    db.mongo_backend()
-else:
-    raise ValueError(f'no back end of {APP_BACK_END}')
+from .UserModel import Model4User
 
 router = APIRouter()
 #######################################################################################
@@ -58,8 +37,11 @@ class UserModels:
         password: str
 
     class PayloadModel(BaseModel):
+        role:str = 'user'
         email: EmailStr = Field(..., description="The email address of the user")
         exp: datetime = Field(..., description="The expiration time of the token as a datetime object")
+        
+        def is_root(self):return self.role == 'root'
 
     class SessionModel(BaseModel):
         token_type: str = 'bearer'
@@ -69,29 +51,41 @@ class UserModels:
 # AuthService for managing authentication
 class AuthService:
     @staticmethod
-    def create_access_token(email: str, expires_delta: timedelta = None):
+    def create_access_token(email: str, expires_delta: timedelta = None, role:str = 'user'):
         expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-        payload = UserModels.PayloadModel(email=email,exp=expire)
+        payload = UserModels.PayloadModel(email=email,exp=expire,role=role)
         return jwt.encode(payload.model_dump(), APP_SECRET_KEY, algorithm=ALGORITHM)
 
     @staticmethod
-    async def get_current_user(request: Request): 
+    async def get_current_payload(request: Request): 
         try:
             session = UserModels.SessionModel(**request.session)
         except Exception as e:            
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
-          
+                  
         try:            
             payload = UserModels.PayloadModel(**jwt.decode(session.app_access_token, APP_SECRET_KEY, algorithms=[ALGORITHM]))
         except JWTError:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
 
-        user = db.find_user_by_email(payload.email)
+        return payload
+
+    @staticmethod
+    async def get_current_user(request: Request):
+        payload = await AuthService.get_current_payload(request)
+        user = USER_DB.find_user_by_email(payload.email)
         if not user or user.disabled:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
         
         return user
 
+    @staticmethod
+    async def get_current_root_payload(request: Request): 
+        payload = await AuthService.get_current_payload(request)
+        if not payload.is_root():
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User is not root")
+        return payload
+    
 # OAuth routes
 class OAuthRoutes:
     @staticmethod
@@ -116,11 +110,11 @@ class OAuthRoutes:
         if data.pop('invite_code') != APP_INVITE_CODE:
             raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Invalid invite code")
 
-        if db.find_user_by_email(request.email) is not None:            
+        if USER_DB.find_user_by_email(request.email) is not None:            
             raise HTTPException(status_code=400, detail="Username already exists")
         
         data['hashed_password'] = UserModels.User.hash_password(data.pop('password'))
-        db.add_new_user(**data)
+        USER_DB.add_new_user(**data)
         return {"status": "success", "message": "User registered successfully"}
 
     @staticmethod
@@ -128,11 +122,11 @@ class OAuthRoutes:
     def get_token(form_data: OAuth2PasswordRequestForm = Depends(), request: Request = None):
         email = form_data.username
 
-        user = db.find_user_by_email(email)        
+        user = USER_DB.find_user_by_email(email)        
         if user is None  or not user.check_password(form_data.password):
             raise HTTPException(status_code=400, detail="Incorrect username or password")
 
-        access_token = AuthService.create_access_token(email=email)
+        access_token = AuthService.create_access_token(email=email,role=user.role)
         data = UserModels.SessionModel(app_access_token=access_token,user_uuid=user.get_id()).model_dump()
         request.session.update(data)
         
@@ -145,12 +139,12 @@ class OAuthRoutes:
 
     @staticmethod
     @router.get("/edit", response_class=HTMLResponse)
-    async def get_edit_page(current_user: UserModels.User = Depends(AuthService.get_current_user)):
+    async def get_edit_page(current_user: UserModels.User = Depends(AuthService.get_current_payload)):
         return FileResponse(os.path.join(os.path.dirname(__file__), 'data', 'templates', "edit.html"))
     
     @staticmethod
     @router.get("/", response_class=HTMLResponse)
-    async def read_home(current_user: UserModels.User = Depends(AuthService.get_current_user)):
+    async def read_home(current_user: UserModels.User = Depends(AuthService.get_current_payload)):
         return FileResponse(os.path.join(os.path.dirname(__file__), 'data', 'templates', 'edit.html'))
     
     @staticmethod
@@ -193,7 +187,7 @@ class OAuthRoutes:
         return dict(**current_user.model_dump(),app_access_token=request.session.get("app_access_token", ""))
 
     @router.get("/icon/{icon_name}", response_class=HTMLResponse)
-    async def read_icon(icon_name: str, current_user: UserModels.User = Depends(AuthService.get_current_user)):
+    async def read_icon(icon_name: str, current_user: UserModels.User = Depends(AuthService.get_current_payload)):
         return FileResponse(os.path.join(os.path.dirname(__file__), 'data', 'icon', icon_name))
 
     @staticmethod

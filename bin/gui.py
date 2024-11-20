@@ -1,9 +1,10 @@
 import gradio as gr
 import requests
 import pandas as pd
+import os 
 
 # Define base URL for the FastAPI endpoints
-BASE_URL = "http://localhost:8000"  # Adjust if the FastAPI server runs on a different host or port
+BASE_URL = f"http://localhost:{os.environ['UVICORN_PORT']}"  # Adjust if the FastAPI server runs on a different host or port
 
 # Functions to interact with the API
 def list_tasks():
