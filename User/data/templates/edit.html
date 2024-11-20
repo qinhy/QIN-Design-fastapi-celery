@@ -75,17 +75,26 @@
             .then(response => response.json())
             .then(data => {
                 // {
+                //     "rank": [
+                //         0
+                //     ],
+                //     "create_time": "2024-11-20T11:39:22.575919+00:00",
+                //     "update_time": "2024-11-20T11:39:22.575919+00:00",
+                //     "status": "",
+                //     "metadata": {},
                 //     "username": "123",
                 //     "full_name": "123",
+                //     "role": "user",
+                //     "hashed_password": "VlzGnSMUNS3LRkt2iDeyrQ==",
                 //     "email": "123@123.com",
-                //     "hashed_password": "$2b$12$OwnuSOHECQa1Li6LWIzD5exM5KT4qGkHMcBv12JW4nj3/BfN94GLG",
-                //     "user_uuid": "221c139bb7da479efe6f2cde388e41c4",
-                //     "disabled": false
+                //     "disabled": false,
+                //     "uuid": "User:a3293ffe-e390-a9b3-ee9c-7d1438b64634"
                 // }
+                // console.log(data);
                 if (data) {
                     document.getElementById("full_name").value = data.full_name || "";
                     document.getElementById("email").value = data.email || "";
-                    document.getElementById("user_uuid").value = data.user_uuid || "";
+                    document.getElementById("uuid").value = data.uuid || "";
                     document.getElementById("new_password").value = ""; // Do not prepopulate password for security
                 } else {
                     alert("Failed to load user information: " + (data.detail || "Unknown error"));
@@ -149,8 +158,8 @@
     <form id="editForm" onsubmit="editUser(event)">
         
         <div id="labelUUID">
-            <label for="user_uuid">UUID:</label>            
-            <input type="text" id="user_uuid" name="user_uuid" value="" disabled>
+            <label for="uuid">UUID:</label>            
+            <input type="text" id="uuid" name="uuid" value="" disabled>
         </div>
 
         <div id="labelEmail">

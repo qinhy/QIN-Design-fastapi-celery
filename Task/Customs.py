@@ -3,7 +3,7 @@ import time
 import cv2
 import numpy as np
 from pydantic import BaseModel, Field
-from basic import NumpyUInt8SharedMemoryStreamIO, ServiceOrientedArchitecture
+from .Basic import NumpyUInt8SharedMemoryStreamIO, ServiceOrientedArchitecture
 
 class Fibonacci(ServiceOrientedArchitecture):
     class Model(ServiceOrientedArchitecture.Model):

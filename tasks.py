@@ -1,12 +1,12 @@
-from users import AuthService, UserModels, router as users_router
+from User.UserAPIs import AuthService, UserModels, router as users_router
 from celery.app import task as Task
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Depends, FastAPI, HTTPException
 import secrets
 from typing import Dict
-from basic import BasicApp
-from customs import CvCameraSharedMemoryService, Fibonacci, ServiceOrientedArchitecture
+from Task.Basic import BasicApp
+from Task.Customs import CvCameraSharedMemoryService, Fibonacci, ServiceOrientedArchitecture
 
 # Celery connect to local rabbitmq and mongo backend
 import os
@@ -53,7 +53,6 @@ class CeleryTask:
         return value
 
     @api.get("/tasks/")
-    # current_user: UserModels.User = Depends(AuthService.get_current_user)):
     def api_list_tasks():
         api_ok()
         return BasicApp.get_tasks_list()
@@ -172,4 +171,23 @@ class CeleryTask:
         act = dict(name='CvCameraSharedMemoryService',
                    data=data_model.model_dump())
         task = CeleryTask.perform_action.delay(**act)
+        return {'task_id': task.id}
+
+    ########################### basic function with auth
+    @staticmethod
+    @celery_app.task(bind=True,)
+    def fibonacci(t: Task, fib_task_model_dump: dict,) -> int:
+        """Celery task to calculate the nth Fibonacci number."""
+        fib_task_model_dump['task_id'] = t.request.id
+        model = Fibonacci.Model(**fib_task_model_dump)
+        model = Fibonacci.Action(model)()
+        res: Fibonacci.Model.Return = model.ret
+        # make sure that res is dict or other primitive objects for json serialization
+        return CeleryTask.is_json_serializable(res.model_dump())
+
+    @api.post("/auth/fibonacci/")
+    def api_fibonacci(fib_task: Fibonacci.Model,
+                      current_user: UserModels.User = Depends(AuthService.get_current_user)):
+        api_ok()
+        task = CeleryTask.fibonacci.delay(fib_task.model_dump())
         return {'task_id': task.id}
