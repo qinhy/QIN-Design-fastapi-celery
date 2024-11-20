@@ -1,6 +1,7 @@
 
 from datetime import datetime
 from multiprocessing import shared_memory
+import os
 import threading
 import time
 from typing import Any
@@ -190,8 +191,14 @@ class RedisApp:
         else:
             return {'error': 'Task not found'}
 
-class BasicApp(RedisApp):
-    pass
+
+APP_BACK_END = os.environ['APP_BACK_END']
+if APP_BACK_END=='redis':
+    BasicApp = RedisApp
+elif APP_BACK_END=='mongodbrabbitmq':
+    BasicApp = RabbitmqMongoApp
+else:
+    raise ValueError(f'no back end of {APP_BACK_END}')
 
 class ServiceOrientedArchitecture:
     class Model(BaseModel):

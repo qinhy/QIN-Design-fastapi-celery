@@ -9,8 +9,12 @@ import secrets
 import os
 from .UserModel import UsersStore,Model4User
 
-INVITE_CODE = os.environ.get('APP_INVITE_CODE', '123')
-SECRET_KEY = os.environ.get('APP_SECRET_KEY', secrets.token_urlsafe(32))
+# INVITE_CODE = os.environ.get('APP_INVITE_CODE', '123')
+# SECRET_KEY = os.environ.get('APP_SECRET_KEY', secrets.token_urlsafe(32))
+APP_BACK_END = os.environ['APP_BACK_END']
+
+APP_INVITE_CODE = os.environ['APP_INVITE_CODE']
+APP_SECRET_KEY = os.environ['APP_SECRET_KEY']
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
@@ -19,7 +23,13 @@ UVICORN_PORT = 8000
 EX_IP = requests.get('https://v4.ident.me/').text
 
 db = UsersStore()
-db.redis_backend()
+if APP_BACK_END=='redis':
+    db.redis_backend()
+elif APP_BACK_END=='mongodbrabbitmq':
+    db.mongo_backend()
+else:
+    raise ValueError(f'no back end of {APP_BACK_END}')
+
 router = APIRouter()
 #######################################################################################
 class UserModels:
@@ -62,7 +72,7 @@ class AuthService:
     def create_access_token(email: str, expires_delta: timedelta = None):
         expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
         payload = UserModels.PayloadModel(email=email,exp=expire)
-        return jwt.encode(payload.model_dump(), SECRET_KEY, algorithm=ALGORITHM)
+        return jwt.encode(payload.model_dump(), APP_SECRET_KEY, algorithm=ALGORITHM)
 
     @staticmethod
     async def get_current_user(request: Request): 
@@ -72,7 +82,7 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
           
         try:            
-            payload = UserModels.PayloadModel(**jwt.decode(session.app_access_token, SECRET_KEY, algorithms=[ALGORITHM]))
+            payload = UserModels.PayloadModel(**jwt.decode(session.app_access_token, APP_SECRET_KEY, algorithms=[ALGORITHM]))
         except JWTError:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
 
@@ -103,7 +113,7 @@ class OAuthRoutes:
 
         data = request.model_dump()
         
-        if data.pop('invite_code') != INVITE_CODE:
+        if data.pop('invite_code') != APP_INVITE_CODE:
             raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Invalid invite code")
 
         if db.find_user_by_email(request.email) is not None:            
