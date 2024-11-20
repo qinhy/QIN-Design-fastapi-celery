@@ -129,7 +129,7 @@ class AuthService:
     @staticmethod
     async def verify_otp(otp_code:str, email:str) -> bool:
         secret = text2hash2base32Str(email)
-        if not secret or len(secret)!=32: return False
+        if not secret: return False
         totp = pyotp.TOTP(secret)
         return totp.verify(otp_code)
     
