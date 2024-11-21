@@ -3,7 +3,6 @@ from Config import APP_BACK_END, RABBITMQ_URL, MONGO_URL, MONGO_DB, CELERY_META,
 
 from datetime import datetime
 from multiprocessing import shared_memory
-import os
 import threading
 import time
 from typing import Any
@@ -25,7 +24,10 @@ import requests
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 
-from Storages import SingletonKeyValueStorage
+try:
+    from ..Storages import SingletonKeyValueStorage
+except Exception as e:
+    from Storages import SingletonKeyValueStorage
 
 class RabbitmqMongoApp:
     rabbitmq_URL = RABBITMQ_URL

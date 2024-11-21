@@ -1,11 +1,6 @@
-from base64 import b64encode
-from io import BytesIO
-import json
-import uuid
 
-import pyotp
-import qrcode
 from Config import APP_INVITE_CODE, APP_SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, USER_DB
+from .UserModel import Model4User, text2hash2base32Str
 
 from pydantic import BaseModel, EmailStr, Field
 from fastapi.security import OAuth2PasswordRequestForm
@@ -13,8 +8,12 @@ from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, Red
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status, Request
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
+import json
+import uuid
+import pyotp
+import qrcode
 import os
-from .UserModel import Model4User, text2hash2base32Str
 
 router = APIRouter()
 #######################################################################################
@@ -261,17 +260,26 @@ class OAuthRoutes:
     async def get_otp_qr(current_user: UserModels.User = Depends(AuthService.get_current_user)):
         return StreamingResponse(AuthService.generate_otp_qr_code(current_user), media_type="image/png")
     
+    @router.get("/qr")
+    async def get_login_qr(request: Request = None):
+        return RedirectResponse(f'/qr/{str(uuid.uuid4())}')
+    
     @router.get("/qr/{uid}")
     async def get_login_qr(uid:str, request: Request = None):
-        data = USER_DB.get(uid)
+        try:
+            uid = str(uuid.UUID(uid))
+        except Exception as e:
+            return RedirectResponse(f'/{uid}')
+        
         try:
             user = await AuthService.get_current_user(request)
             return RedirectResponse('/')
         except Exception as e:
             pass
 
-        if data is None:
-            uid = uuid.UUID(uid)
+        data = USER_DB.get(uid)
+        if data is None or len(data)==0:
+            USER_DB.set(uid,{})
             return StreamingResponse(AuthService.generate_login_qr(uid), media_type="image/png")
         else:
             session = UserModels.SessionModel(**data)
@@ -285,12 +293,16 @@ class OAuthRoutes:
     @router.get("/qr/login/{uid}")
     async def login_qr(uid:str, request: Request, current_user: UserModels.User = Depends(AuthService.get_current_user)):
         session = UserModels.SessionModel(**request.session)
-        USER_DB.set(uid,session.model_dump_json_dict())
-        return {"status": "success", "message": "Logged in successfully"}
+        print(uid)
+        if USER_DB.exists(uid):
+            USER_DB.set(uid,session.model_dump_json_dict())
+            return {"status": "success", "message": "Logged in successfully"}
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid code")
     
-    @router.get("/otp/token/{email}/{code}")
-    async def get_otp_token(code:str,email:str, request: Request = None):        
-        if not AuthService.verify_otp(code,email): 
+    @router.get("/otp/login/{email}/{code}")
+    async def get_otp_token(code:str,email:str, request: Request = None):
+        con = await AuthService.verify_otp(code,email)
+        if not con: 
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
         user = USER_DB.find_user_by_email(email)
         data = AuthService.generate_session(user)

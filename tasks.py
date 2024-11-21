@@ -1,13 +1,14 @@
 from Config import SESSION_DURATION, APP_SECRET_KEY
 
 from User.UserAPIs import AuthService, UserModels, router as users_router
+from Task.Basic import BasicApp
+from Task.Customs import CvCameraSharedMemoryService, Fibonacci, ServiceOrientedArchitecture
+
 from celery.app import task as Task
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Depends, FastAPI, HTTPException
 from typing import Dict
-from Task.Basic import BasicApp
-from Task.Customs import CvCameraSharedMemoryService, Fibonacci, ServiceOrientedArchitecture
 
 celery_app = BasicApp.get_celery_app()
 
