@@ -57,8 +57,13 @@
                                 class="border p-2 rounded w-full mb-2"></p-inputtext>
                             <p-inputtext v-model="registerForm.invite" placeholder="Invite code" type="invite" required
                                 class="border p-2 rounded w-full mb-2"></p-inputtext>
-                            <p-button @click="()=>api.registerUser(registerForm)" type="submit"
-                                class="bg-blue-500 text-white px-4 py-2 rounded w-full">Register</p-button>
+
+                            <p-button @click="()=>api.registerUser(registerForm)" type="submit" :disabled="loading"
+                                class="bg-blue-500 text-white px-4 py-2 rounded w-full">
+                                <span v-if="loading" class="pi pi-spinner animate-spin"></span>
+                                <span v-else>Register</span>
+                            </p-button>
+                            
                         </form>
                     </div>
                 </p-tabpanel>
