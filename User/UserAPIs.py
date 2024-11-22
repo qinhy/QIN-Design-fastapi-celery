@@ -165,8 +165,25 @@ class OAuthRoutes:
         return FileResponse(os.path.join(os.path.dirname(__file__), 'data', 'templates', "register.html"))
 
     @staticmethod
+    @router.get("/login", response_class=HTMLResponse)
+    async def get_login_page():
+        return FileResponse(os.path.join(os.path.dirname(__file__), 'data', 'templates', "login.html"))
+
+    @staticmethod
+    @router.get("/edit", response_class=HTMLResponse)
+    async def get_edit_page(current_user: UserModels.User = Depends(AuthService.get_current_payload)):
+        return FileResponse(os.path.join(os.path.dirname(__file__), 'data', 'templates', "edit.html"))
+    
+    @staticmethod
+    @router.get("/", response_class=HTMLResponse)
+    async def read_home(current_user: UserModels.User = Depends(AuthService.get_current_payload)):
+        return FileResponse(os.path.join(os.path.dirname(__file__), 'data', 'templates', "edit.html"))
+
+    @staticmethod
     @router.post("/register")
     async def register_user(request: UserModels.RegisterRequest):
+
+        # TODO
         # 1. **Email Format Validation**:
         # 2. **Password Strength Validation**:
         # 3. **Checking for Missing Fields**:
@@ -200,20 +217,6 @@ class OAuthRoutes:
         request.session.update(data)        
         return data
         
-    @staticmethod
-    @router.get("/login", response_class=HTMLResponse)
-    async def get_login_page():
-        return FileResponse(os.path.join(os.path.dirname(__file__), 'data', 'templates', "login.html"))
-
-    @staticmethod
-    @router.get("/edit", response_class=HTMLResponse)
-    async def get_edit_page(current_user: UserModels.User = Depends(AuthService.get_current_payload)):
-        return FileResponse(os.path.join(os.path.dirname(__file__), 'data', 'templates', "edit.html"))
-    
-    @staticmethod
-    @router.get("/", response_class=HTMLResponse)
-    async def read_home(current_user: UserModels.User = Depends(AuthService.get_current_payload)):
-        return FileResponse(os.path.join(os.path.dirname(__file__), 'data', 'templates', 'edit.html'))
     
     @staticmethod
     @router.post("/edit")

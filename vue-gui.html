@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Vue App with APIs</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/primevue@4.0.0-rc.2/umd/primevue.min.js"></script>
+    <script src="https://unpkg.com/@primevue/themes@4.0.0-rc.2/umd/lara.min.js"></script>
+    <script src="https://unpkg.com/primevue/inputtext"></script>
+    <script src="https://unpkg.com/primevue/button"></script>
+    <script src="https://unpkg.com/primevue/dialog"></script>
+    <script src="https://unpkg.com/primevue/toast"></script>
+    <script src="https://unpkg.com/primevue/toastservice"></script>
+    <link rel="stylesheet" href="https://unpkg.com/primevue/resources/themes/saga-blue/theme.css" />
+    <link rel="stylesheet" href="https://unpkg.com/primevue/resources/primevue.min.css" />
+    <link rel="stylesheet" href="https://unpkg.com/primeicons/primeicons.css" />
+</head>
+
+<body class="bg-gray-100">
+
+    <div id="app">
+        <p class="text-xl font-bold text-center px-4 py-2">
+            App
+        </p>
+        <p-tabs value="1">
+            <p-tablist>
+                <p-tab v-for="(c,i) in ['Register','Login','Profile']" :value="`${i}`">{{c}}</p-tab>
+            </p-tablist>
+            <p-tabpanels>
+                <p-tabpanel value="0">
+                    <div class="mt-5">
+                        <h2 class="text-xl font-bold">Register</h2>
+                        <div>
+                            <p-inputtext v-model="registerForm.username" placeholder="Username" type="text" required class="border p-2 rounded w-full mb-2"></p-inputtext>
+                            <p-inputtext v-model="registerForm.full_name" placeholder="Full Name" type="text" required class="border p-2 rounded w-full mb-2"></p-inputtext>
+                            <p-inputtext v-model="registerForm.email" placeholder="Email" type="email" required class="border p-2 rounded w-full mb-2"></p-inputtext>
+                            <p-inputtext v-model="registerForm.password" placeholder="Password" type="password" required class="border p-2 rounded w-full mb-2"></p-inputtext>
+                            <p-inputtext v-model="registerForm.invite" placeholder="Invite code" type="invite" required class="border p-2 rounded w-full mb-2"></p-inputtext>
+                            <p-button @click="()=>api.registerUser(registerForm)" class="bg-blue-500 text-white px-4 py-2 rounded">Register</p-button>
+                        </div>
+                    </div>
+                </p-tabpanel>
+
+                <p-tabpanel value="1">
+                </p-tabpanel>
+
+                <p-tabpanel value="2">
+                </p-tabpanel>
+
+            </p-tabpanels>
+        </p-tabs>
+
+</body>
+
+<script>
+
+    class APIClient {
+        constructor(baseURL = '') {
+            this.baseURL = baseURL;
+            this.authToken = null;
+        }
+
+        // Helper to set authentication token
+        setAuthToken(token) {
+            this.authToken = token;
+        }
+
+        // Helper for headers
+        getHeaders(isJSON = true) {
+            const headers = {};
+            if (isJSON) headers["Content-Type"] = "application/json";
+            if (this.authToken) headers["Authorization"] = `Bearer ${this.authToken}`;
+            return headers;
+        }
+
+        // Helper for making requests
+        async request(endpoint, method = "GET", body = null, isJSON = true) {
+            const options = {
+                method,
+                headers: this.getHeaders(isJSON),
+            };
+            if (body) {
+                options.body = isJSON ? JSON.stringify(body) : body;
+            }
+            const response = await fetch(`${this.baseURL}${endpoint}`, options);
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: "Unknown error" }));
+                throw new Error(error.detail || error.message || "Request failed");
+            }
+            return response.json();
+        }
+
+        // Register User
+        async registerUser(data) {
+            return this.request("/register", "POST", data);
+        }
+
+        // Get Token (Login)
+        async getToken(email, password) {
+            const formData = new URLSearchParams();
+            formData.append("username", email);
+            formData.append("password", password);
+            const response = await this.request("/token", "POST", formData, false);
+            this.setAuthToken(response.access_token); // Save token for future requests
+            return response;
+        }
+
+        // Edit User Info
+        async editUserInfo(data) {
+            return this.request("/edit", "POST", data);
+        }
+
+        // Remove Account
+        async removeAccount(data) {
+            return this.request("/remove", "POST", data);
+        }
+
+        // Get Current User Info
+        async getCurrentUser() {
+            return this.request("/me");
+        }
+
+        // Read Session
+        async readSession() {
+            return this.request("/session");
+        }
+
+        // Get OTP QR Code
+        async getOtpQr() {
+            const response = await fetch(`${this.baseURL}/otp/qr`, {
+                headers: this.getHeaders(),
+            });
+            if (!response.ok) throw new Error("Failed to fetch OTP QR code");
+            return response.blob();
+        }
+
+        // Get Login QR Code
+        async getLoginQr(uid = null) {
+            const endpoint = uid ? `/qr/${uid}` : "/qr";
+            const response = await fetch(`${this.baseURL}${endpoint}`, {
+                headers: this.getHeaders(),
+            });
+            if (!response.ok) throw new Error("Failed to fetch Login QR code");
+            return response.blob();
+        }
+
+        // Login with QR Code
+        async loginWithQr(uid) {
+            return this.request(`/qr/login/${uid}`, "GET");
+        }
+
+        // Get OTP Token
+        async getOtpToken(email, code) {
+            return this.request(`/otp/login/${email}/${code}`, "GET");
+        }
+
+        // Read Icon
+        async getIcon(iconName) {
+            const response = await fetch(`${this.baseURL}/icon/${iconName}`, {
+                headers: this.getHeaders(),
+            });
+            if (!response.ok) throw new Error("Failed to fetch icon");
+            return response.blob();
+        }
+
+        // Logout
+        async logout() {
+            const response = await this.request("/logout", "GET");
+            this.authToken = null; // Clear the token on logout
+            return response;
+        }
+    }
+
+    const { createApp } = Vue;
+
+    const app = createApp({
+        setup() {
+            const activeTab = 'Register';
+            const registerForm = {
+                username:'',
+                full_name:'',
+                email:'',
+                password:'',
+                invite:'',
+            };
+            const user = null;
+            const session = null;
+            const api = new APIClient();
+            const register = () => {
+                data = api.registerUser(registerForm);
+            }
+            return {
+                activeTab, registerForm, user, session,
+                api,
+            };
+        }
+    });
+
+    app.use(PrimeVue.Config, {
+        theme: {
+            preset: PrimeVue.Themes.Lara,
+            options: { prefix: 'p', darkModeSelector: '.app-dark', cssLayer: false, }
+        }
+    });
+    app.use(PrimeVue.ToastService);
+
+    app.directive('ripple', PrimeVue.Ripple);
+
+    app.component('p-button', PrimeVue.Button);
+    app.component('p-inputtext', PrimeVue.InputText);
+    app.component('p-inputnumber', PrimeVue.InputNumber);
+    app.component('p-tabs', PrimeVue.Tabs);
+    app.component('p-tablist', PrimeVue.TabList);
+    app.component('p-tab', PrimeVue.Tab);
+    app.component('p-tabpanels', PrimeVue.TabPanels);
+    app.component('p-tabpanel', PrimeVue.TabPanel);
+    app.component('p-toast', PrimeVue.Toast);
+    app.component('p-panel', PrimeVue.Panel);
+    app.component('p-toggleswitch', PrimeVue.ToggleSwitch);
+    app.component('p-select', PrimeVue.Select);
+    app.component('p-textarea', PrimeVue.Textarea);
+    app.component('p-fileupload', PrimeVue.FileUpload);
+
+    app.mount('#app');
+</script>
+
+</html>
