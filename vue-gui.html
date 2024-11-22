@@ -4,19 +4,32 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Vue App with APIs</title>
+    <title>One File Web Chat</title>
+    <link rel="stylesheet" href="https://unpkg.com/primeicons@7.0.0/primeicons.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://unpkg.com/primevue@4.0.0-rc.2/umd/primevue.min.js"></script>
     <script src="https://unpkg.com/@primevue/themes@4.0.0-rc.2/umd/lara.min.js"></script>
-    <script src="https://unpkg.com/primevue/inputtext"></script>
-    <script src="https://unpkg.com/primevue/button"></script>
-    <script src="https://unpkg.com/primevue/dialog"></script>
-    <script src="https://unpkg.com/primevue/toast"></script>
-    <script src="https://unpkg.com/primevue/toastservice"></script>
-    <link rel="stylesheet" href="https://unpkg.com/primevue/resources/themes/saga-blue/theme.css" />
-    <link rel="stylesheet" href="https://unpkg.com/primevue/resources/primevue.min.css" />
-    <link rel="stylesheet" href="https://unpkg.com/primeicons/primeicons.css" />
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.6.1/github-markdown.min.css">
+    <style>
+        .markdown-body {
+            box-sizing: border-box;
+            min-width: 100px;
+            max-width: 980px;
+            margin: 0px 0px 0px;
+            padding: 15px;
+        }
+
+        .app-dark .markdown-body {
+            /* Inverted colors for dark mode */
+            background-color: #18181B;
+            /* or another dark color */
+            color: white;
+            /* or another light color */
+        }
+    </style>
 </head>
 
 <body class="bg-gray-100">
@@ -25,29 +38,68 @@
         <p class="text-xl font-bold text-center px-4 py-2">
             App
         </p>
-        <p-tabs value="1">
+        <p-tabs :value="activeTab">
             <p-tablist>
-                <p-tab v-for="(c,i) in ['Register','Login','Profile']" :value="`${i}`">{{c}}</p-tab>
+                <p-tab v-for="(c,i) in TABS" :value="`${c}`">{{c}}</p-tab>
             </p-tablist>
             <p-tabpanels>
-                <p-tabpanel value="0">
+                <p-tabpanel value="Register">
                     <div class="mt-5">
                         <h2 class="text-xl font-bold">Register</h2>
-                        <div>
-                            <p-inputtext v-model="registerForm.username" placeholder="Username" type="text" required class="border p-2 rounded w-full mb-2"></p-inputtext>
-                            <p-inputtext v-model="registerForm.full_name" placeholder="Full Name" type="text" required class="border p-2 rounded w-full mb-2"></p-inputtext>
-                            <p-inputtext v-model="registerForm.email" placeholder="Email" type="email" required class="border p-2 rounded w-full mb-2"></p-inputtext>
-                            <p-inputtext v-model="registerForm.password" placeholder="Password" type="password" required class="border p-2 rounded w-full mb-2"></p-inputtext>
-                            <p-inputtext v-model="registerForm.invite" placeholder="Invite code" type="invite" required class="border p-2 rounded w-full mb-2"></p-inputtext>
-                            <p-button @click="()=>api.registerUser(registerForm)" class="bg-blue-500 text-white px-4 py-2 rounded">Register</p-button>
-                        </div>
+                        <form @submit.prevent="api.registerUser">
+                            <p-inputtext v-model="registerForm.username" placeholder="Username" type="text" required
+                                class="border p-2 rounded w-full mb-2"></p-inputtext>
+                            <p-inputtext v-model="registerForm.full_name" placeholder="Full Name" type="text" required
+                                class="border p-2 rounded w-full mb-2"></p-inputtext>
+                            <p-inputtext v-model="registerForm.email" placeholder="Email" type="email" required
+                                class="border p-2 rounded w-full mb-2"></p-inputtext>
+                            <p-inputtext v-model="registerForm.password" placeholder="Password" type="password" required
+                                class="border p-2 rounded w-full mb-2"></p-inputtext>
+                            <p-inputtext v-model="registerForm.invite" placeholder="Invite code" type="invite" required
+                                class="border p-2 rounded w-full mb-2"></p-inputtext>
+                            <p-button @click="()=>api.registerUser(registerForm)" type="submit"
+                                class="bg-blue-500 text-white px-4 py-2 rounded w-full">Register</p-button>
+                        </form>
                     </div>
                 </p-tabpanel>
 
-                <p-tabpanel value="1">
+                <p-tabpanel value="Login">
+                    <div>
+                        <h2 class="text-xl font-bold mb-4">Login</h2>
+                        <form @submit.prevent="loginUser">
+                            <p-inputtext v-model="loginForm.username" placeholder="Email" type="text" required
+                                class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+                            <p-inputtext v-if="!useOtp" v-model="loginForm.password" placeholder="Password"
+                                :type="passwordVisible ? 'text' : 'password'" required
+                                class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+                            <p-inputtext v-if="useOtp" v-model="loginForm.otp" placeholder="OTP" type="number" required
+                                class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+                            
+                                <p-button
+                                icon="pi pi-eye"
+                                class="absolute right-4 top-10"
+                                @click="togglePasswordVisibility"
+                            ></p-button>
+                            <p-toggleswitch v-model="useOtp" label="Login with OTP"></p-toggleswitch>
+                            <span class="font-medium">Login with OTP</span>
+                            
+                            <p-button type="submit" :disabled="loading"
+                                class="bg-blue-500 text-white px-4 py-2 rounded w-full">
+                                <span v-if="loading" class="pi pi-spinner animate-spin"></span>
+                                <span v-else>Login</span>
+                            </p-button>
+
+                            <p class="text-center mt-4">Don't have an account?
+                                <a href="/" class="text-blue-500 underline">Register here</a>
+                            </p>
+                        </form>
+                    </div>
                 </p-tabpanel>
 
-                <p-tabpanel value="2">
+                <p-tabpanel value="Profile">
                 </p-tabpanel>
 
             </p-tabpanels>
@@ -174,17 +226,43 @@
         }
     }
 
-    const { createApp } = Vue;
+    const { createApp,ref } = Vue;
 
     const app = createApp({
         setup() {
-            const activeTab = 'Register';
+
+            const loginForm = ref({ username: '', password: '', otp: '', });
+            const useOtp = ref(false);
+            const loading = ref(false);
+            const passwordVisible = ref(false);
+            const loginUser = () => {
+                loading = true;
+                // Call API for login
+                setTimeout(() => {
+                    loading.value = false;
+                    alert('Logged in successfully!');
+                }, 2000); // Simulated delay
+            }
+
+            const toggleOtp = () => {
+                useOtp.value = !useOtp.value;
+                loginForm.password = ''; // Clear password if switching to OTP
+                loginForm.otp = ''; // Clear OTP if switching to password
+            }
+
+            const togglePasswordVisibility = () => {
+                passwordVisible = !passwordVisible;
+                console.log(passwordVisible);
+
+            }
+
+
             const registerForm = {
-                username:'',
-                full_name:'',
-                email:'',
-                password:'',
-                invite:'',
+                username: '',
+                full_name: '',
+                email: '',
+                password: '',
+                invite: '',
             };
             const user = null;
             const session = null;
@@ -192,9 +270,12 @@
             const register = () => {
                 data = api.registerUser(registerForm);
             }
+            const activeTab = 'Login';
+            const TABS = ['Register', 'Login', 'Profile'];
             return {
-                activeTab, registerForm, user, session,
-                api,
+                TABS, activeTab, user, session, api,
+                registerForm,
+                loginForm, useOtp, loading, passwordVisible, loginUser, toggleOtp, togglePasswordVisibility
             };
         }
     });
