@@ -38,7 +38,7 @@
         <p class="text-xl font-bold text-center px-4 py-2">
             App
         </p>
-        <p-tabs :value="activeTab">
+        <p-tabs :value="activeTab" scrollable>
             <p-tablist>
                 <p-tab v-for="(c,i) in TABS" :value="`${c}`">{{c}}</p-tab>
             </p-tablist>
@@ -77,15 +77,11 @@
                             <p-inputtext v-if="useOtp" v-model="loginForm.otp" placeholder="OTP" type="number" required
                                 class="border p-2 rounded w-full mb-2"></p-inputtext>
 
-                            
-                                <p-button
-                                icon="pi pi-eye"
-                                class="absolute right-4 top-10"
-                                @click="togglePasswordVisibility"
-                            ></p-button>
+
+                            <p-button icon="pi pi-eye" class="mb-2" @click="()=>passwordVisible=!passwordVisible"></p-button>
                             <p-toggleswitch v-model="useOtp" label="Login with OTP"></p-toggleswitch>
                             <span class="font-medium">Login with OTP</span>
-                            
+
                             <p-button type="submit" :disabled="loading"
                                 class="bg-blue-500 text-white px-4 py-2 rounded w-full">
                                 <span v-if="loading" class="pi pi-spinner animate-spin"></span>
@@ -102,10 +98,24 @@
                 <p-tabpanel value="Profile">
                 </p-tabpanel>
 
+
+                <p-tabpanel value="Files">
+                </p-tabpanel>
+
+                <p-tabpanel value="Dashboard">
+                </p-tabpanel>
+
+                <p-tabpanel value="App1">
+                </p-tabpanel>
+
+                <p-tabpanel value="App2">
+                </p-tabpanel>
+
             </p-tabpanels>
         </p-tabs>
-
+    </div>
 </body>
+
 
 <script>
 
@@ -226,7 +236,7 @@
         }
     }
 
-    const { createApp,ref } = Vue;
+    const { createApp, ref, reactive } = Vue;
 
     const app = createApp({
         setup() {
@@ -238,44 +248,20 @@
             const loginUser = () => {
                 loading = true;
                 // Call API for login
-                setTimeout(() => {
-                    loading.value = false;
-                    alert('Logged in successfully!');
-                }, 2000); // Simulated delay
+                api.loginUser;
             }
 
-            const toggleOtp = () => {
-                useOtp.value = !useOtp.value;
-                loginForm.password = ''; // Clear password if switching to OTP
-                loginForm.otp = ''; // Clear OTP if switching to password
-            }
-
-            const togglePasswordVisibility = () => {
-                passwordVisible = !passwordVisible;
-                console.log(passwordVisible);
-
-            }
-
-
-            const registerForm = {
-                username: '',
-                full_name: '',
-                email: '',
-                password: '',
-                invite: '',
-            };
+            const registerForm = {username: '',full_name: '',email: '',password: '',invite: '',};
             const user = null;
             const session = null;
             const api = new APIClient();
-            const register = () => {
-                data = api.registerUser(registerForm);
-            }
+            
             const activeTab = 'Login';
-            const TABS = ['Register', 'Login', 'Profile'];
+            const TABS = ['Register', 'Login', 'Profile', "Files", "Dashboard", "App1", "App2"];
             return {
                 TABS, activeTab, user, session, api,
                 registerForm,
-                loginForm, useOtp, loading, passwordVisible, loginUser, toggleOtp, togglePasswordVisibility
+                loginForm, useOtp, loading, passwordVisible, loginUser
             };
         }
     });
