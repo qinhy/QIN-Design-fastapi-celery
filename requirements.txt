@@ -4,11 +4,12 @@ pandas
 requests
 celery
 redis
-cv2
+opencv-python
 fastapi
 pydantic
+pydantic[email]
 starlette
 pymongo
-jose
+python-jose
 pyotp
 qrcode

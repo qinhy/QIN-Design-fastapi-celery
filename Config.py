@@ -17,7 +17,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', 30))  # Use environment variable with a default fallback
 SESSION_DURATION = ACCESS_TOKEN_EXPIRE_MINUTES * 60
 UVICORN_PORT = int(os.getenv('UVICORN_PORT', 8000))  # Using an environment variable fallback
-
+FLOWER_PORT = int(os.getenv('UVICORN_PORT', 5555))  # Using an environment variable fallback
 # External service URLs with sensible defaults
 RABBITMQ_URL = os.getenv('RABBITMQ_URL', 'localhost:15672')
 RABBITMQ_USER = os.getenv('RABBITMQ_USER', 'guest')
