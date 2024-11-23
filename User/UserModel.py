@@ -47,9 +47,6 @@ def base64Str2list(bs:str):
     return np.frombuffer(r).tolist()
 
 def format_email(email: str) -> str:
-    EMAIL_REGEX = r"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)"
-    if not re.match(EMAIL_REGEX, email):
-        raise ValueError("Invalid email format")
     return email.lower().strip()
 
 class Controller4User:

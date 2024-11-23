@@ -46,7 +46,7 @@
                 <p-tabpanel value="Register">
                     <div class="mt-5">
                         <h2 class="text-xl font-bold">Register</h2>
-                        <form @submit.prevent="api.registerUser">
+                        <form @submit.prevent="registerUser">
                             <p-inputtext v-model="registerForm.username" placeholder="Username" type="text" required
                                 class="border p-2 rounded w-full mb-2"></p-inputtext>
                             <p-inputtext v-model="registerForm.full_name" placeholder="Full Name" type="text" required
@@ -55,15 +55,15 @@
                                 class="border p-2 rounded w-full mb-2"></p-inputtext>
                             <p-inputtext v-model="registerForm.password" placeholder="Password" type="password" required
                                 class="border p-2 rounded w-full mb-2"></p-inputtext>
-                            <p-inputtext v-model="registerForm.invite" placeholder="Invite code" type="invite" required
-                                class="border p-2 rounded w-full mb-2"></p-inputtext>
+                            <p-inputtext v-model="registerForm.invite_code" placeholder="Invite code" type="invite"
+                                required class="border p-2 rounded w-full mb-2"></p-inputtext>
 
-                            <p-button @click="()=>api.registerUser(registerForm)" type="submit" :disabled="loading"
+                            <p-button @click="registerUser" type="submit" :disabled="loading"
                                 class="bg-blue-500 text-white px-4 py-2 rounded w-full">
                                 <span v-if="loading" class="pi pi-spinner animate-spin"></span>
                                 <span v-else>Register</span>
                             </p-button>
-                            
+
                         </form>
                     </div>
                 </p-tabpanel>
@@ -232,32 +232,30 @@
 </body>
 
 
-<script>
-
-    class APIClient {
+<script>class APIClient {
         constructor(baseURL = '') {
             this.baseURL = baseURL;
             this.authToken = null;
         }
 
         // Helper to set authentication token
-        setAuthToken(token) {
-            this.authToken = token;
-        }
+        setAuthToken(token) {this.authToken = token;}
 
         // Helper for headers
-        getHeaders(isJSON = true) {
+        getHeaders(isJSON = true, authToken = null) {
+            authToken = authToken ? this.authToken : authToken;
             const headers = {};
             if (isJSON) headers["Content-Type"] = "application/json";
-            if (this.authToken) headers["Authorization"] = `Bearer ${this.authToken}`;
+            else headers["Content-Type"] = "application/x-www-form-urlencoded";
+            if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
             return headers;
         }
 
         // Helper for making requests
-        async request(endpoint, method = "GET", body = null, isJSON = true) {
+        async request(endpoint, method = "GET", body = null, isJSON = true, authToken = null) {
             const options = {
                 method,
-                headers: this.getHeaders(isJSON),
+                headers: this.getHeaders(isJSON, authToken),
             };
             if (body) {
                 options.body = isJSON ? JSON.stringify(body) : body;
@@ -270,40 +268,48 @@
             return response.json();
         }
 
-        // Register User
-        async registerUser(data) {
-            return this.request("/register", "POST", data);
+        // Fetch and display tasks
+        async fetchAndDisplayTasks() {
+            const taskList = await this.request('/tasks/');
+            const tasks = taskList; // Assuming this is a state variable in your UI
+            const taskOptions = taskList.map((task) => ({
+                label: task.task_id,
+                value: task.task_id,
+            }));
+            return { tasks, taskOptions };
         }
+
+        // Check task status
+        async checkTaskStatus(taskId) { return await this.request(`/tasks/status/${taskId}`); }
+
+        // Stop a task
+        async stopTask(taskId) { return await this.request(`/tasks/stop/${taskId}`, "POST"); }
+
+        // Fetch workers
+        async fetchWorkers() { return await this.request('/workers/'); }
+
+        // Register User
+        async registerUser(data) { return this.request("/register", "POST", data); }
 
         // Get Token (Login)
         async getToken(email, password) {
-            const formData = new URLSearchParams();
-            formData.append("username", email);
-            formData.append("password", password);
+            const formData = `username=${email}&password=${password}`;
             const response = await this.request("/token", "POST", formData, false);
             this.setAuthToken(response.access_token); // Save token for future requests
             return response;
         }
 
         // Edit User Info
-        async editUserInfo(data) {
-            return this.request("/edit", "POST", data);
-        }
+        async editUserInfo(data) { return this.request("/edit", "POST", data); }
 
         // Remove Account
-        async removeAccount(data) {
-            return this.request("/remove", "POST", data);
-        }
+        async removeAccount(data) { return this.request("/remove", "POST", data); }
 
         // Get Current User Info
-        async getCurrentUser() {
-            return this.request("/me");
-        }
+        async getCurrentUser() { return this.request("/me"); }
 
         // Read Session
-        async readSession() {
-            return this.request("/session");
-        }
+        async readSession() { return this.request("/session"); }
 
         // Get OTP QR Code
         async getOtpQr() {
@@ -325,14 +331,10 @@
         }
 
         // Login with QR Code
-        async loginWithQr(uid) {
-            return this.request(`/qr/login/${uid}`, "GET");
-        }
+        async loginWithQr(uid) { return this.request(`/qr/login/${uid}`, "GET"); }
 
         // Get OTP Token
-        async getOtpToken(email, code) {
-            return this.request(`/otp/login/${email}/${code}`, "GET");
-        }
+        async getOtpToken(email, code) { return this.request(`/otp/login/${email}/${code}`, "GET"); }
 
         // Read Icon
         async getIcon(iconName) {
@@ -347,7 +349,6 @@
         async logout() {
             const response = await this.request("/logout", "GET");
             this.authToken = null; // Clear the token on logout
-            return response;
         }
     }
 
@@ -362,77 +363,15 @@
             const selectedTaskId = ref(null); // Selected Task ID
             const taskStatus = ref(""); // Status or result message
             const workersInfo = ref(""); // Workers information
-
-            // Methods
-            const fetchAndDisplayTasks = async () => {
-                try {
-                    const response = await fetch(`${BASE_URL}/tasks/`);
-                    if (response.ok) {
-                        const taskList = await response.json();
-                        tasks.value = taskList;
-                        taskOptions.value = taskList.map((task) => ({
-                            label: task.task_id,
-                            value: task.task_id,
-                        }));
-                    } else {
-                        tasks.value = [];
-                        taskOptions.value = [];
-                        alert(`Error fetching tasks: ${response.status}`);
-                    }
-                } catch (error) {
-                    console.error("Error fetching tasks:", error);
-                }
-            };
-
-            const checkTaskStatus = async () => {
-                if (!selectedTaskId.value) {
-                    alert("Please select a Task ID.");
-                    return;
-                }
-                try {
-                    const response = await fetch(`${BASE_URL}/tasks/status/${selectedTaskId.value}`);
-                    if (response.ok) {
-                        const status = await response.json();
-                        taskStatus.value = JSON.stringify(status, null, 2);
-                    } else {
-                        taskStatus.value = `Error: ${response.status}`;
-                    }
-                } catch (error) {
-                    console.error("Error fetching task status:", error);
-                }
-            };
-
-            const stopTask = async () => {
-                if (!selectedTaskId.value) {
-                    alert("Please select a Task ID.");
-                    return;
-                }
-                try {
-                    const response = await fetch(`${BASE_URL}/tasks/stop/${selectedTaskId.value}`);
-                    if (response.ok) {
-                        const result = await response.json();
-                        taskStatus.value = JSON.stringify(result, null, 2);
-                    } else {
-                        taskStatus.value = `Error: ${response.status}`;
-                    }
-                } catch (error) {
-                    console.error("Error stopping task:", error);
-                }
-            };
-
-            const fetchWorkers = async () => {
-                try {
-                    const response = await fetch(`${BASE_URL}/workers/`);
-                    if (response.ok) {
-                        const workers = await response.json();
-                        workersInfo.value = JSON.stringify(workers, null, 2);
-                    } else {
-                        workersInfo.value = `Error: ${response.status}`;
-                    }
-                } catch (error) {
-                    console.error("Error fetching workers:", error);
-                }
-            };
+            const fetchAndDisplayTasks = async () => {api.fetchAndDisplayTasks();}
+            const fetchWorkers = async () => {api.fetchWorkers();}
+            // if (!selectedTaskId.value) {
+            //     alert("Please select a Task ID.");
+            //     return;
+            // }
+            const checkTaskStatus = async () => {api.checkTaskStatus();}
+            const stopTask = async () => {api.stopTask();}
+            
 
             const files = [{ name: 1, size: 1, status: '' }, { name: 2, size: 2, status: '' },]; // List of uploaded files
             const uploadFile = (event) => {
@@ -461,25 +400,61 @@
             const useOtp = ref(false);
             const loading = ref(false);
             const passwordVisible = ref(false);
-            const loginUser = () => {
-                loading = true;
-                // Call API for login
-                api.loginUser;
+            const loginUser = async () => {
+                loading.value = true;
+                await api.getToken(loginForm.value.username, loginForm.value.password);
+                loading.value = false;
+                alert(`login successfully.`);
+                const data = await api.getCurrentUser();
+                // {
+                //     "rank": [
+                //         0
+                //     ],
+                //     "create_time": "2024-11-23T11:17:30.338030+00:00",
+                //     "update_time": "2024-11-23T11:17:30.338030+00:00",
+                //     "status": "",
+                //     "metadata": {},
+                //     "username": "123",
+                //     "full_name": "123",
+                //     "role": "user",
+                //     "hashed_password": "VlzGnSMUNS3LRkt2iDeyrQ==",
+                //     "email": "123@123.com",
+                //     "disabled": false,
+                //     "uuid": "User:a3293ffe-e390-a9b3-ee9c-7d1438b64634"
+                // }
+                editForm.value = data;
             }
 
-            const registerForm = { username: '', full_name: '', email: '', password: '', invite: '', };
+            const registerForm = ref({ username: '', full_name: '', email: '', password: '', invite_code: '', });
+            const registerUser = async () => {
+                loading.value = true;
+                await api.registerUser(registerForm.value);
+                loading.value = false;
+                alert(`register user successfully.`);
+            }
+
             const user = null;
             const session = null;
             const api = new APIClient();
 
-            const activeTab = 'Profile';
-            const TABS = ['Register', 'Login', 'Profile', "Files", "Dashboard", "App1", "App2"];
+            const activeTab = ref('Login');
+            const TABS = ref(['Register', 'Login', 'Profile', "Files", "Dashboard", "App1", "App2"]);
+
+
+            (async () => {
+                const data = await api.getCurrentUser();
+                if (data) {
+                    editForm.value = data;
+                    activeTab.value = 'Profile';
+                    TABS.value = ['Profile', "Files", "Dashboard", "App1", "App2"];
+                }
+            })()
             return {
                 TABS, activeTab, user, session, api,
                 tasks, taskOptions, selectedTaskId, taskStatus, workersInfo, fetchAndDisplayTasks, checkTaskStatus, stopTask, fetchWorkers,
                 files, uploadFile, downloadFile, deleteFile,
                 editForm,
-                registerForm,
+                registerForm, registerUser,
                 loginForm, useOtp, loading, passwordVisible, loginUser
             };
         }

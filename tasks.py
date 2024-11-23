@@ -1,3 +1,5 @@
+import os
+from fastapi.responses import FileResponse, HTMLResponse
 from Config import SESSION_DURATION, APP_SECRET_KEY
 
 from User.UserAPIs import AuthService, UserModels, router as users_router
@@ -33,6 +35,10 @@ class CeleryTask:
 
     api.include_router(users_router, prefix="", tags=["users"])
 
+    @staticmethod
+    @api.get("/", response_class=HTMLResponse)
+    async def get_register_page():
+        return FileResponse(os.path.join(os.path.dirname(__file__), "vue-gui.html"))
     ########################### essential function
     @staticmethod
     def is_json_serializable(value) -> bool:
