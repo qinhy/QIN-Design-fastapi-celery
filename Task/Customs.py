@@ -42,6 +42,7 @@ class Fibonacci(ServiceOrientedArchitecture):
                 else:
                     def fib_r(n):
                         if stop_flag.is_set(): return 0
+                        if n<1:return n
                         return(fib_r(n-1) + fib_r(n-2))                    
                     res = fib_r(n)
                 self.model.ret.n = res

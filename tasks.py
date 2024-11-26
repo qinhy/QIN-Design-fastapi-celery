@@ -196,3 +196,50 @@ class CeleryTask:
         api_ok()
         task = CeleryTask.fibonacci.delay(fib_task.model_dump())
         return {'task_id': task.id}
+        # build GUI
+        # I have a python api like following and need you to build primuevue GUI along the example.
+        # ```python        
+        # @api.post("/auth/local/fibonacci/")
+        # def api_fibonacci(fib_task: Fibonacci.Model,
+        #                 current_user: UserModels.User = Depends(AuthService.get_current_payload_if_not_local)):
+        #     api_ok()
+        #     task = CeleryTask.fibonacci.delay(fib_task.model_dump())
+        #     return {'task_id': task.id}
+        # # Request body
+        # # Example Value
+        # # Schema
+        # # {
+        # #   "task_id": "NO_NEED_INPUT",
+        # #   "param": {
+        # #     "mode": "fast"
+        # #   },
+        # #   "args": {
+        # #     "n": 1
+        # #   },
+        # #   "ret": {
+        # #     "n": -1
+        # #   }
+        # # }
+        # ```
+
+
+        # ```vue gui example
+        # <p-tabpanel value="Profile">
+        #     <div>
+        #         <h2 class="text-xl font-bold mb-4">Edit User Info</h2>
+        #         <form @submit.prevent="api.editUserInfo">
+        #             <!-- UUID (Disabled) -->
+        #             <p-inputtext v-model="editForm.uuid" disabled placeholder="UUID"
+        #                 class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+        #             <!-- Email (Disabled) -->
+        #             <p-inputtext v-model="editForm.email" disabled placeholder="Email"
+        #                 class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+        #             <p-button severity="danger" class="border p-2 rounded w-full mb-2 top-1">Remove
+        #                 Account</p-button>
+        #         </form>
+        #     </div>
+        # </p-tabpanel>
+        # ````
+
