@@ -347,21 +347,22 @@
         setup() {
 
             // State
-            const tasks = ref([{ task_id: 1, status: 1, result: 1, date_done: 1 }]); // List of tasks
-            const taskOptions = ref([1]); // select options for Task IDs
+            const tasks = ref([]); // List of tasks { task_id: 1, status: 1, result: 1, date_done: 1 }
+            const taskOptions = ref([]); // select options for Task IDs
             const selectedTaskId = ref(null); // Selected Task ID
             const taskStatus = ref(""); // Status or result message
             const workersInfo = ref(""); // Workers information
             const fetchAndDisplayTasks = async () => {
-                tasks.value = await api.request('/tasks/');        
+                tasks.value = await api.request('/tasks/');
+                taskOptions.value = tasks.value.map(v=>v.task_id);
             }
-            const fetchWorkers = async () => {api.fetchWorkers();}
-            // if (!selectedTaskId.value) {
-            //     alert("Please select a Task ID.");
-            //     return;
-            // }
-            const checkTaskStatus = async () => {api.checkTaskStatus();}
-            const stopTask = async () => {api.stopTask();}
+            const fetchWorkers = async () => {
+                workersInfo.value = JSON.stringify(await api.fetchWorkers());
+            }            
+            const checkTaskStatus = async () => {
+                taskStatus.value = JSON.stringify(await api.checkTaskStatus(selectedTaskId.value));
+            }
+            const stopTask = async () => {api.stopTask(selectedTaskId.value);}
             
 
             const files = [{ name: 1, size: 1, status: '' }, { name: 2, size: 2, status: '' },]; // List of uploaded files
