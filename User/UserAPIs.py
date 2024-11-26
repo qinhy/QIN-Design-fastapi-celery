@@ -85,6 +85,12 @@ class AuthService:
         return payload
 
     @staticmethod
+    async def get_current_payload_if_not_local(request: Request):
+        if request.client.host in ("127.0.0.1", "localhost"):
+            return  {}
+        return await AuthService.get_current_payload(request)
+    
+    @staticmethod
     async def get_current_user(request: Request):
         payload = await AuthService.get_current_payload(request)
         user = USER_DB.find_user_by_email(payload.email)
@@ -92,21 +98,13 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
         
         return user
-
+    
     @staticmethod
     async def get_current_root_payload(request: Request): 
         payload = await AuthService.get_current_payload(request)
         if not payload.is_root():
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User is not root")
         return payload
-
-    @staticmethod
-    def generate_otp_secret(email: str) -> str:
-        secret = pyotp.random_base32()
-        user = USER_DB.find_user_by_email(email)
-        if user:
-            USER_DB.update_user_otp_secret(email, secret)
-        return secret
 
     @staticmethod
     def generate_otp_qr_code(user:UserModels.User) -> str:

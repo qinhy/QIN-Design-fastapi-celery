@@ -188,3 +188,11 @@ class CeleryTask:
         api_ok()
         task = CeleryTask.fibonacci.delay(fib_task.model_dump())
         return {'task_id': task.id}
+    
+    
+    @api.post("/auth/local/fibonacci/")
+    def api_fibonacci(fib_task: Fibonacci.Model,
+                      current_user: UserModels.User = Depends(AuthService.get_current_payload_if_not_local)):
+        api_ok()
+        task = CeleryTask.fibonacci.delay(fib_task.model_dump())
+        return {'task_id': task.id}
