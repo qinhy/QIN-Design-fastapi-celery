@@ -194,14 +194,14 @@
                                 </p-select>
 
                                 <div class="mb-4">
-                                    <p-button label="Check Task Status" class="mr-2" @click="()=>checkTaskStatus()">
+                                    <p-button label="Check Task Meta" class="mr-2" @click="()=>checkTaskMeta()">
                                     </p-button>
                                     <p-button label="Stop Task" class="p-button-danger" @click="()=>stopTask()">
                                     </p-button>
                                 </div>
 
-                                <p-textarea v-model="taskStatus"
-                                    placeholder="Task status or operation result will appear here..." rows="3"
+                                <p-textarea v-model="taskMeta"
+                                    placeholder="Task Meta or operation result will appear here..." rows="3"
                                     class="w-full" readonly>
                                 </p-textarea>
                             </div>
@@ -243,13 +243,13 @@
                         <p class="text-green-600">Task ID: {{ taskId }}</p>                        
                         <div>
                             <div class="mb-4">
-                                <p-button label="Check Task Status" class="mr-2" @click="()=>checkTaskStatus(taskId)">
+                                <p-button label="Check Task Meta" class="mr-2" @click="()=>checkTaskMeta(taskId)">
                                 </p-button>
                                 <p-button label="Stop Task" class="p-button-danger" @click="()=>stopTask(taskId)">
                                 </p-button>
                             </div>
-                            <p-textarea v-model="taskStatus"
-                                placeholder="Task status or operation result will appear here..." rows="4"
+                            <p-textarea v-model="taskMeta"
+                                placeholder="Task Meta or operation result will appear here..." rows="4"
                                 class="w-full" readonly>
                             </p-textarea>
                         </div>
@@ -309,8 +309,8 @@ class APIClient {
             return response.json();
         }
 
-        // Check task status
-        async checkTaskStatus(taskId) { return await this.request(`/tasks/status/${taskId}`); }
+        // Check task meta
+        async checkTaskMeta(taskId) { return await this.request(`/tasks/meta/${taskId}`); }
 
         // Stop a task
         async stopTask(taskId) { return await this.request(`/tasks/stop/${taskId}`, "GET"); }
@@ -403,7 +403,8 @@ class APIClient {
             const errorMessage = ref(null);
 
             const submitFibonacciTask = async () => {
-                taskStatus.value = "";
+                loading.value = true;
+                taskMeta.value = "";
                 const response = await fetch("/auth/local/fibonacci/", {
                 method: "POST",
                 headers: {"Content-Type": "application/json",},
@@ -422,6 +423,7 @@ class APIClient {
                 const data = await response.json();
                 taskId.value = data.task_id;
                 errorMessage.value = null;
+                loading.value = false;
             };
 
 
@@ -429,7 +431,7 @@ class APIClient {
             const tasks = ref([]); // List of tasks { task_id: 1, status: 1, result: 1, date_done: 1 }
             const taskOptions = ref([]); // select options for Task IDs
             const selectedTaskId = ref(null); // Selected Task ID
-            const taskStatus = ref(""); // Status or result message
+            const taskMeta = ref(""); // meta or result message
             const workersInfo = ref(""); // Workers information
             const fetchAndDisplayTasks = async () => {
                 tasks.value = await api.request('/tasks/');
@@ -438,9 +440,9 @@ class APIClient {
             const fetchWorkers = async () => {
                 workersInfo.value = JSON.stringify(await api.fetchWorkers());
             }            
-            const checkTaskStatus = async (val=null) => {
+            const checkTaskMeta = async (val=null) => {
                 if(!val)val=selectedTaskId.value;
-                taskStatus.value = JSON.stringify(await api.checkTaskStatus(val));
+                taskMeta.value = JSON.stringify(await api.checkTaskMeta(val));
             }
             const stopTask = async (val=null) => {
                 if(!val)val=selectedTaskId.value;
@@ -539,7 +541,7 @@ class APIClient {
             })()
             return {
                 TABS, activeTab, user, session, api,
-                tasks, taskOptions, selectedTaskId, taskStatus, workersInfo, fetchAndDisplayTasks, checkTaskStatus, stopTask, fetchWorkers,
+                tasks, taskOptions, selectedTaskId, taskMeta, workersInfo, fetchAndDisplayTasks, checkTaskMeta, stopTask, fetchWorkers,
                 files, uploadFile, downloadFile, deleteFile,
                 editForm,
                 registerForm, registerUser,

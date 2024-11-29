@@ -53,21 +53,21 @@ class CeleryTask:
         api_ok()
         return BasicApp.get_tasks_list()
 
-    @api.get("/tasks/status/{task_id}")
-    def api_task_status(task_id: str):
+    @api.get("/tasks/meta/{task_id}")
+    def api_task_meta(task_id: str):
         api_ok()
-        return BasicApp.get_task_status(task_id)
+        return BasicApp.get_task_meta(task_id)
 
     @api.get("/tasks/stop/{task_id}")
     def api_task_stop(task_id: str):
         api_ok()
-        return BasicApp.set_task_revoked(task_id)
+        BasicApp.send_data_to_task(task_id,{'status': 'REVOKED'})
+        # return BasicApp.set_task_revoked(task_id)
 
     @api.get("/workers/")
     def get_workers():
         # current_user: UserModels.User = Depends(AuthService.get_current_root_user)):
         api_ok()
-        """Retrieve the status of all Celery workers."""
         inspector = celery_app.control.inspect()
         active_workers = inspector.active() or {}
         stats = inspector.stats() or {}
@@ -184,7 +184,7 @@ class CeleryTask:
 
     @api.post("/auth/fibonacci/")
     def api_fibonacci(fib_task: Fibonacci.Model,
-                      current_user: UserModels.User = Depends(AuthService.get_current_payload)):
+                      current_payload: UserModels.User = Depends(AuthService.get_current_payload)):
         api_ok()
         task = CeleryTask.fibonacci.delay(fib_task.model_dump())
         return {'task_id': task.id}
@@ -192,7 +192,7 @@ class CeleryTask:
     
     @api.post("/auth/local/fibonacci/")
     def api_fibonacci(fib_task: Fibonacci.Model,
-                      current_user: UserModels.User = Depends(AuthService.get_current_payload_if_not_local)):
+                      current_payload: UserModels.User = Depends(AuthService.get_current_payload_if_not_local)):
         api_ok()
         task = CeleryTask.fibonacci.delay(fib_task.model_dump())
         return {'task_id': task.id}

@@ -29,24 +29,30 @@ class Fibonacci(ServiceOrientedArchitecture):
             self.model: Fibonacci.Model = model
 
         def __call__(self, *args, **kwargs):
-            stop_flag = super().__call__(*args, **kwargs)
-            n = self.model.args.n
-            if n <= 1:
-                self.model.ret.n = n
-            else:
-                if self.model.param.is_fast():
-                    a, b = 0, 1
-                    for _ in range(2, n + 1):
-                        a, b = b, a + b
-                    res = b
+            with self.listen_stop_flag() as stop_flag:
+                n = self.model.args.n
+                if n <= 1:
+                    self.model.ret.n = n
                 else:
-                    def fib_r(n):
-                        if stop_flag.is_set(): return 0
-                        if n<1:return n
-                        return(fib_r(n-1) + fib_r(n-2))                    
-                    res = fib_r(n)
-                self.model.ret.n = res
-            return self.model
+                    if self.model.param.is_fast():
+                        a, b = 0, 1
+                        for _ in range(2, n + 1):
+                            if stop_flag.is_set():
+                                break
+                            a, b = b, a + b
+                        res = b
+                    else:
+                        def fib_r(n):
+                            if stop_flag.is_set(): return 0
+                            if n<1:return n
+                            return(fib_r(n-1) + fib_r(n-2))                    
+                        res = fib_r(n)
+                    self.model.ret.n = res
+                        
+                if stop_flag.is_set():
+                    self.model.ret.n = 0
+                
+                return self.model
 
 class CvCameraSharedMemoryService:
     class Model(ServiceOrientedArchitecture.Model):        
@@ -146,52 +152,52 @@ class CvCameraSharedMemoryService:
                 # time.sleep(frame_time)
 
         def __call__(self, *args, **kwargs):
-            stop_flag = super().__call__(*args, **kwargs)
+            with self.listen_stop_flag() as stop_flag:
+                
+                if self.model.param.is_write():
+                    writer = self.model.param.writer()
 
-            if self.model.param.is_write():
-                writer = self.model.param.writer()
+                    frame_gen = self.cv2_Random_gen(stop_flag,writer.array_shape)
+                    start_time = time.time()
+                    # Add FPS text to the frame
+                    position = (10, 30)  # Top-left corner
+                    font = cv2.FONT_HERSHEY_SIMPLEX
+                    font_scale = 1
+                    color = (255, 255, 255)  # White color (use (0, 0, 0) for black on a grayscale image)
+                    thickness = 2
+                    for i,frame in enumerate(frame_gen):
+                        if i%10000==0:
+                            fps = 10000/(time.time()-start_time+1e-5)
+                            print(f"FPS: {fps:.2f} , {writer.id}")
+                            start_time = time.time()
+                            
+                        # Put text on the frame (converted to 3-channel to allow color text if needed)
+                        # text = f"FPS: {fps:.2f}"
+                        # frame_with_text = cv2.putText(frame, text, position, font, font_scale, color, thickness, cv2.LINE_AA)
 
-                frame_gen = self.cv2_Random_gen(stop_flag,writer.array_shape)
-                start_time = time.time()
-                # Add FPS text to the frame
-                position = (10, 30)  # Top-left corner
-                font = cv2.FONT_HERSHEY_SIMPLEX
-                font_scale = 1
-                color = (255, 255, 255)  # White color (use (0, 0, 0) for black on a grayscale image)
-                thickness = 2
-                for i,frame in enumerate(frame_gen):
-                    if i%10000==0:
-                        fps = 10000/(time.time()-start_time+1e-5)
-                        print(f"FPS: {fps:.2f} , {writer.id}")
-                        start_time = time.time()
-                        
-                    # Put text on the frame (converted to 3-channel to allow color text if needed)
-                    # text = f"FPS: {fps:.2f}"
-                    # frame_with_text = cv2.putText(frame, text, position, font, font_scale, color, thickness, cv2.LINE_AA)
+                        writer.write(frame)
 
-                    writer.write(frame)
+                else:
+                    # reading
+                    reader = self.model.param.reader()
+                    title = f'Shared Memory Reader Frame:{reader.id}'
+                    print("reading")
+                    while not stop_flag.is_set():
+                        # Read the frame from shared memory
+                        frame,_ = reader.read()
+                        if frame is None:
+                            print("No frame read from shared memory.")
+                            continue
 
-            else:
-                # reading
-                reader = self.model.param.reader()
-                title = f'Shared Memory Reader Frame:{reader.id}'
-                print("reading")
-                while not stop_flag.is_set():
-                    # Read the frame from shared memory
-                    frame,_ = reader.read()
-                    if frame is None:
-                        print("No frame read from shared memory.")
-                        continue
+                        # Display the frame
+                        cv2.imshow(title, frame)
 
-                    # Display the frame
-                    cv2.imshow(title, frame)
+                        if cv2.waitKey(1) & 0xFF == ord('q'):
+                            break
 
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        break
-
-                cv2.destroyAllWindows()
-            
-            return self.model
+                    cv2.destroyAllWindows()
+                
+                return self.model
 
 # def camera_writer_process(camera_service_model):
 #     action = CvCameraSharedMemoryService.Action(camera_service_model)

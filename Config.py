@@ -72,3 +72,26 @@ if USER_DB.find_user_by_email(email) is None:
 #     print(f"CELERY_META: {CELERY_META}")
 #     print(f"CELERY_RABBITMQ_BROKER: {CELERY_RABBITMQ_BROKER}")
 #     print(f"REDIS_URL: {REDIS_URL}")
+print('APP_BACK_END :',APP_BACK_END)
+print('APP_INVITE_CODE :',APP_INVITE_CODE)
+print('APP_SECRET_KEY :',APP_SECRET_KEY)
+print('ALGORITHM :',ALGORITHM)
+print('ACCESS_TOKEN_EXPIRE_MINUTES :',ACCESS_TOKEN_EXPIRE_MINUTES)
+print('SESSION_DURATION :',SESSION_DURATION)
+print('UVICORN_PORT :',UVICORN_PORT)
+print('FLOWER_PORT :',FLOWER_PORT)
+print('EX_IP :',EX_IP)
+
+if APP_BACK_END=='mongodbrabbitmq':
+    print('RABBITMQ_URL :',RABBITMQ_URL)
+    print('RABBITMQ_USER :',RABBITMQ_USER)
+    print('RABBITMQ_PASSWORD :',RABBITMQ_PASSWORD)
+
+    print('MONGO_URL :',MONGO_URL)
+    print('MONGO_DB :',MONGO_DB)
+
+    print('CELERY_META :',CELERY_META)
+    print('CELERY_RABBITMQ_BROKER :',CELERY_RABBITMQ_BROKER)
+if APP_BACK_END=='redis':
+    # Redis URL configuration with fallback
+    print('REDIS_URL :',REDIS_URL)

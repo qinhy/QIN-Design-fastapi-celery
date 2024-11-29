@@ -13,3 +13,4 @@ pymongo
 python-jose
 pyotp
 qrcode
+pika

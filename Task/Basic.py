@@ -1,4 +1,5 @@
 
+from contextlib import contextmanager
 from Config import APP_BACK_END, RABBITMQ_URL, MONGO_URL, MONGO_DB, CELERY_META, CELERY_RABBITMQ_BROKER, RABBITMQ_USER, RABBITMQ_PASSWORD, REDIS_URL
 
 from datetime import datetime
@@ -18,6 +19,9 @@ from pymongo.errors import ConnectionFailure
 import redis
 import json
 import celery.states
+import pika
+import json
+import threading
 
 import celery
 import requests
@@ -29,14 +33,96 @@ try:
 except Exception as e:
     from Storages import SingletonKeyValueStorage
 
-class RabbitmqMongoApp:
+class AppInterface:
+    @staticmethod
+    def send_data_to_task(task_id, data: dict): raise NotImplementedError('send_data_to_task')
+    @staticmethod
+    def listen_data_of_task(task_id, data_callback=lambda data: data, eternal=False): raise NotImplementedError('listen_data_of_task')
+    @staticmethod
+    def get_celery_app(): raise NotImplementedError('get_celery_app')
+    @staticmethod
+    def check_rabbitmq_health(url=None, user='', password='') -> bool:('check_rabbitmq_health')
+    @staticmethod
+    def check_mongodb_health(url=None) -> bool:('check_mongodb_health')
+    @staticmethod
+    def get_tasks_collection(): raise NotImplementedError('get_tasks_collection')
+    @staticmethod
+    def get_tasks_list(): raise NotImplementedError('get_tasks_list')
+    @staticmethod
+    def get_task_meta(task_id: str): raise NotImplementedError('get_task_meta')
+    @staticmethod
+    def get_task_status(task_id: str): raise NotImplementedError('get_task_status')
+    @staticmethod
+    def set_task_started(task_model: 'ServiceOrientedArchitecture.Model'): raise NotImplementedError('set_task_started')
+    @staticmethod
+    def set_task_revoked(task_id): raise NotImplementedError('set_task_revoked')
+
+class RabbitmqMongoApp(AppInterface):
     rabbitmq_URL = RABBITMQ_URL
     mongo_URL = MONGO_URL
     mongo_DB = MONGO_DB
     celery_META = CELERY_META
     CELERY_RABBITMQ_BROKER = CELERY_RABBITMQ_BROKER
+    TASK_PUBSUB_NAME = 'task_updates'
 
     store = SingletonKeyValueStorage().mongo_backend(mongo_URL)
+
+    @staticmethod
+    def send_data_to_task(task_id, data: dict):
+        h,p = RABBITMQ_URL.split(':')
+        connection = pika.BlockingConnection(pika.ConnectionParameters(h))
+        channel = connection.channel()
+        channel.exchange_declare(exchange=RabbitmqMongoApp.TASK_PUBSUB_NAME,
+                                 exchange_type='direct')
+
+        message = json.dumps({'task_id': task_id, 'data': data})
+        channel.basic_publish(exchange=RabbitmqMongoApp.TASK_PUBSUB_NAME,
+                                 routing_key=task_id, body=message)
+        # print(f" [x] Sent data to task {task_id}: {data}")
+        connection.close()
+
+    @staticmethod
+    def listen_data_of_task(task_id, data_callback=lambda data: data, eternal=False):
+        h,p = RABBITMQ_URL.split(':')
+        connection = pika.BlockingConnection(pika.ConnectionParameters(h))
+        channel = connection.channel()
+        channel.exchange_declare(exchange=RabbitmqMongoApp.TASK_PUBSUB_NAME,
+                                 exchange_type='direct')
+
+        # Create a unique, exclusive queue for this task
+        result = channel.queue_declare(queue='', exclusive=True)
+        queue_name = result.method.queue
+        channel.queue_bind(exchange=RabbitmqMongoApp.TASK_PUBSUB_NAME,
+                                 queue=queue_name, routing_key=task_id)
+
+        def listen():
+            def callback(ch, method, properties, body):
+                if RabbitmqMongoApp.get_task_status(task_id) in celery.states.READY_STATES:
+                        channel.stop_consuming()
+                        connection.close()
+                        return
+                
+                message = json.loads(body)
+                if message['task_id'] == task_id:
+                    # print(f" [x] Received data for task {task_id}: {message['data']}")
+                    data_callback(message['data'])
+                    if not eternal:
+                        channel.stop_consuming()
+                        connection.close()
+                        return
+                
+                if RabbitmqMongoApp.get_task_status(task_id) in celery.states.READY_STATES:
+                        channel.stop_consuming()
+                        connection.close()
+                        return
+
+            channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
+            # print(f" [*] {'eternal'if eternal else ''} Listening for data on task {task_id}...")
+            channel.start_consuming()
+
+        listener_thread = threading.Thread(target=listen)
+        listener_thread.daemon = True
+        listener_thread.start()
 
     @staticmethod
     def get_celery_app():
@@ -92,12 +178,18 @@ class RabbitmqMongoApp:
         return tasks
 
     @staticmethod
-    def get_task_status(task_id: str):
+    def get_task_meta(task_id: str):
         collection = RabbitmqMongoApp.get_tasks_collection()
         res = collection.find_one({'_id': task_id})
         if res:
             del res['_id']
-        return res
+            return res
+        else:
+            return {}
+    
+    @staticmethod
+    def get_task_status(task_id: str):
+        return RabbitmqMongoApp.get_task_meta(task_id).get('status',None)
 
     @staticmethod
     def set_task_started(task_model: 'ServiceOrientedArchitecture.Model'):
@@ -121,11 +213,42 @@ class RabbitmqMongoApp:
             res = {'error': 'Task not found'}
         return res
 
-class RedisApp:
+class RedisApp(AppInterface):
     store = SingletonKeyValueStorage().redis_backend()
     # Redis URL configuration
     redis_URL = REDIS_URL
     redis_client = redis.Redis.from_url(redis_URL)
+
+    @staticmethod
+    def send_data_to_task(task_id, data):
+        message = json.dumps({'task_id': task_id, 'data': data})
+        RedisApp.redis_client.publish(task_id, message)
+        # print(f" [x] Sent data to task {task_id}: {data}")
+
+    @staticmethod
+    def listen_data_of_task(task_id, data_callback=lambda data: data, eternal=False):
+        pubsub = RedisApp.redis_client.pubsub()
+        pubsub.subscribe(task_id)
+
+        def listen():
+            # print(f" [*] Listening for data on task {task_id}...")
+            for message in pubsub.listen():
+                if RedisApp.get_task_status(task_id) in celery.states.READY_STATES: break
+
+                if message['type'] == 'message':
+                    data = json.loads(message['data'])
+                    # print(f" [x] Received data for task {task_id}: {data['data']}")
+                    data_callback(data['data'])
+                    if not eternal: break
+                    
+                if RedisApp.get_task_status(task_id) in celery.states.READY_STATES: break
+            
+            pubsub.unsubscribe(task_id)
+
+        listener_thread = threading.Thread(target=listen)
+        listener_thread.daemon = True
+        listener_thread.start()
+
 
     @staticmethod
     def get_celery_app():
@@ -162,16 +285,19 @@ class RedisApp:
                 }
                 tasks.append(task_data)
         return tasks
-
+    
     @staticmethod
-    def get_task_status(task_id: str):
-        """Fetches the status of a task by task_id from Redis."""
+    def get_task_meta(task_id: str):
         task_key = f'celery-task-meta-{task_id}'
         task_data_json = RedisApp.redis_client.get(task_key)
         if task_data_json:
             task_data = json.loads(task_data_json)
             return task_data
-        return None
+        return {}
+    
+    @staticmethod
+    def get_task_status(task_id: str):
+        return RedisApp.get_task_meta(task_id).get('status',None)
 
     @staticmethod
     def set_task_started(task_model:'ServiceOrientedArchitecture.Model'):
@@ -198,9 +324,9 @@ class RedisApp:
             return {'error': 'Task not found'}
 
 if APP_BACK_END=='redis':
-    BasicApp = RedisApp
+    BasicApp:AppInterface = RedisApp
 elif APP_BACK_END=='mongodbrabbitmq':
-    BasicApp = RabbitmqMongoApp
+    BasicApp:AppInterface = RabbitmqMongoApp
 else:
     raise ValueError(f'no back end of {APP_BACK_END}')
 
@@ -225,31 +351,27 @@ class ServiceOrientedArchitecture:
                 model = ServiceOrientedArchitecture.Model(**model)
             self.model: ServiceOrientedArchitecture.Model = model
 
-        def __call__(self, *args, **kwargs):
+        @contextmanager
+        def listen_stop_flag(self):
+            task_id=self.model.task_id
             BasicApp.set_task_started(self.model)
             # A shared flag to communicate between threads
             stop_flag = threading.Event()
-
             # Function to check if the task should be stopped, running in a separate thread
-            def check_task_status(task_id):
-                
-                while True:
-                    task = BasicApp.get_task_status(task_id)
-                    if task: break
-                    time.sleep(1)
-
-                while not stop_flag.is_set():
-                    task = BasicApp.get_task_status(task_id)
-                    if task['status'] == celery.states.REVOKED:
-                        print(f"Task marked as {celery.states.REVOKED}, setting stop flag.")
-                        stop_flag.set()
-                        break
-                    time.sleep(1)  # Delay between checks to reduce load on MongoDB
-
-            # Start the status-checking thread
-            status_thread = threading.Thread(target=check_task_status, args=(self.model.task_id,))
-            status_thread.start()
+            def check_task_status(data:dict,task_id=task_id):
+                if data.get('status',None) == celery.states.REVOKED:
+                    BasicApp.set_task_revoked(task_id)
+                    stop_flag.set()
+            BasicApp.listen_data_of_task(task_id,check_task_status,True)
+            
+            try:
+                yield stop_flag  # Provide the stop_flag to the `with` block
+            finally:
+                BasicApp.send_data_to_task(self.model.task_id,{})
             return stop_flag
+
+        def __call__(self, *args, **kwargs):
+            return self.model
 
 ##################### IO 
 
