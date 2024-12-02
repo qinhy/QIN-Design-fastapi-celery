@@ -6,7 +6,7 @@ from Config import SESSION_DURATION, APP_SECRET_KEY
 
 from User.UserAPIs import AuthService, UserModels, router as users_router
 from Task.Basic import BasicApp
-from Task.Manager import BookService, MT5CopyLastRatesService,MT5Manager,MT5Account,Book
+from Task.MT5Manager import BookService, MT5CopyLastRatesService,MT5Manager,MT5Account,Book
 
 from celery.app import task as Task
 from starlette.middleware.sessions import SessionMiddleware
