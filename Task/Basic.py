@@ -35,11 +35,13 @@ except Exception as e:
 
 class AppInterface:
     @staticmethod
+    def check_services() -> bool: raise NotImplementedError('check_services')
+    @staticmethod
     def send_data_to_task(task_id, data: dict): raise NotImplementedError('send_data_to_task')
     @staticmethod
     def listen_data_of_task(task_id, data_callback=lambda data: data, eternal=False): raise NotImplementedError('listen_data_of_task')
     @staticmethod
-    def get_celery_app(): raise NotImplementedError('get_celery_app')
+    def get_celery_app()->celery.Celery: raise NotImplementedError('get_celery_app')
     @staticmethod
     def check_rabbitmq_health(url=None, user='', password='') -> bool:('check_rabbitmq_health')
     @staticmethod

@@ -70,7 +70,7 @@ class CeleryTask:
         api_ok()
         inspector = celery_app.control.inspect()
         active_workers = inspector.active() or {}
-        stats = inspector.stats() or {}
+        stats:dict[str,dict] = inspector.stats() or {}
 
         workers = []
         for worker_name, data in stats.items():
