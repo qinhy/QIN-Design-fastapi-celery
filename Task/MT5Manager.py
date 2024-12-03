@@ -77,28 +77,58 @@ class MT5Manager:
         def __exit__(self, type, value, traceback):
             self.release()
 
-        
-    def __init__(self,id=None,results=None,terminals=None,is_singleton=None):
+    def __init__(self, id=None, results=None, terminals=None, is_singleton=None):
         self.uuid = uuid.uuid4() if id is None else id
-        self.results:Dict[str,List[Any]] = None if results is None else results
-        self.terminals:Dict[str,set[MT5Manager.TerminalLock]] = None if terminals is None else terminals
-        self.is_singleton:bool = False if is_singleton is None else is_singleton
-    # {
-    #     'TitanFX':[
-    #         MT5Manager.TerminalLock(exe_path="path/to/your/terminal64.exe")
-    #     ],
-    #     'XMTrading':[ MT5Manager.TerminalLock(exe_path="path/to/your/terminal64.exe") ],
-    # }
-    
+        self.results: Dict[str, List[Any]] = None if results is None else results
+        self.terminals: Dict[str, Set[MT5Manager.TerminalLock]] = None if terminals is None else terminals
+        self.is_singleton: bool = False if is_singleton is None else is_singleton
+
+        # Discover terminal.exe files and initialize terminals
+        self.terminals = self._discover_terminals()
+
+    def _discover_terminals(self, start_directory="C:\\Program Files", max_depth=2):
+        """
+        Discover terminal.exe files and initialize terminals with broker names.
+        """
+        broker_info = []
+        start_depth = start_directory.count(os.sep)
+
+        # Walk through the directory tree
+        for root, dirs, files in os.walk(start_directory):
+            current_depth = root.count(os.sep) - start_depth
+            if current_depth > max_depth:
+                # Skip directories deeper than max_depth
+                dirs[:] = []
+                continue
+
+            # Check if terminal.exe exists in the current directory
+            if "terminal.exe" in files:
+                # Extract broker name from the path
+                parts = root.split(os.sep)
+                for part in parts:
+                    if "MT5" in part or "MetaTrader 5" in part:
+                        broker_name = part.replace(" MT5", "").replace(" MetaTrader 5", "")
+                        broker_info.append({"Broker Name": broker_name, "Path": os.path.join(root, "terminal.exe")})
+                        break
+        
+        # Initialize terminals dictionary
+        terminals = {}
+        for broker in broker_info:
+            broker_name = broker["Broker Name"]
+            exe_path = broker["Path"]
+            if broker_name not in terminals:
+                terminals[broker_name] = set()
+            terminals[broker_name].add(MT5Manager.TerminalLock(exe_path=exe_path))
+        
+        return terminals
+
     def get_singleton(self):
-        return self.__class__(self._uuid,self._results,self._terminals,self._is_singleton)
+        return self.__class__(self.uuid, self.results, self.terminals, self.is_singleton)
 
     def add_terminal(self, account_server='XMTrading', exe_path="path/to/your/terminal64.exe"):
-        # if not os.path.exists(exe_path):
-        #     raise ValueError(f'No such file of {exe_path}')
         if account_server not in self.terminals:
             self.terminals[account_server] = set()
-        if exe_path not in set([i.exe_path for i in self.terminals[account_server]]):
+        if exe_path not in {i.exe_path for i in self.terminals[account_server]}:
             self.terminals[account_server].add(MT5Manager.TerminalLock(exe_path=exe_path))
 
     def _get_terminal_lock(self, account_server='XMTrading'):
