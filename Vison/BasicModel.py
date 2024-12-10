@@ -343,8 +343,12 @@ class NumpyDualBufferDiskBackedQueue(BaseModel):
                 else:
                     img = self._buffer_b[index_in_buffer].copy()
                 return img
+            
+        pwd = self.storage_dirs[self.current_storage_index]
+        if index_in_buffer==0 and os.path.exists(os.path.join(pwd, f"buffer_{buffer_id-1}.npy")):
+            os.remove(os.path.join(pwd, f"buffer_{buffer_id-1}.npy"))
 
-        filename = os.path.join(self.storage_dirs[self.current_storage_index], f"buffer_{buffer_id}.npy")
+        filename = os.path.join(pwd, f"buffer_{buffer_id}.npy")
         buffer_data = np.load(filename, mmap_mode='r')
         img = buffer_data[index_in_buffer].copy()
         return img
