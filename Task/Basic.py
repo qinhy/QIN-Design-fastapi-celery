@@ -494,6 +494,80 @@ class NumpyUInt8SharedMemoryIO(GeneralSharedMemoryIO):
         return NumpyUInt8SharedMemoryIO.Writer(shm_size=shm_size,
                                     shm_name=shm_name, create=True, array_shape=array_shape).build_buffer()
 
+class NumpyUInt8SharedMemoryQueue:
+    def __init__(self, shm_prefix: str, num_blocks: int, block_size: int, item_shape: tuple):
+        """
+        Create a queue using multiple shared memory blocks.
+        Args:
+            shm_prefix (str): Prefix for shared memory block names.
+            num_blocks (int): Number of blocks in the queue.
+            block_size (int): Maximum number of items per block.
+            item_shape (tuple): Shape of each item in the queue.
+        """
+        self.num_blocks = num_blocks
+        self.block_size = block_size
+        self.item_shape = item_shape
+        self.total_capacity = num_blocks * block_size
+
+        # Create NumpyUInt8SharedMemoryIO instances for each block
+        self.blocks = [
+            NumpyUInt8SharedMemoryIO.writer(
+                shm_name=f"{shm_prefix}_block_{i}",
+                array_shape=(block_size, *item_shape),
+            )
+            for i in range(num_blocks)
+        ]
+
+        # Metadata
+        self.head = 0  # Global index for dequeue
+        self.tail = 0  # Global index for enqueue
+
+    def enqueue(self, item: np.ndarray):
+        if item.shape != self.item_shape:
+            raise ValueError(f"Item shape {item.shape} does not match expected shape {self.item_shape}.")
+
+        # Determine the block and position within the block
+        block_idx = self.tail // self.block_size
+        pos_in_block = self.tail % self.block_size
+
+        # Write item to the block
+        self.blocks[block_idx]._shared_array[pos_in_block] = item
+
+        # Update the tail index
+        self.tail = (self.tail + 1) % self.total_capacity
+
+        # If the queue is full, move the head forward (overwrite old data)
+        if self.tail == self.head:
+            self.head = (self.head + 1) % self.total_capacity
+
+    def dequeue(self) -> np.ndarray:
+        if self.head == self.tail:
+            raise ValueError("Queue is empty.")
+
+        # Determine the block and position within the block
+        block_idx = self.head // self.block_size
+        pos_in_block = self.head % self.block_size
+
+        # Read item from the block
+        item = self.blocks[block_idx]._shared_array[pos_in_block].copy()
+
+        # Update the head index
+        self.head = (self.head + 1) % self.total_capacity
+
+        return item
+
+    def is_empty(self) -> bool:
+        return self.head == self.tail
+
+    def is_full(self) -> bool:
+        return (self.tail + 1) % self.total_capacity == self.head
+
+    def current_size(self) -> int:
+        """Returns the current number of items in the queue."""
+        if self.tail >= self.head:
+            return self.tail - self.head
+        return self.total_capacity - (self.head - self.tail)
+
 ##################### stream IO 
 class CommonStreamIO(CommonIO):
     class Base(CommonIO.Base):
