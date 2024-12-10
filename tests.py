@@ -1,6 +1,19 @@
 import numpy as np
 import requests
 import time
+from Task.Basic import AppInterface,RedisApp,RabbitmqMongoApp
+
+from Task.Customs import ServiceOrientedArchitecture
+from Config import APP_BACK_END, SESSION_DURATION, APP_SECRET_KEY, RABBITMQ_URL, MONGO_URL, MONGO_DB, CELERY_META, CELERY_RABBITMQ_BROKER, RABBITMQ_USER, RABBITMQ_PASSWORD, REDIS_URL
+if APP_BACK_END=='redis':
+    BasicApp:AppInterface = RedisApp(REDIS_URL)
+elif APP_BACK_END=='mongodbrabbitmq':
+    BasicApp:AppInterface = RabbitmqMongoApp(RABBITMQ_URL,RABBITMQ_USER,RABBITMQ_PASSWORD,
+                                             MONGO_URL,MONGO_DB,CELERY_META,
+                                             CELERY_RABBITMQ_BROKER)
+else:
+    raise ValueError(f'no back end of {APP_BACK_END}')
+ServiceOrientedArchitecture.BasicApp  = BasicApp
 
 from Task.Basic import BidirectionalStream, NumpyUInt8SharedMemoryIO, RedisIO
 from Vison.BasicModel import NumpyUInt8SharedMemoryStreamIO
@@ -92,6 +105,6 @@ def test_BidirectionalStream():
         writer)    
     bwriter.run()
 
-# test_NumpyUInt8SharedMemoryIO()
-# test_redisIO()
-# test_BidirectionalStream()
+test_NumpyUInt8SharedMemoryIO()
+test_redisIO()
+test_BidirectionalStream()

@@ -1,32 +1,23 @@
-
 from contextlib import contextmanager
-from Config import APP_BACK_END, RABBITMQ_URL, MONGO_URL, MONGO_DB, CELERY_META, CELERY_RABBITMQ_BROKER, RABBITMQ_USER, RABBITMQ_PASSWORD, REDIS_URL
-
 from datetime import datetime
 from multiprocessing import shared_memory
-import threading
-import time
 from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo
-import requests
-import celery
-import celery.states
+
+import threading
+import time
+import json
+
 import numpy as np
+import requests
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 import redis
-import json
-import celery.states
 import pika
-import json
-import threading
-
 import celery
-import requests
-from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
+import celery.states
 
 try:
     from ..Storages import SingletonKeyValueStorage
@@ -34,6 +25,10 @@ except Exception as e:
     from Storages import SingletonKeyValueStorage
 
 class AppInterface:
+    @classmethod
+    def redis_client() -> redis.Redis: raise NotImplementedError('redis_client')
+    @classmethod
+    def store() -> SingletonKeyValueStorage: raise NotImplementedError('store')
     @staticmethod
     def check_services() -> bool: raise NotImplementedError('check_services')
     @staticmethod
@@ -60,91 +55,87 @@ class AppInterface:
     def set_task_revoked(task_id): raise NotImplementedError('set_task_revoked')
 
 class RabbitmqMongoApp(AppInterface):
-    rabbitmq_URL = RABBITMQ_URL
-    mongo_URL = MONGO_URL
-    mongo_DB = MONGO_DB
-    celery_META = CELERY_META
-    CELERY_RABBITMQ_BROKER = CELERY_RABBITMQ_BROKER
-    TASK_PUBSUB_NAME = 'task_updates'
+    def __init__(self, rabbitmq_url:str, rabbitmq_user:str, rabbitmq_password:str, 
+                 mongo_url:str, mongo_db:str, celery_meta:str, celery_rabbitmq_broker:str, task_pubsub_name='task_updates'):
+        self.rabbitmq_url = rabbitmq_url
+        self.rabbitmq_user = rabbitmq_user
+        self.rabbitmq_password = rabbitmq_password
 
-    store = SingletonKeyValueStorage().mongo_backend(mongo_URL)
+        self.mongo_url = mongo_url
+        self.mongo_db = mongo_db
+        self.celery_meta = celery_meta
+        self.celery_rabbitmq_broker = celery_rabbitmq_broker
+        self.task_pubsub_name = task_pubsub_name
+        self._store = None
+        
+    def store(self):
+        if self._store is None:
+            self._store = SingletonKeyValueStorage().mongo_backend(self.mongo_url)
+        return self._store
 
-    @staticmethod
-    def send_data_to_task(task_id, data: dict):
-        h,p = RABBITMQ_URL.split(':')
-        connection = pika.BlockingConnection(pika.ConnectionParameters(h))
+    def send_data_to_task(self, task_id, data: dict):
+        host, port = self.rabbitmq_url.split(':')
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host))
         channel = connection.channel()
-        channel.exchange_declare(exchange=RabbitmqMongoApp.TASK_PUBSUB_NAME,
-                                 exchange_type='direct')
+        channel.exchange_declare(exchange=self.task_pubsub_name, exchange_type='direct')
 
         message = json.dumps({'task_id': task_id, 'data': data})
-        channel.basic_publish(exchange=RabbitmqMongoApp.TASK_PUBSUB_NAME,
-                                 routing_key=task_id, body=message)
-        # print(f" [x] Sent data to task {task_id}: {data}")
+        channel.basic_publish(exchange=self.task_pubsub_name, routing_key=task_id, body=message)
         connection.close()
 
-    @staticmethod
-    def listen_data_of_task(task_id, data_callback=lambda data: data, eternal=False):
-        h,p = RABBITMQ_URL.split(':')
-        connection = pika.BlockingConnection(pika.ConnectionParameters(h))
+    def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False):
+        host, port = self.rabbitmq_url.split(':')
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host))
         channel = connection.channel()
-        channel.exchange_declare(exchange=RabbitmqMongoApp.TASK_PUBSUB_NAME,
-                                 exchange_type='direct')
+        channel.exchange_declare(exchange=self.task_pubsub_name, exchange_type='direct')
 
-        # Create a unique, exclusive queue for this task
         result = channel.queue_declare(queue='', exclusive=True)
         queue_name = result.method.queue
-        channel.queue_bind(exchange=RabbitmqMongoApp.TASK_PUBSUB_NAME,
-                                 queue=queue_name, routing_key=task_id)
+        channel.queue_bind(exchange=self.task_pubsub_name, queue=queue_name, routing_key=task_id)
 
         def listen():
             def callback(ch, method, properties, body):
-                if RabbitmqMongoApp.get_task_status(task_id) in celery.states.READY_STATES:
-                        channel.stop_consuming()
-                        connection.close()
-                        return
+                if self.get_task_status(task_id) in celery.states.READY_STATES:
+                    channel.stop_consuming()
+                    connection.close()
+                    return
                 
                 message = json.loads(body)
                 if message['task_id'] == task_id:
-                    # print(f" [x] Received data for task {task_id}: {message['data']}")
                     data_callback(message['data'])
                     if not eternal:
                         channel.stop_consuming()
                         connection.close()
                         return
                 
-                if RabbitmqMongoApp.get_task_status(task_id) in celery.states.READY_STATES:
-                        channel.stop_consuming()
-                        connection.close()
-                        return
+                if self.get_task_status(task_id) in celery.states.READY_STATES:
+                    channel.stop_consuming()
+                    connection.close()
+                    return
 
             channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
-            # print(f" [*] {'eternal'if eternal else ''} Listening for data on task {task_id}...")
             channel.start_consuming()
 
         listener_thread = threading.Thread(target=listen)
         listener_thread.daemon = True
         listener_thread.start()
 
-    @staticmethod
-    def get_celery_app():
-        return celery.Celery(RabbitmqMongoApp.mongo_DB, broker=RabbitmqMongoApp.CELERY_RABBITMQ_BROKER,
-                             backend=f'{RabbitmqMongoApp.mongo_URL}/{RabbitmqMongoApp.mongo_DB}')
-    
-    @staticmethod
-    def check_rabbitmq_health(url=None, user=RABBITMQ_USER, password=RABBITMQ_PASSWORD) -> bool:
+    def get_celery_app(self):
+        return celery.Celery(self.mongo_db, broker=self.celery_rabbitmq_broker,
+                             backend=f'{self.mongo_url}/{self.mongo_db}')
+
+    def check_rabbitmq_health(self, url=None, user=None, password=None) -> bool:
         if url is None:
-            url = f'http://{RabbitmqMongoApp.rabbitmq_URL}/api/health/checks/alarms'
+            url = f'http://{self.rabbitmq_url}/api/health/checks/alarms'
         try:
             response = requests.get(url, auth=(user, password), timeout=5)
             return response.status_code == 200
         except requests.exceptions.RequestException:
             return False
 
-    @staticmethod
-    def check_mongodb_health(url=None) -> bool:
+    def check_mongodb_health(self, url=None) -> bool:
         if url is None:
-            url = RabbitmqMongoApp.mongo_URL
+            url = self.mongo_url
         try:
             client = MongoClient(url, serverSelectionTimeoutMS=2000)
             client.admin.command('ping')
@@ -152,22 +143,19 @@ class RabbitmqMongoApp(AppInterface):
         except ConnectionFailure:
             return False
 
-    @classmethod
-    def check_services(cls) -> bool:
-        rabbitmq_health = cls.check_rabbitmq_health()
-        mongodb_health = cls.check_mongodb_health()
+    def check_services(self) -> bool:
+        rabbitmq_health = self.check_rabbitmq_health(user=self.rabbitmq_user, password=self.rabbitmq_password)
+        mongodb_health = self.check_mongodb_health()
         return rabbitmq_health and mongodb_health
 
-    @staticmethod
-    def get_tasks_collection():
-        client = MongoClient(RabbitmqMongoApp.mongo_URL)
-        db = client.get_database(RabbitmqMongoApp.mongo_DB)
-        collection = db.get_collection(RabbitmqMongoApp.celery_META)
+    def get_tasks_collection(self):
+        client = MongoClient(self.mongo_url)
+        db = client.get_database(self.mongo_db)
+        collection = db.get_collection(self.celery_meta)
         return collection
 
-    @staticmethod
-    def get_tasks_list():
-        collection = RabbitmqMongoApp.get_tasks_collection()
+    def get_tasks_list(self):
+        collection = self.get_tasks_collection()
         tasks = []
         for task in collection.find():
             task_data = {
@@ -179,23 +167,20 @@ class RabbitmqMongoApp(AppInterface):
             tasks.append(task_data)
         return tasks
 
-    @staticmethod
-    def get_task_meta(task_id: str):
-        collection = RabbitmqMongoApp.get_tasks_collection()
+    def get_task_meta(self, task_id: str):
+        collection = self.get_tasks_collection()
         res = collection.find_one({'_id': task_id})
         if res:
             del res['_id']
             return res
         else:
             return {}
-    
-    @staticmethod
-    def get_task_status(task_id: str):
-        return RabbitmqMongoApp.get_task_meta(task_id).get('status',None)
 
-    @staticmethod
-    def set_task_started(task_model: 'ServiceOrientedArchitecture.Model'):
-        collection = RabbitmqMongoApp.get_tasks_collection()
+    def get_task_status(self, task_id: str):
+        return self.get_task_meta(task_id).get('status', None)
+
+    def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'):
+        collection = self.get_tasks_collection()
         collection.update_one(
             {'_id': task_model.task_id},
             {'$set': {
@@ -205,9 +190,8 @@ class RabbitmqMongoApp(AppInterface):
             upsert=True
         )
 
-    @staticmethod
-    def set_task_revoked(task_id):
-        collection = RabbitmqMongoApp.get_tasks_collection()
+    def set_task_revoked(self, task_id):
+        collection = self.get_tasks_collection()
         update_result = collection.update_one({'_id': task_id}, {'$set': {'status': 'REVOKED'}})
         if update_result.matched_count > 0:
             res = collection.find_one({'_id': task_id})
@@ -216,34 +200,42 @@ class RabbitmqMongoApp(AppInterface):
         return res
 
 class RedisApp(AppInterface):
-    store = SingletonKeyValueStorage().redis_backend()
-    # Redis URL configuration
-    redis_URL = REDIS_URL
-    redis_client = redis.Redis.from_url(redis_URL)
+    def __init__(self, redis_url):
+        self.redis_url = redis_url
+        self._redis_client = None
+        self._store = None
 
-    @staticmethod
-    def send_data_to_task(task_id, data):
+    def redis_client(self):
+        if self._redis_client is None:
+            self._redis_client = redis.Redis.from_url(self.redis_url)
+        return self._redis_client
+
+    def store(self):
+        if self._store is None:
+            self._store = SingletonKeyValueStorage().redis_backend()
+        return self._store
+
+    def send_data_to_task(self, task_id, data):
         message = json.dumps({'task_id': task_id, 'data': data})
-        RedisApp.redis_client.publish(task_id, message)
-        # print(f" [x] Sent data to task {task_id}: {data}")
+        self.redis_client().publish(task_id, message)
 
-    @staticmethod
-    def listen_data_of_task(task_id, data_callback=lambda data: data, eternal=False):
-        pubsub = RedisApp.redis_client.pubsub()
+    def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False):
+        pubsub = self.redis_client().pubsub()
         pubsub.subscribe(task_id)
 
         def listen():
-            # print(f" [*] Listening for data on task {task_id}...")
             for message in pubsub.listen():
-                if RedisApp.get_task_status(task_id) in celery.states.READY_STATES: break
+                if self.get_task_status(task_id) in celery.states.READY_STATES:
+                    break
 
                 if message['type'] == 'message':
                     data = json.loads(message['data'])
-                    # print(f" [x] Received data for task {task_id}: {data['data']}")
                     data_callback(data['data'])
-                    if not eternal: break
-                    
-                if RedisApp.get_task_status(task_id) in celery.states.READY_STATES: break
+                    if not eternal:
+                        break
+
+                if self.get_task_status(task_id) in celery.states.READY_STATES:
+                    break
             
             pubsub.unsubscribe(task_id)
 
@@ -251,34 +243,29 @@ class RedisApp(AppInterface):
         listener_thread.daemon = True
         listener_thread.start()
 
+    def get_celery_app(self):
+        return celery.Celery('tasks', broker=self.redis_url, backend=self.redis_url)
 
-    @staticmethod
-    def get_celery_app():
-        return celery.Celery('tasks', broker=RedisApp.redis_URL, backend=RedisApp.redis_URL)
-
-    @staticmethod    
-    def check_services() -> bool:
+    def check_services(self) -> bool:
         """Check Redis connection health."""
         try:
-            return RedisApp.redis_client.ping()
+            return self.redis_client().ping()
         except redis.ConnectionError:
             return False
 
-    @staticmethod        
-    def get_tasks_collection():
+    def get_tasks_collection(self):
         """Returns a list of keys representing tasks in Redis."""
-        return RedisApp.redis_client.keys(pattern='celery-task-meta-*')
+        return self.redis_client().keys(pattern='celery-task-meta-*')
 
-    @staticmethod
-    def get_tasks_list():    
+    def get_tasks_list(self):
         """Fetches a list of all tasks stored in Redis."""
-        task_keys = RedisApp.get_tasks_collection()
+        task_keys = self.get_tasks_collection()
         tasks = []
 
         for key in task_keys:
-            task_data_json = RedisApp.redis_client.get(key)
+            task_data_json = self.redis_client().get(key)
             if task_data_json:
-                task:dict = json.loads(task_data_json)
+                task: dict = json.loads(task_data_json)
                 task_data = {
                     "task_id": task.get('task_id'),
                     "status": task.get('status'),
@@ -287,22 +274,19 @@ class RedisApp(AppInterface):
                 }
                 tasks.append(task_data)
         return tasks
-    
-    @staticmethod
-    def get_task_meta(task_id: str):
+
+    def get_task_meta(self, task_id: str):
         task_key = f'celery-task-meta-{task_id}'
-        task_data_json = RedisApp.redis_client.get(task_key)
+        task_data_json = self.redis_client().get(task_key)
         if task_data_json:
             task_data = json.loads(task_data_json)
             return task_data
         return {}
-    
-    @staticmethod
-    def get_task_status(task_id: str):
-        return RedisApp.get_task_meta(task_id).get('status',None)
 
-    @staticmethod
-    def set_task_started(task_model:'ServiceOrientedArchitecture.Model'):
+    def get_task_status(self, task_id: str):
+        return self.get_task_meta(task_id).get('status', None)
+
+    def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'):
         """Marks a task as started in Redis."""
         task_key = f'celery-task-meta-{task_model.task_id}'
         task_data = {
@@ -310,29 +294,22 @@ class RedisApp(AppInterface):
             'status': celery.states.STARTED,
             'result': task_model.model_dump_json()  # Assuming `task_model` has this method
         }
-        RedisApp.redis_client.set(task_key, json.dumps(task_data))
+        self.redis_client().set(task_key, json.dumps(task_data))
 
-    @staticmethod
-    def set_task_revoked(task_id):
+    def set_task_revoked(self, task_id):
         """Marks a task as revoked in Redis."""
         task_key = f'celery-task-meta-{task_id}'
-        task_data_json = RedisApp.redis_client.get(task_key)
+        task_data_json = self.redis_client().get(task_key)
         if task_data_json:
             task_data = json.loads(task_data_json)
             task_data['status'] = 'REVOKED'
-            RedisApp.redis_client.set(task_key, json.dumps(task_data))
+            self.redis_client().set(task_key, json.dumps(task_data))
             return task_data
         else:
             return {'error': 'Task not found'}
 
-if APP_BACK_END=='redis':
-    BasicApp:AppInterface = RedisApp
-elif APP_BACK_END=='mongodbrabbitmq':
-    BasicApp:AppInterface = RabbitmqMongoApp
-else:
-    raise ValueError(f'no back end of {APP_BACK_END}')
-
 class ServiceOrientedArchitecture:
+    BasicApp:AppInterface = None
     class Model(BaseModel):
         task_id:str = 'NO_NEED_INPUT'
         class Param(BaseModel):
@@ -356,20 +333,20 @@ class ServiceOrientedArchitecture:
         @contextmanager
         def listen_stop_flag(self):
             task_id=self.model.task_id
-            BasicApp.set_task_started(self.model)
+            ServiceOrientedArchitecture.BasicApp.set_task_started(self.model)
             # A shared flag to communicate between threads
             stop_flag = threading.Event()
             # Function to check if the task should be stopped, running in a separate thread
             def check_task_status(data:dict,task_id=task_id):
                 if data.get('status',None) == celery.states.REVOKED:
-                    BasicApp.set_task_revoked(task_id)
+                    ServiceOrientedArchitecture.BasicApp.set_task_revoked(task_id)
                     stop_flag.set()
-            BasicApp.listen_data_of_task(task_id,check_task_status,True)
+            ServiceOrientedArchitecture.BasicApp.listen_data_of_task(task_id,check_task_status,True)
             
             try:
                 yield stop_flag  # Provide the stop_flag to the `with` block
             finally:
-                BasicApp.send_data_to_task(self.model.task_id,{})
+                ServiceOrientedArchitecture.BasicApp.send_data_to_task(self.model.task_id,{})
             return stop_flag
 
         def __call__(self, *args, **kwargs):
@@ -390,12 +367,12 @@ class AbstractObj(BaseModel):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        print(f'BasicApp.store.set({self.id},{self.__class__.__name__})')
-        BasicApp.store.set(self.id,self.model_dump_json_dict())
+        print(f'BasicApp.store().set({self.id},{self.__class__.__name__})')
+        ServiceOrientedArchitecture.BasicApp.store().set(self.id,self.model_dump_json_dict())
     
     def __del__(self):
-        print(f'BasicApp.store.delete({self.id})')
-        BasicApp.store.delete(self.id)
+        print(f'BasicApp.store().delete({self.id})')
+        ServiceOrientedArchitecture.BasicApp.store().delete(self.id)
 
     def model_dump_json_dict(self)->dict:
         return json.loads(self.model_dump_json())
@@ -527,11 +504,11 @@ class CommonStreamIO(CommonIO):
             super().__init__(**kwargs)
             tmp = self.model_dump_json_dict()
             tmp['id'] = self.stream_id()
-            BasicApp.store.set(self.stream_id(),tmp)
+            ServiceOrientedArchitecture.BasicApp.store().set(self.stream_id(),tmp)
         
         def __del__(self):
             super().__del__()
-            BasicApp.store.delete(self.stream_id())
+            ServiceOrientedArchitecture.BasicApp.store().delete(self.stream_id())
 
         def stream_id(self):
             return f'streams:{self.stream_key}'
@@ -566,172 +543,6 @@ class CommonStreamIO(CommonIO):
         id: str= Field(default_factory=lambda:f"CommonStreamIO.StreamWriter:{uuid4()}")
         def write(self, data, metadata={}):
             raise ValueError("[StreamWriter]: 'write' not implemented")
-
-
-
-class VideoStreamReader(CommonStreamIO.StreamReader):
-
-    @staticmethod
-    def isFile(p): return not str(p).isdecimal()
-
-    @staticmethod
-    def isBitFlowCamera(p): return 'bitflow' in str(p).lower()
-    
-    class Base(CommonStreamIO.Base):
-        def __init__(self, video_src=0, fps=30.0, width=800, height=600):
-            self.video_src = video_src
-            self.cam = cv2.VideoCapture(self.video_src)
-            self.cam.set(cv2.CAP_PROP_FPS, fps)
-            self.cam.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-            self.cam.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-
-            self.fps = self.cam.get(cv2.CAP_PROP_FPS)
-            self.width = self.cam.get(cv2.CAP_PROP_FRAME_WIDTH)
-            self.height = self.cam.get(cv2.CAP_PROP_FRAME_HEIGHT)
-            image, _ = self.read()
-            self.shape = image.shape
-
-        def read(self):
-            ret_val, img = self.cam.read()
-            if not ret_val:
-                raise StopIteration()
-            return img, {}
-
-        def close(self):
-            del self.cam
-
-    class Camera(Base):
-        def read(self):
-            image, _ = super().read()
-            return cv2.flip(image, 1), {}
-
-    class File(Base):
-        def read(self):
-            return super().read(), {}
-
-    class BitFlowCamera(Base):
-        
-        def __init__(self, video_src='bitflow-0', fps=30.0, width=800, height=600):
-            self.video_src = video_src
-            self.fps = fps
-            self.width = width # TODO: width
-            self.height = height # TODO: height
-                        
-            import platform
-            if(platform.system() == 'Windows'):
-                import sys
-                import msvcrt
-                if (sys.version_info.major >= 3 and sys.version_info.minor >= 8):
-                    import os
-                    #Following lines specifying, the location of DLLs, are required for Python Versions 3.8 and greater
-                    os.add_dll_directory("C:\BitFlow SDK 6.6\Bin64")
-                    os.add_dll_directory("C:\Program Files\CameraLink\Serial")
-
-            import BFModule.BufferAcquisition as Buf
-            self.Buf = Buf
-            self.CirAq = None
-
-            numBuffers = 10
-            self.CirAq = Buf.clsCircularAcquisition(Buf.ErrorMode.ErIgnore)
-
-            if '-' in str(self.video_src):
-                channel = int(str(self.video_src).split('-')[1])
-            else:
-                channel = 0
-
-            self.CirAq.Open(channel)
-
-            self.BufArray = self.CirAq.BufferSetup(numBuffers)
-            
-            self.CirAq.AqSetup(Buf.SetupOptions.setupDefault)
-            
-            self.CirAq.AqControl(Buf.AcqCommands.Start, Buf.AcqControlOptions.Wait)
-
-        def fast_bayer_to_bgr(self,image):
-            h, w = image.shape
-            bgr = np.zeros((h, w, 3), dtype=image.dtype)
-
-            # Extract channels (simple bilinear interpolation)
-            bgr[1::2, 0::2, 0] = image[1::2, 0::2]  # Blue
-            bgr[0::2, 1::2, 2] = image[0::2, 1::2]  # Red
-            bgr[::2, ::2, 1] = image[::2, ::2]  # Green on even rows
-            bgr[1::2, 1::2, 1] = image[1::2, 1::2]  # Green on odd rows
-
-            # Optional: Simple smoothing for edges (optional for better quality)
-            # bgr[:, :, 1] = cv2.blur(bgr[:, :, 1], (3, 3))  # Smooth green
-            return bgr
-
-        def bayer2bgr(self,bayer_image):    
-            bgr_image = cv2.cvtColor(bayer_image.astype(np.uint8), cv2.COLOR_BayerBG2BGR)
-
-            avg_r = np.mean(bgr_image[:, :, 2])
-            avg_g = np.mean(bgr_image[:, :, 1])
-            avg_b = np.mean(bgr_image[:, :, 0])
-
-            bgr_image[:, :, 2] = np.clip(bgr_image[:, :, 2] * (avg_g / avg_r), 0, 255)
-            bgr_image[:, :, 0] = np.clip(bgr_image[:, :, 0] * (avg_g / avg_b), 0, 255)
-
-            bgr_image = bgr_image.astype(np.uint8)
-            return bgr_image
-        
-        def to8bit(self,frame):
-            frame = (frame >> 2).astype(np.uint8)
-            return frame
-            # frame = self.bayer2bgr(frame)
-
-        def read(self):
-            if(self.CirAq.GetAcqStatus().Start == True):
-                curBuf = self.CirAq.WaitForFrame(100)
-                frame = self.BufArray[curBuf.BufferNumber]
-                return frame, {}
-            return None, {}
-
-        def close(self):
-            self.CirAq.AqCleanup()
-            self.CirAq.BufferCleanup()
-            self.CirAq.Close()
-
-
-    @staticmethod
-    def reader(video_src=0, fps=30.0, width=800, height=600):
-        if not VideoStreamReader.isFile(video_src):
-            return VideoStreamReader.Camera(int(video_src), fps, width, height)
-        if VideoStreamReader.isBitFlowCamera(video_src):
-            return VideoStreamReader.BitFlowCamera(video_src, fps, width, height)
-        return VideoStreamReader.File(video_src, fps, width, height)
-
-
-class NumpyUInt8SharedMemoryStreamIO(NumpyUInt8SharedMemoryIO,CommonStreamIO):
-    class Base(NumpyUInt8SharedMemoryIO.Base,CommonStreamIO.Base):
-        def get_steam_info(self)->dict:
-            return self.model_dump()            
-        def set_steam_info(self,data):
-            pass        
-    class StreamReader(NumpyUInt8SharedMemoryIO.Reader, CommonStreamIO.StreamReader, Base):
-        id: str= Field(default_factory=lambda:f"NumpyUInt8SharedMemoryStreamIO.StreamReader:{uuid4()}")
-        def read(self,copy=True)->tuple[Any,dict]:
-            return super().read(copy),{}
-    class StreamWriter(NumpyUInt8SharedMemoryIO.Writer, CommonStreamIO.StreamWriter, Base):
-        id: str= Field(default_factory=lambda:f"NumpyUInt8SharedMemoryStreamIO.StreamWriter:{uuid4()}")
-        def write(self, data: np.ndarray, metadata={}):
-            return super().write(data),{}
-        
-    @staticmethod
-    def reader(stream_key: str, array_shape: tuple):
-        shm_size = np.prod(array_shape) * np.dtype(np.uint8).itemsize
-        shm_name = stream_key.replace(':','_')
-        return NumpyUInt8SharedMemoryStreamIO.StreamReader(
-            shm_name=shm_name, create=False, stream_key=stream_key,
-            array_shape=array_shape,shm_size=shm_size).build_buffer()
-    
-    @staticmethod
-    def writer(stream_key: str, array_shape: tuple):
-        shm_size = np.prod(array_shape) * np.dtype(np.uint8).itemsize
-        shm_name = stream_key.replace(':','_')
-        return NumpyUInt8SharedMemoryStreamIO.StreamWriter(
-            shm_name=shm_name, create=True, stream_key=stream_key,
-            array_shape=array_shape,shm_size=shm_size).build_buffer()
-
 class BidirectionalStream:
     class Bidirectional:
         id: str= Field(default_factory=lambda:f"BidirectionalStream.Bidirectional:{uuid4()}")
@@ -880,70 +691,3 @@ except Exception as e:
     print('No redis support')
 except Exception as e:
     print('No redis support')
-
-########################## test 
-def test_NumpyUInt8SharedMemoryIO():
-    # Initialize the mock shared memory IO
-    shm_io = NumpyUInt8SharedMemoryIO()
-
-    # Create a writer for a specific shared memory segment
-    writer = shm_io.writer(shm_name="numpy_uint8_shm", array_shape=(10, 10))    
-    print(writer.model_dump())
-
-    # Create some sample data to write
-    data = np.random.randint(0, 256, size=(10, 10), dtype=np.uint8)
-
-    # Write the NumPy int8 array to shared memory
-    writer.write(data)
-
-    # Now create a reader for the same shared memory segment
-    reader = shm_io.reader(shm_name="numpy_uint8_shm", array_shape=(10, 10))
-
-    # Read the data back from shared memory
-    data_read = reader.read()
-
-    print(data_read)
-
-    # Validate that the data matches
-    assert np.array_equal(data, data_read), "The data read from shared memory does not match the written data"
-    
-    # Close the reader
-    reader.close()
-    writer.close()
-
-    return "Test passed!"
-
-def test_redisIO():
-    # Initialize RedisIO for writing
-    redis_io = RedisIO()
-
-    # Create a writer for a specific Redis key
-    writer = redis_io.writer(key="binary_data_key")
-    print(writer.model_dump())
-    # Create a reader for the same Redis key
-    reader = redis_io.reader(key="binary_data_key")
-
-    # Write binary data to Redis
-    data = b"Hello, this is a binary message stored in Redis!"
-    writer.write(data)
-
-    # Read the binary data from Redis
-    data_read = reader.read()
-    print(data_read)  # Outputs: b"Hello, this is a binary message stored in Redis!"
-
-    # Close the reader (not necessary for Redis, but to maintain CommonIO consistency)
-    reader.close()
-    writer.close()
-
-def test_BidirectionalStream():
-    shm_io = NumpyUInt8SharedMemoryStreamIO()
-    writer = shm_io.writer(stream_key="numpy:uint8:shm", array_shape=(7680, 4320, 3))
-    img = np.random.randint(0, 256, size=(7680, 4320, 3), dtype=np.uint8)
-    bwriter = BidirectionalStream.WriteOnly(
-        lambda  i,frame,frame_metadata:(img,{'No':print(frame_metadata.get('fps',0))}),
-        writer)    
-    bwriter.run()
-
-# test_NumpyUInt8SharedMemoryIO()
-# test_redisIO()
-# test_BidirectionalStream()

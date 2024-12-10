@@ -1,11 +1,23 @@
 import os
 from fastapi.responses import FileResponse, HTMLResponse
-from Config import SESSION_DURATION, APP_SECRET_KEY
 
 from User.UserAPIs import AuthService, UserModels, router as users_router
-from Task.Basic import BasicApp
-from Task.Customs import CvCameraSharedMemoryService, Fibonacci, ServiceOrientedArchitecture
+from Task.Customs import Fibonacci, ServiceOrientedArchitecture
 
+from Task.Basic import AppInterface,RedisApp,RabbitmqMongoApp
+
+from Config import APP_BACK_END, SESSION_DURATION, APP_SECRET_KEY, RABBITMQ_URL, MONGO_URL, MONGO_DB, CELERY_META, CELERY_RABBITMQ_BROKER, RABBITMQ_USER, RABBITMQ_PASSWORD, REDIS_URL
+if APP_BACK_END=='redis':
+    BasicApp:AppInterface = RedisApp(REDIS_URL)
+elif APP_BACK_END=='mongodbrabbitmq':
+    BasicApp:AppInterface = RabbitmqMongoApp(RABBITMQ_URL,RABBITMQ_USER,RABBITMQ_PASSWORD,
+                                             MONGO_URL,MONGO_DB,CELERY_META,
+                                             CELERY_RABBITMQ_BROKER)
+else:
+    raise ValueError(f'no back end of {APP_BACK_END}')
+ServiceOrientedArchitecture.BasicApp  = BasicApp
+
+from Vison import Service as VisonService
 from celery.app import task as Task
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
@@ -107,7 +119,7 @@ class CeleryTask:
         action_name, action_data = name, data
         ACTION_REGISTRY: Dict[str, ServiceOrientedArchitecture] = {
             'Fibonacci': Fibonacci,
-            'CvCameraSharedMemoryService': CvCameraSharedMemoryService,
+            'CvCameraSharedMemoryService': VisonService.CvCameraSharedMemoryService,
         }
         if action_name not in ACTION_REGISTRY:
             raise ValueError(f"Action '{action_name}' is not registered.")
@@ -141,12 +153,12 @@ class CeleryTask:
     # 3840, 2160  480,640
     def api_actions_camera_write(stream_key: str = 'camera:0', h: int = 2160*2*2, w: int = 3840*2*2):
         api_ok()
-        info = BasicApp.store.get(f'streams:{stream_key}')
+        info = BasicApp.store().get(f'streams:{stream_key}')
         if info is not None:
             raise HTTPException(status_code=503, detail={
                                 'error': f'stream of [streams:{stream_key}] has created'})
 
-        CCModel = CvCameraSharedMemoryService.Model
+        CCModel = VisonService.CvCameraSharedMemoryService.Model
         data_model = CCModel(param=CCModel.Param(
             mode='write', stream_key=stream_key, array_shape=(h, w)))
         act = dict(name='CvCameraSharedMemoryService',
@@ -157,12 +169,12 @@ class CeleryTask:
     @api.get("/streams/read")
     def api_actions_camera_read(stream_key: str = 'camera:0'):
         api_ok()
-        info = BasicApp.store.get(f'streams:{stream_key}')
+        info = BasicApp.store().get(f'streams:{stream_key}')
         if info is None:
             raise HTTPException(status_code=503, detail={
                                 'error': f'not such stream of [streams:{stream_key}]'})
 
-        CCModel = CvCameraSharedMemoryService.Model
+        CCModel = VisonService.CvCameraSharedMemoryService.Model
         data_model = CCModel(param=CCModel.Param(
             mode='read', stream_key=stream_key, array_shape=info['array_shape']))
         act = dict(name='CvCameraSharedMemoryService',
