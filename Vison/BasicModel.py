@@ -176,48 +176,50 @@ class NumpyUInt8SharedMemoryStreamIO(NumpyUInt8SharedMemoryIO,CommonStreamIO):
             array_shape=array_shape,shm_size=shm_size).build_buffer()
 
 class NumpyDualBufferDiskBackedQueue(BaseModel):
-    image_shape: tuple[int, ...]
+    array_shape: tuple[int, ...]
     buffer_capacity: int
     dtype: str = 'uint8'
     is_init:bool = False
     base_dirs: list[str] = Field(default_factory=lambda: ["D:/data","C:/data"])
 
-    active_buffer:str = 'A'  # start writing to buffer A
+    active_buffer:str = True
     write_index:int = 0
     total_images_written:int = 0
     total_images_read:int = 0
-    next_buffer_id_to_save:int = 0  # increments every time we save a full buffer
-    next_buffer_id_to_overwrite:int = 0  # track how many buffers have been overwritten
+    next_buffer_id_to_save:int = 0
+    next_buffer_id_to_overwrite:int = 0
     storage_dirs:list = []
-    remaining_space:list = []  # in bytes
-    current_storage_index:int = 0  # Start with the first storage directory
+    remaining_space:list = []
+    current_storage_index:int = 0
     buffers_to_save:list = []
 
     _stop_event: threading.Event = None
     _save_thread: threading.Thread = None
-    _lock: threading.Lock = None
+    _saving_lock: threading.Lock = None
+    _buffer_lock: threading.Lock = None
     _buffer_full_condition: threading.Condition = None
-    _buffer_a:Any = None
-    _buffer_b:Any = None
+    _buffers:dict[Any] = None
 
     def init(self):
-        dtype = np.__dict__[self.dtype]
-
+        dtype = np.__dict__[dtype]
+        
         # Pre-allocate the two buffers
-        self._buffer_a = np.zeros((self.buffer_capacity,) + self.image_shape, dtype=dtype)
-        self._buffer_b = np.zeros((self.buffer_capacity,) + self.image_shape, dtype=dtype)
-
+        size = (self.buffer_capacity,) + self.array_shape
+        self._buffers = {True:np.zeros(size, dtype=dtype),
+                        False:np.zeros(size, dtype=dtype)}
         # State variables
-        self.active_buffer = 'A'  # start writing to buffer A
+        self.active_buffer = True  # start writing to buffer A
         self.write_index = 0
-        self.total_images_written = 0
-        self.total_images_read = 0
+        self.total_arrays_written = 0
+        self.total_arrays_popped = 0
         self.next_buffer_id_to_save = 0  # increments every time we save a full buffer
-        self.next_buffer_id_to_overwrite = 0  # track how many buffers have been overwritten
+        # track how many buffers have been overwritten
+        self.next_buffer_id_to_overwrite = 0
 
         # Locks and conditions
-        self._lock = threading.Lock()
-        self._buffer_full_condition = threading.Condition(self._lock)
+        self._saving_lock = threading.Lock()
+        self._buffer_lock = threading.Lock()
+        self._buffer_full_condition = threading.Condition(self._buffer_lock)
 
         # Setup directories and capacities
         self.storage_dirs = []
@@ -227,50 +229,41 @@ class NumpyDualBufferDiskBackedQueue(BaseModel):
             uuid_dir = os.path.join(base_dir, str(uuid.uuid4()))
             os.makedirs(uuid_dir, exist_ok=True)
             self.storage_dirs.append(uuid_dir)
-            self.remaining_space.append(self._calculate_free_space(uuid_dir))
-
-        self.current_storage_index = 0  # Start with the first storage directory
-
+            self.remaining_space.append(shutil.disk_usage(uuid_dir).free)
+        # Start with the first storage directory
+        self.current_storage_index = 0 
         # Buffers pending save
         self.buffers_to_save = []
-
         # Event for stopping the thread
         self._stop_event = threading.Event()
 
         self._save_thread = threading.Thread(target=self.disk_saver_thread, daemon=True)
         self._save_thread.start()
         self.is_init = True
-        return self
 
-    def push(self, image: np.ndarray):
+    def push(self, in_arr: np.ndarray):
         if not self.is_init:
             raise ValueError("Class not init.")
-        with self._lock:
-            if image.shape != self.image_shape:
-                raise ValueError("Image shape does not match the buffer's image shape.")
+        with self._buffer_lock:
+            if in_arr.shape != self.array_shape:
+                raise ValueError("input shape not match buffer shape.")
 
             # Check if both buffers are full and not saved
             if len(self.buffers_to_save) >= 2:
-                raise RuntimeError("Both buffers are full and not yet saved. Cannot push more data.")
+                raise RuntimeError("buffers are full cannot push data.")
 
             # Write to the active buffer
-            if self.active_buffer == 'A':
-                self._buffer_a[self.write_index] = image
-            else:
-                self._buffer_b[self.write_index] = image
+            self._buffers[self.active_buffer][self.write_index] = in_arr
 
             self.write_index += 1
-            self.total_images_written += 1
+            self.total_arrays_written += 1
 
             # Check if the active buffer is now full
             if self.write_index == self.buffer_capacity:
                 full_buffer = self.active_buffer
 
                 # Switch active buffer
-                if self.active_buffer == 'A':
-                    self.active_buffer = 'B'
-                else:
-                    self.active_buffer = 'A'
+                self.active_buffer = not self.active_buffer
                 self.write_index = 0
 
                 # Queue buffer for saving
@@ -278,83 +271,66 @@ class NumpyDualBufferDiskBackedQueue(BaseModel):
                 self.next_buffer_id_to_save += 1
                 self._buffer_full_condition.notify()
 
-    def _calculate_free_space(self, path):
-        """Calculate free space at the specified path in bytes."""
-        usage = shutil.disk_usage(path)
-        return usage.free  # Returns the free space in bytes
-
     def disk_saver_thread(self):
         while not self._stop_event.is_set():
             with self._buffer_full_condition:
                 while not self.buffers_to_save and not self._stop_event.is_set():
                     self._buffer_full_condition.wait()
 
-                if not self.buffers_to_save:
-                    # Stop event was set, and there are no buffers to save
-                    break
+                if not self.buffers_to_save: break
 
                 buffer_to_save, buffer_id = self.buffers_to_save.pop(0)
 
-            # Copy the buffer out (not holding lock to avoid blocking)
-            if buffer_to_save == 'A':
-                buffer_data = self._buffer_a.copy()
-                self._buffer_a[:] = 0
-            else:
-                buffer_data = self._buffer_b.copy()
-                self._buffer_b[:] = 0
+            # Copy the buffer out
+            with self._saving_lock:
 
-            while True:
-                # Check the remaining space in the current storage directory
-                current_dir = self.storage_dirs[self.current_storage_index]
-                required_space = buffer_data.nbytes
+                buffer_data = self._buffers[buffer_to_save].copy()
+                self._buffers[buffer_to_save][:] = 0
 
-                if self.remaining_space[self.current_storage_index] >= required_space:
-                    # Save the buffer to the current directory
-                    filename = os.path.join(current_dir, f"buffer_{buffer_id}.npy")
-                    np.save(filename, buffer_data)
+                while True:
+                    # Check the remaining space in the current storage directory
+                    current_dir = self.storage_dirs[self.current_storage_index]
+                    required_space = buffer_data.nbytes
 
-                    # Update remaining space
-                    self.remaining_space[self.current_storage_index] -= required_space
-                    break
-                else:
-                    # Switch to the next storage directory
-                    self.current_storage_index += 1
-                    if self.current_storage_index >= len(self.storage_dirs):
-                        raise RuntimeError("All storage directories are full. Cannot save more data.")
+                    if self.remaining_space[self.current_storage_index] >= required_space:
+                        # Save the buffer to the current directory
+                        filename = os.path.join(current_dir, f"buffer_{buffer_id}.npy")
+                        np.save(filename, buffer_data)
+
+                        # Update remaining space
+                        self.remaining_space[self.current_storage_index] -= required_space
+                        break
+                    else:
+                        # Switch to the next storage directory
+                        self.current_storage_index += 1
+                        if self.current_storage_index >= len(self.storage_dirs):
+                            raise RuntimeError("All storage are full. Cannot save more data.")
 
     def pop(self):
-        with self._lock:
-            if self.total_images_read >= self.total_images_written:
-                # No images available
-                return None
+        if self.total_arrays_popped >= self.total_arrays_written:return None
 
-            global_read_index = self.total_images_read
-            self.total_images_read += 1
+        buffer_id = self.total_arrays_popped // self.buffer_capacity
+        index_in_buffer = self.total_arrays_popped % self.buffer_capacity
 
-        buffer_id = global_read_index // self.buffer_capacity
-        index_in_buffer = global_read_index % self.buffer_capacity
-
-        with self._lock:
-            current_buffer_id = (self.next_buffer_id_to_save - 1)
-
-            if buffer_id == self.next_buffer_id_to_save: 
-                if self.active_buffer == 'A':
-                    img = self._buffer_a[index_in_buffer].copy()
-                else:
-                    img = self._buffer_b[index_in_buffer].copy()
+        if buffer_id == self.next_buffer_id_to_save:
+            with self._buffer_lock:
+                img = self._buffers[self.active_buffer][index_in_buffer].copy()
+                
+                self.total_arrays_popped += 1
                 return img
-            
+
         pwd = self.storage_dirs[self.current_storage_index]
-        if index_in_buffer==0 and os.path.exists(os.path.join(pwd, f"buffer_{buffer_id-1}.npy")):
+        if index_in_buffer == 0 and os.path.exists(os.path.join(pwd, f"buffer_{buffer_id-1}.npy")):
             os.remove(os.path.join(pwd, f"buffer_{buffer_id-1}.npy"))
 
-        filename = os.path.join(pwd, f"buffer_{buffer_id}.npy")
-        buffer_data = np.load(filename, mmap_mode='r')
-        img = buffer_data[index_in_buffer].copy()
+        with self._saving_lock:
+            buffer_data = np.load(os.path.join(pwd, f"buffer_{buffer_id}.npy"), mmap_mode='r')
+            img = buffer_data[index_in_buffer].copy()
+
+        self.total_arrays_popped += 1
         return img
 
     def close(self):
-        # Signal the thread to stop
         self._stop_event.set()
         with self._buffer_full_condition:
             self._buffer_full_condition.notify_all()
