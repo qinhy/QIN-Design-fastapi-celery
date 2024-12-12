@@ -12,7 +12,6 @@ try:
 except Exception as e:
     from Task.Basic import CommonStreamIO, NumpyUInt8SharedMemoryIO
 
-
 class VideoStreamReader(CommonStreamIO.StreamReader):
 
     @staticmethod
@@ -74,39 +73,22 @@ class VideoStreamReader(CommonStreamIO.StreamReader):
             import BFModule.BufferAcquisition as Buf
             self.Buf = Buf
             self.CirAq = None
-
+            channel = 0
             numBuffers = 10
             self.CirAq = Buf.clsCircularAcquisition(Buf.ErrorMode.ErIgnore)
 
             if '-' in str(self.video_src):
                 channel = int(str(self.video_src).split('-')[1])
-            else:
-                channel = 0
 
             self.CirAq.Open(channel)
-
             self.BufArray = self.CirAq.BufferSetup(numBuffers)
-            
             self.CirAq.AqSetup(Buf.SetupOptions.setupDefault)
-            
             self.CirAq.AqControl(Buf.AcqCommands.Start, Buf.AcqControlOptions.Wait)
 
-        def fast_bayer_to_bgr(self,image):
-            h, w = image.shape
-            bgr = np.zeros((h, w, 3), dtype=image.dtype)
-
-            # Extract channels (simple bilinear interpolation)
-            bgr[1::2, 0::2, 0] = image[1::2, 0::2]  # Blue
-            bgr[0::2, 1::2, 2] = image[0::2, 1::2]  # Red
-            bgr[::2, ::2, 1] = image[::2, ::2]  # Green on even rows
-            bgr[1::2, 1::2, 1] = image[1::2, 1::2]  # Green on odd rows
-
-            # Optional: Simple smoothing for edges (optional for better quality)
-            # bgr[:, :, 1] = cv2.blur(bgr[:, :, 1], (3, 3))  # Smooth green
-            return bgr
-
         def bayer2bgr(self,bayer_image):    
-            bgr_image = cv2.cvtColor(bayer_image.astype(np.uint8), cv2.COLOR_BayerBG2BGR)
+            return cv2.cvtColor(bayer_image.astype(np.uint8), cv2.COLOR_BayerBG2BGR)
+        
+        def auto_white_balance(self):
 
             avg_r = np.mean(bgr_image[:, :, 2])
             avg_g = np.mean(bgr_image[:, :, 1])
@@ -117,11 +99,11 @@ class VideoStreamReader(CommonStreamIO.StreamReader):
 
             bgr_image = bgr_image.astype(np.uint8)
             return bgr_image
+
         
         def to8bit(self,frame):
             frame = (frame >> 2).astype(np.uint8)
             return frame
-            # frame = self.bayer2bgr(frame)
 
         def read(self):
             if(self.CirAq.GetAcqStatus().Start == True):
