@@ -12,7 +12,7 @@ try:
 except Exception as e:
     from Task.Basic import CommonStreamIO, NumpyUInt8SharedMemoryIO
 
-class VideoStreamReader(CommonStreamIO.StreamReader):
+class VideoStreamReader:
 
     @staticmethod
     def isFile(p): return not str(p).isdecimal()
@@ -20,39 +20,57 @@ class VideoStreamReader(CommonStreamIO.StreamReader):
     @staticmethod
     def isBitFlowCamera(p): return 'bitflow' in str(p).lower()
     
-    class Base(CommonStreamIO.Base):
-        def __init__(self, video_src=0, fps=30.0, width=800, height=600):
-            self.video_src = video_src
-            self.cam = cv2.VideoCapture(self.video_src)
-            self.cam.set(cv2.CAP_PROP_FPS, fps)
-            self.cam.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-            self.cam.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+    class Base(CommonStreamIO.StreamReader):
+        id: str= Field(default_factory=lambda:f"VideoStreamReader.Base:{uuid.uuid4()}")
+        video_src:int=0
+        fps:float=30.0
+        width:int=800
+        height:int=600
+        shape:tuple=(600,800)
+        _cam:Any = None # cv2.VideoCapture
+        _is_init:bool = False
 
-            self.fps = self.cam.get(cv2.CAP_PROP_FPS)
-            self.width = self.cam.get(cv2.CAP_PROP_FRAME_WIDTH)
-            self.height = self.cam.get(cv2.CAP_PROP_FRAME_HEIGHT)
-            image, _ = self.read()
+        def init(self):
+            self._cam:cv2.VideoCapture = cv2.VideoCapture(self.video_src)
+            self._cam.set(cv2.CAP_PROP_FPS, self.fps)
+            self._cam.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+            self._cam.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+
+            self.fps = self._cam.get(cv2.CAP_PROP_FPS)
+            self.width = self._cam.get(cv2.CAP_PROP_FRAME_WIDTH)
+            self.height = self._cam.get(cv2.CAP_PROP_FRAME_HEIGHT)
+            ret_val, image = self._cam.read()
             self.shape = image.shape
+            self.width = self.shape[1]
+            self.height = self.shape[0]
+            self._is_init = True
+            return self
 
         def read(self):
-            ret_val, img = self.cam.read()
+            if not self._is_init:
+                self.init()
+
+            ret_val, img = self._cam.read()
             if not ret_val:
                 raise StopIteration()
             return img, {}
 
         def close(self):
-            del self.cam
+            del self._cam
 
     class Camera(Base):
+        id: str= Field(default_factory=lambda:f"VideoStreamReader.Camera:{uuid.uuid4()}")
         def read(self):
             image, _ = super().read()
             return cv2.flip(image, 1), {}
 
     class File(Base):
+        id: str= Field(default_factory=lambda:f"VideoStreamReader.File:{uuid.uuid4()}")
         def read(self):
             return super().read(), {}
 
     class BitFlowCamera(Base):
+        id: str= Field(default_factory=lambda:f"VideoStreamReader.BitFlowCamera:{uuid.uuid4()}")
         
         def __init__(self, video_src='bitflow-0', fps=30.0, width=800, height=600):
             self.video_src = video_src
@@ -121,7 +139,8 @@ class VideoStreamReader(CommonStreamIO.StreamReader):
     @staticmethod
     def reader(video_src=0, fps=30.0, width=800, height=600):
         if not VideoStreamReader.isFile(video_src):
-            return VideoStreamReader.Camera(int(video_src), fps, width, height)
+            return VideoStreamReader.Camera(video_src=int(video_src), fps=fps,
+                                            width=width, height=height)
         if VideoStreamReader.isBitFlowCamera(video_src):
             return VideoStreamReader.BitFlowCamera(video_src, fps, width, height)
         return VideoStreamReader.File(video_src, fps, width, height)
@@ -130,8 +149,9 @@ class NumpyUInt8SharedMemoryStreamIO(NumpyUInt8SharedMemoryIO,CommonStreamIO):
     class Base(NumpyUInt8SharedMemoryIO.Base,CommonStreamIO.Base):
         def get_steam_info(self)->dict:
             return self.model_dump()            
-        def set_steam_info(self,data):
-            pass        
+        def set_steam_info(self,data:dict):
+            self.update_db(**data)
+
     class StreamReader(NumpyUInt8SharedMemoryIO.Reader, CommonStreamIO.StreamReader, Base):
         id: str= Field(default_factory=lambda:f"NumpyUInt8SharedMemoryStreamIO.StreamReader:{uuid.uuid4()}")
         def read(self,copy=True)->tuple[Any,dict]:
@@ -166,8 +186,8 @@ class NumpyDualBufferDiskBackedQueue(BaseModel):
 
     active_buffer:str = True
     write_index:int = 0
-    total_images_written:int = 0
-    total_images_read:int = 0
+    total_arrays_written:int = 0
+    total_arrays_popped:int = 0
     next_buffer_id_to_save:int = 0
     next_buffer_id_to_overwrite:int = 0
     storage_dirs:list = []
@@ -183,7 +203,7 @@ class NumpyDualBufferDiskBackedQueue(BaseModel):
     _buffers:dict[Any] = None
 
     def init(self):
-        dtype = np.__dict__[dtype]
+        dtype = np.__dict__[self.dtype]
         
         # Pre-allocate the two buffers
         size = (self.buffer_capacity,) + self.array_shape
@@ -222,6 +242,7 @@ class NumpyDualBufferDiskBackedQueue(BaseModel):
         self._save_thread = threading.Thread(target=self.disk_saver_thread, daemon=True)
         self._save_thread.start()
         self.is_init = True
+        return self
 
     def push(self, in_arr: np.ndarray):
         if not self.is_init:

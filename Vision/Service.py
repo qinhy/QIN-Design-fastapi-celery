@@ -4,15 +4,16 @@ import time
 import cv2
 import numpy as np
 from pydantic import BaseModel, Field
+
 from .BasicModel import NumpyUInt8SharedMemoryStreamIO
 
 try:
-    from ..Task import Basic
+    from ..Task.Basic import ServiceOrientedArchitecture
 except Exception as e:
-    from Task import Basic
+    from Task.Basic import ServiceOrientedArchitecture
 
 class CvCameraSharedMemoryService:
-    class Model(Basic.ServiceOrientedArchitecture.Model):        
+    class Model(ServiceOrientedArchitecture.Model):        
         class Param(BaseModel):
             stream_key: str = Field(default='camera:0', description="The name of the stream")
             array_shape: tuple = Field(default=(480, 640), description="Shape of the NumPy array to store in shared memory")
@@ -40,8 +41,7 @@ class CvCameraSharedMemoryService:
 
         param:Param = Param()
         args:Args = Args()
-        ret:str = 'NO_NEED_INPUT'
-        
+        ret:str = 'AUTO_SET_BUT_NULL_NOW'
         
         def set_param(self, stream_key="camera_shm", array_shape=(480, 640), mode = 'write'):
             self.param = CvCameraSharedMemoryService.Model.Param(
@@ -52,14 +52,13 @@ class CvCameraSharedMemoryService:
             self.args = CvCameraSharedMemoryService.Model.Args(camera=camera)
             return self
         
-    class Action(Basic.ServiceOrientedArchitecture.Action):
+    class Action(ServiceOrientedArchitecture.Action):
         def __init__(self, model):
             if isinstance(model, dict):
                 nones = [k for k,v in model.items() if v is None]
                 for i in nones:del model[i]
                 model = CvCameraSharedMemoryService.Model(**model)
             self.model: CvCameraSharedMemoryService.Model = model
-        
 
         def cv2_VideoCapture_gen(self,src,writer:NumpyUInt8SharedMemoryStreamIO.Writer
                                  ,stop_flag:threading.Event):
@@ -77,7 +76,6 @@ class CvCameraSharedMemoryService:
                 gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 resized_frame = cv2.resize(gray_frame, (writer.array_shape[1], writer.array_shape[0]))
                 yield resized_frame
-
 
         def cv2_Random_gen(self, stop_flag:threading.Event, array_shape=(7680, 4320), fps=30):
             # Define common resolutions
@@ -158,6 +156,7 @@ class CvCameraSharedMemoryService:
                     cv2.destroyAllWindows()
                 
                 return self.model
+
 
 # def camera_writer_process(camera_service_model):
 #     action = CvCameraSharedMemoryService.Action(camera_service_model)

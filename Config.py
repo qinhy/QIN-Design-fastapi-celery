@@ -8,7 +8,7 @@ os.environ.setdefault('CELERY_TASK_SERIALIZER', 'json')
 # SECRET_KEY = os.environ.get('APP_SECRET_KEY', secrets.token_urlsafe(32))
 
 # for app back {redis | mongodbrabbitmq}
-APP_BACK_END = os.getenv('APP_BACK_END', 'mongodbrabbitmq')  # Defaulting to a common local endpoint
+APP_BACK_END = os.getenv('APP_BACK_END', 'redis')  # Defaulting to a common local endpoint
 APP_INVITE_CODE = os.getenv('APP_INVITE_CODE', '123')  # Replace with appropriate default
 APP_SECRET_KEY = os.getenv('APP_SECRET_KEY', 'super_secret_key')  # Caution: replace with a strong key in production
 

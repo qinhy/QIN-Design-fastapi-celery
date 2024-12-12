@@ -311,7 +311,7 @@ class RedisApp(AppInterface):
 class ServiceOrientedArchitecture:
     BasicApp:AppInterface = None
     class Model(BaseModel):
-        task_id:str = 'NO_NEED_INPUT'
+        task_id:str = 'AUTO_SET_BUT_NULL_NOW'
         class Param(BaseModel):
             pass
         class Args(BaseModel):
@@ -329,6 +329,10 @@ class ServiceOrientedArchitecture:
                 for i in nones:del model[i]
                 model = ServiceOrientedArchitecture.Model(**model)
             self.model: ServiceOrientedArchitecture.Model = model
+
+        def stop_service(self):
+            task_id=self.model.task_id
+            ServiceOrientedArchitecture.BasicApp.send_data_to_task(task_id,{'status': 'REVOKED'})
 
         @contextmanager
         def listen_stop_flag(self):
@@ -373,6 +377,22 @@ class AbstractObj(BaseModel):
     def __del__(self):
         print(f'BasicApp.store().delete({self.id})')
         ServiceOrientedArchitecture.BasicApp.store().delete(self.id)
+
+    def storage(self):return ServiceOrientedArchitecture.BasicApp.store()
+
+    def store(self):
+        self.storage().set(self.id,self.model_dump_json_dict())
+        return self
+
+    def _update_timestamp(self): self.update_time = now_utc()
+
+    def update_db(self, **kwargs):
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+        self._update_timestamp()
+        self.store()
+        return self
 
     def model_dump_json_dict(self)->dict:
         return json.loads(self.model_dump_json())
@@ -571,6 +591,7 @@ class NumpyUInt8SharedMemoryQueue:
 ##################### stream IO 
 class CommonStreamIO(CommonIO):
     class Base(CommonIO.Base):
+        fps:float = 0
         stream_key: str = 'NULL'
         is_close: bool = False
 
@@ -752,6 +773,9 @@ try:
                 if not isinstance(data, bytes):
                     raise ValueError("Data must be in binary format (bytes)")
                 self._redis_client.set(self.key, data)  # Store binary data under the given key
+            def close(self):
+                self._redis_client.delete(self.key)
+                return super().close()
 
         @staticmethod
         def reader(key: str, redis_host: str = 'localhost', redis_port: int = 6379, redis_db: int = 0):

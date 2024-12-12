@@ -17,7 +17,7 @@ else:
     raise ValueError(f'no back end of {APP_BACK_END}')
 ServiceOrientedArchitecture.BasicApp  = BasicApp
 
-from Vison import Service as VisonService
+from Vision import Service as VisonService
 from celery.app import task as Task
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
@@ -151,7 +151,7 @@ class CeleryTask:
 
     @api.get("/streams/write")
     # 3840, 2160  480,640
-    def api_actions_camera_write(stream_key: str = 'camera:0', h: int = 2160*2*2, w: int = 3840*2*2):
+    def api_actions_camera_write(stream_key: str = 'camera:0', h: int = 600, w: int = 800):
         api_ok()
         info = BasicApp.store().get(f'streams:{stream_key}')
         if info is not None:
@@ -221,7 +221,7 @@ class CeleryTask:
         # # Example Value
         # # Schema
         # # {
-        # #   "task_id": "NO_NEED_INPUT",
+        # #   "task_id": "AUTO_SET_BUT_NULL_NOW",
         # #   "param": {
         # #     "mode": "fast"
         # #   },

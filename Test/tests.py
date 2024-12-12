@@ -1,9 +1,22 @@
 import numpy as np
 import requests
 import time
+from Task.Basic import AppInterface,RedisApp,RabbitmqMongoApp
+
+from Task.Customs import BidirectionalStreamService, ServiceOrientedArchitecture
+from Config import APP_BACK_END, SESSION_DURATION, APP_SECRET_KEY, RABBITMQ_URL, MONGO_URL, MONGO_DB, CELERY_META, CELERY_RABBITMQ_BROKER, RABBITMQ_USER, RABBITMQ_PASSWORD, REDIS_URL
+if APP_BACK_END=='redis':
+    BasicApp:AppInterface = RedisApp(REDIS_URL)
+elif APP_BACK_END=='mongodbrabbitmq':
+    BasicApp:AppInterface = RabbitmqMongoApp(RABBITMQ_URL,RABBITMQ_USER,RABBITMQ_PASSWORD,
+                                             MONGO_URL,MONGO_DB,CELERY_META,
+                                             CELERY_RABBITMQ_BROKER)
+else:
+    raise ValueError(f'no back end of {APP_BACK_END}')
+ServiceOrientedArchitecture.BasicApp  = BasicApp
 
 from Task.Basic import BidirectionalStream, NumpyUInt8SharedMemoryIO, RedisIO
-from Vison.BasicModel import NumpyUInt8SharedMemoryStreamIO
+from Vision.BasicModel import NumpyUInt8SharedMemoryStreamIO, VideoStreamReader
 
 BASE_URL = "http://localhost:8000"  # Adjust as necessary for your server
 
@@ -83,15 +96,33 @@ def test_redisIO():
     reader.close()
     writer.close()
 
-def test_BidirectionalStream():
+def test_BidirectionalStream(limits=100):
+    array_shape=(3840, 3840, 1, 4) # 4k x 4
+    # array_shape=(4000, 4000, 3, 4)
     shm_io = NumpyUInt8SharedMemoryStreamIO()
-    writer = shm_io.writer(stream_key="numpy:uint8:shm", array_shape=(7680, 4320, 3))
-    img = np.random.randint(0, 256, size=(7680, 4320, 3), dtype=np.uint8)
-    bwriter = BidirectionalStream.WriteOnly(
-        lambda  i,frame,frame_metadata:(img,{'No':print(frame_metadata.get('fps',0))}),
-        writer)    
+    writer = shm_io.writer(stream_key="numpy:uint8:shm", array_shape=array_shape)
+    img = np.random.randint(0, 256, size=array_shape, dtype=np.uint8)
+    disp = 'NumpyUInt8SharedMemoryStreamIO {} writing fps: {}'
+    def frame_processor(i,frame,frame_metadata):
+        print(disp.format(array_shape,frame_metadata.get('fps',0)),end='\r')
+        return img,frame_metadata
+    bwriter = BidirectionalStream.WriteOnly(frame_processor,writer)
     bwriter.run()
+
+def test_BidirectionalStreamService(limits=100):
+    model = BidirectionalStreamService.Model()
+    model.param.stream_reader = stream_reader = VideoStreamReader.reader(video_src=0,width=800,height=600).init()
+    array_shape=stream_reader.shape
+    model.param.stream_writer = NumpyUInt8SharedMemoryStreamIO().writer(stream_key="numpy:uint8:shm", array_shape=array_shape)        
+    def frame_processor(i,frame,frame_metadata):
+        print(i, frame.shape, 'fps', frame_metadata.get('fps',0),end='\r')
+        if i>limits:
+            action.stop_service()
+        return frame,frame_metadata
+    action = BidirectionalStreamService.Action(model,frame_processor)
+    action()
 
 # test_NumpyUInt8SharedMemoryIO()
 # test_redisIO()
 # test_BidirectionalStream()
+test_BidirectionalStreamService()
