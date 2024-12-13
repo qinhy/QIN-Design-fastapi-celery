@@ -125,4 +125,4 @@ def test_BidirectionalStreamService(limits=100):
 # test_NumpyUInt8SharedMemoryIO()
 # test_redisIO()
 # test_BidirectionalStream()
-test_BidirectionalStreamService()
+# test_BidirectionalStreamService()

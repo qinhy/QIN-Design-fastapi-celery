@@ -12,7 +12,7 @@ except Exception as e:
 def test():
     # Define the shape and queue parameters
     image_shape = (250, 250, 1)
-    buffer_capacity = 100
+    buffer_capacity = 1000
     q = BasicModel.NumpyDualBufferDiskBackedQueue(base_dirs=['data'],array_shape=image_shape,
                                        buffer_capacity=buffer_capacity).init()
 
