@@ -111,9 +111,9 @@ def test_BidirectionalStream(limits=100):
 
 def test_BidirectionalStreamService(limits=100):
     model = BidirectionalStreamService.Model()
-    model.param.stream_reader = stream_reader = VideoStreamReader.reader(video_src=0,width=800,height=600).init()
+    model.param._stream_reader = stream_reader = VideoStreamReader.reader(video_src=0,width=800,height=600).init()
     array_shape=stream_reader.shape
-    model.param.stream_writer = NumpyUInt8SharedMemoryStreamIO().writer(stream_key="numpy:uint8:shm", array_shape=array_shape)        
+    model.param._stream_writer = NumpyUInt8SharedMemoryStreamIO().writer(stream_key="numpy:uint8:shm", array_shape=array_shape)        
     def frame_processor(i,frame,frame_metadata):
         print(i, frame.shape, 'fps', frame_metadata.get('fps',0),end='\r')
         if i>limits:

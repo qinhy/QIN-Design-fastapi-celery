@@ -23,6 +23,7 @@ class VideoStreamReader:
     class Base(CommonStreamIO.StreamReader):
         id: str= Field(default_factory=lambda:f"VideoStreamReader.Base:{uuid.uuid4()}")
         video_src:int=0
+        stream_key: str = 'VideoStream'
         fps:float=30.0
         width:int=800
         height:int=600
@@ -31,6 +32,7 @@ class VideoStreamReader:
         _is_init:bool = False
 
         def init(self):
+            self.stream_key += f':{self.video_src}'
             self._cam:cv2.VideoCapture = cv2.VideoCapture(self.video_src)
             self._cam.set(cv2.CAP_PROP_FPS, self.fps)
             self._cam.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
@@ -60,81 +62,87 @@ class VideoStreamReader:
 
     class Camera(Base):
         id: str= Field(default_factory=lambda:f"VideoStreamReader.Camera:{uuid.uuid4()}")
+        stream_key: str = 'CameraStream'
         def read(self):
             image, _ = super().read()
             return cv2.flip(image, 1), {}
 
     class File(Base):
         id: str= Field(default_factory=lambda:f"VideoStreamReader.File:{uuid.uuid4()}")
+        stream_key: str = 'FileStream'
         def read(self):
             return super().read(), {}
 
-    class BitFlowCamera(Base):
-        id: str= Field(default_factory=lambda:f"VideoStreamReader.BitFlowCamera:{uuid.uuid4()}")
-        
-        def __init__(self, video_src='bitflow-0', fps=30.0, width=800, height=600):
-            self.video_src = video_src
-            self.fps = fps
-            self.width = width # TODO: width
-            self.height = height # TODO: height
-                        
-            import platform
-            if(platform.system() == 'Windows'):
-                import sys
-                import msvcrt
-                if (sys.version_info.major >= 3 and sys.version_info.minor >= 8):
-                    import os
-                    #Following lines specifying, the location of DLLs, are required for Python Versions 3.8 and greater
-                    os.add_dll_directory("C:\BitFlow SDK 6.6\Bin64")
-                    os.add_dll_directory("C:\Program Files\CameraLink\Serial")
+    try:
+        import BFModule.BufferAcquisition as Buf
+        class BitFlowCamera(Base):
+            id: str= Field(default_factory=lambda:f"VideoStreamReader.BitFlowCamera:{uuid.uuid4()}")
+            stream_key: str = 'BitFlowCameraStream'
+            
+            def __init__(self, video_src='bitflow-0', fps=30.0, width=800, height=600):
+                self.video_src = video_src
+                self.fps = fps
+                self.width = width # TODO: width
+                self.height = height # TODO: height
+                            
+                import platform
+                if(platform.system() == 'Windows'):
+                    import sys
+                    import msvcrt
+                    if (sys.version_info.major >= 3 and sys.version_info.minor >= 8):
+                        import os
+                        #Following lines specifying, the location of DLLs, are required for Python Versions 3.8 and greater
+                        os.add_dll_directory("C:\BitFlow SDK 6.6\Bin64")
+                        os.add_dll_directory("C:\Program Files\CameraLink\Serial")
+                import BFModule.BufferAcquisition as Buf
+                self.Buf = Buf
+                self.CirAq = None
+                channel = 0
+                numBuffers = 10
+                self.CirAq = Buf.clsCircularAcquisition(Buf.ErrorMode.ErIgnore)
 
-            import BFModule.BufferAcquisition as Buf
-            self.Buf = Buf
-            self.CirAq = None
-            channel = 0
-            numBuffers = 10
-            self.CirAq = Buf.clsCircularAcquisition(Buf.ErrorMode.ErIgnore)
+                if '-' in str(self.video_src):
+                    channel = int(str(self.video_src).split('-')[1])
 
-            if '-' in str(self.video_src):
-                channel = int(str(self.video_src).split('-')[1])
+                self.CirAq.Open(channel)
+                self.BufArray = self.CirAq.BufferSetup(numBuffers)
+                self.CirAq.AqSetup(Buf.SetupOptions.setupDefault)
+                self.CirAq.AqControl(Buf.AcqCommands.Start, Buf.AcqControlOptions.Wait)
 
-            self.CirAq.Open(channel)
-            self.BufArray = self.CirAq.BufferSetup(numBuffers)
-            self.CirAq.AqSetup(Buf.SetupOptions.setupDefault)
-            self.CirAq.AqControl(Buf.AcqCommands.Start, Buf.AcqControlOptions.Wait)
+            def bayer2bgr(self,bayer_image):    
+                return cv2.cvtColor(bayer_image.astype(np.uint8), cv2.COLOR_BayerBG2BGR)
+            
+            def auto_white_balance(self):
 
-        def bayer2bgr(self,bayer_image):    
-            return cv2.cvtColor(bayer_image.astype(np.uint8), cv2.COLOR_BayerBG2BGR)
-        
-        def auto_white_balance(self):
+                avg_r = np.mean(bgr_image[:, :, 2])
+                avg_g = np.mean(bgr_image[:, :, 1])
+                avg_b = np.mean(bgr_image[:, :, 0])
 
-            avg_r = np.mean(bgr_image[:, :, 2])
-            avg_g = np.mean(bgr_image[:, :, 1])
-            avg_b = np.mean(bgr_image[:, :, 0])
+                bgr_image[:, :, 2] = np.clip(bgr_image[:, :, 2] * (avg_g / avg_r), 0, 255)
+                bgr_image[:, :, 0] = np.clip(bgr_image[:, :, 0] * (avg_g / avg_b), 0, 255)
 
-            bgr_image[:, :, 2] = np.clip(bgr_image[:, :, 2] * (avg_g / avg_r), 0, 255)
-            bgr_image[:, :, 0] = np.clip(bgr_image[:, :, 0] * (avg_g / avg_b), 0, 255)
+                bgr_image = bgr_image.astype(np.uint8)
+                return bgr_image
 
-            bgr_image = bgr_image.astype(np.uint8)
-            return bgr_image
+            
+            def to8bit(self,frame):
+                frame = (frame >> 2).astype(np.uint8)
+                return frame
 
-        
-        def to8bit(self,frame):
-            frame = (frame >> 2).astype(np.uint8)
-            return frame
+            def read(self):
+                if(self.CirAq.GetAcqStatus().Start == True):
+                    curBuf = self.CirAq.WaitForFrame(100)
+                    frame = self.BufArray[curBuf.BufferNumber]
+                    return frame, {}
+                return None, {}
 
-        def read(self):
-            if(self.CirAq.GetAcqStatus().Start == True):
-                curBuf = self.CirAq.WaitForFrame(100)
-                frame = self.BufArray[curBuf.BufferNumber]
-                return frame, {}
-            return None, {}
+            def close(self):
+                self.CirAq.AqCleanup()
+                self.CirAq.BufferCleanup()
+                self.CirAq.Close()
 
-        def close(self):
-            self.CirAq.AqCleanup()
-            self.CirAq.BufferCleanup()
-            self.CirAq.Close()
-
+    except Exception as e:
+        print('not BitFlow Camera support')
 
     @staticmethod
     def reader(video_src=0, fps=30.0, width=800, height=600):

@@ -55,8 +55,8 @@ class BidirectionalStreamService(ServiceOrientedArchitecture):
     class Model(ServiceOrientedArchitecture.Model):
         
         class Param(BaseModel):
-            stream_reader:CommonStreamIO.StreamReader=None
-            stream_writer:CommonStreamIO.StreamWriter=None
+            _stream_reader:CommonStreamIO.StreamReader=None
+            _stream_writer:CommonStreamIO.StreamWriter=None
         class Args(BaseModel):
             pass
         class Return(BaseModel):
@@ -70,13 +70,13 @@ class BidirectionalStreamService(ServiceOrientedArchitecture):
     class Action(ServiceOrientedArchitecture.Action):
         def __init__(self, model, frame_processor=lambda i,frame,frame_metadata:(frame,frame_metadata)):
             if isinstance(model, dict):
-                model = BidirectionalStreamService.Bidirectional.Model(**model)
-            self.model: BidirectionalStreamService.Bidirectional.Model = model
+                model = BidirectionalStreamService.Model(**model)
+            self.model: BidirectionalStreamService.Model = model
             self.frame_processor = frame_processor
             
         def __call__(self, *args, **kwargs):
-            stream_reader:CommonStreamIO.StreamReader = self.model.param.stream_reader
-            stream_writer:CommonStreamIO.StreamWriter = self.model.param.stream_writer
+            stream_reader:CommonStreamIO.StreamReader = self.model.param._stream_reader
+            stream_writer:CommonStreamIO.StreamWriter = self.model.param._stream_writer
             if stream_reader is None:raise ValueError('stream_reader is None')
             if stream_writer is None:raise ValueError('stream_writer is None')
             with self.listen_stop_flag() as stop_flag:      

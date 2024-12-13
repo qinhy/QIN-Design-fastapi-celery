@@ -374,9 +374,11 @@ class AbstractObj(BaseModel):
         print(f'BasicApp.store().set({self.id},{self.__class__.__name__})')
         ServiceOrientedArchitecture.BasicApp.store().set(self.id,self.model_dump_json_dict())
     
-    def __del__(self):
+    def __obj_del__(self):
         print(f'BasicApp.store().delete({self.id})')
         ServiceOrientedArchitecture.BasicApp.store().delete(self.id)
+    def __del__(self):
+        self.__obj_del__()
 
     def storage(self):return ServiceOrientedArchitecture.BasicApp.store()
 
@@ -436,8 +438,8 @@ class GeneralSharedMemoryIO(CommonIO):
             if hasattr(self,'_shm'):
                 self._shm.close()  # Detach from shared memory
 
-        def __del__(self):
-            super().__del__()
+        def __del__(self):            
+            self.__obj_del__()
             self.close()
 
     class Reader(CommonIO.Reader, Base):
@@ -594,17 +596,7 @@ class CommonStreamIO(CommonIO):
         fps:float = 0
         stream_key: str = 'NULL'
         is_close: bool = False
-
-        def __init__(self, **kwargs):
-            super().__init__(**kwargs)
-            tmp = self.model_dump_json_dict()
-            tmp['id'] = self.stream_id()
-            ServiceOrientedArchitecture.BasicApp.store().set(self.stream_id(),tmp)
         
-        def __del__(self):
-            super().__del__()
-            ServiceOrientedArchitecture.BasicApp.store().delete(self.stream_id())
-
         def stream_id(self):
             return f'streams:{self.stream_key}'
 
@@ -636,8 +628,19 @@ class CommonStreamIO(CommonIO):
         
     class StreamWriter(CommonIO.Writer, Base):
         id: str= Field(default_factory=lambda:f"CommonStreamIO.StreamWriter:{uuid4()}")
+
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            tmp = self.model_dump_json_dict()
+            tmp['id'] = self.stream_id()
+            ServiceOrientedArchitecture.BasicApp.store().set(self.stream_id(),tmp)
+            
         def write(self, data, metadata={}):
             raise ValueError("[StreamWriter]: 'write' not implemented")
+        
+        def __del__(self):
+            self.__obj_del__()
+            ServiceOrientedArchitecture.BasicApp.store().delete(self.stream_id())
 class BidirectionalStream:
     class Bidirectional:
         id: str= Field(default_factory=lambda:f"BidirectionalStream.Bidirectional:{uuid4()}")

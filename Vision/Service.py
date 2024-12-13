@@ -5,24 +5,33 @@ import cv2
 import numpy as np
 from pydantic import BaseModel, Field
 
-from .BasicModel import NumpyUInt8SharedMemoryStreamIO
+from Task.Customs import BidirectionalStreamService
+
+from .BasicModel import NumpyUInt8SharedMemoryStreamIO, VideoStreamReader
 
 try:
     from ..Task.Basic import ServiceOrientedArchitecture
 except Exception as e:
     from Task.Basic import ServiceOrientedArchitecture
 
-class CvCameraSharedMemoryService:
-    class Model(ServiceOrientedArchitecture.Model):        
-        class Param(BaseModel):
+class CvCameraSharedMemoryService(BidirectionalStreamService):
+    class Model(BidirectionalStreamService.Model):        
+        class Param(BidirectionalStreamService.Model.Param):
             stream_key: str = Field(default='camera:0', description="The name of the stream")
             array_shape: tuple = Field(default=(480, 640), description="Shape of the NumPy array to store in shared memory")
             mode:str='write'
             _writer:NumpyUInt8SharedMemoryStreamIO.Writer=None
             _reader:NumpyUInt8SharedMemoryStreamIO.Reader=None
+            _video_reader:NumpyUInt8SharedMemoryStreamIO.Reader=None
             
             def is_write(self):
                 return self.mode=='write'
+            
+            def video_reader(self,video_src):
+                if self._video_reader is None:
+                    self._video_reader = VideoStreamReader.reader(
+                        video_src=video_src).init()
+                return self._video_reader
             
             def writer(self):
                 if self._writer is None:
@@ -36,12 +45,12 @@ class CvCameraSharedMemoryService:
                         self.stream_key,self.array_shape)
                 return self._reader
 
-        class Args(BaseModel):
+        class Args(BidirectionalStreamService.Model.Args):
             camera:int = 0
 
         param:Param = Param()
         args:Args = Args()
-        ret:str = 'AUTO_SET_BUT_NULL_NOW'
+        ret:str = 'NULL'
         
         def set_param(self, stream_key="camera_shm", array_shape=(480, 640), mode = 'write'):
             self.param = CvCameraSharedMemoryService.Model.Param(
@@ -60,80 +69,48 @@ class CvCameraSharedMemoryService:
                 model = CvCameraSharedMemoryService.Model(**model)
             self.model: CvCameraSharedMemoryService.Model = model
 
-        def cv2_VideoCapture_gen(self,src,writer:NumpyUInt8SharedMemoryStreamIO.Writer
-                                 ,stop_flag:threading.Event):
-            # Open the camera using OpenCV
-            cap = cv2.VideoCapture(src)
-            if not cap.isOpened():
-                raise ValueError(f"Unable to open camera {src}")
-            print("writing")
-            while not stop_flag.is_set():
-                ret, frame = cap.read()
-                if not ret:
-                    print("Failed to grab frame")
-                    continue
-                # Convert the frame to grayscale and resize to match shared memory size
-                gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                resized_frame = cv2.resize(gray_frame, (writer.array_shape[1], writer.array_shape[0]))
-                yield resized_frame
+        # def cv2_Random_gen(self, stop_flag:threading.Event, array_shape=(7680, 4320), fps=30):
+        #     # Define common resolutions
+        #     # resolutions = {
+        #     #     '8k': (7680, 4320),
+        #     #     '4k': (3840, 2160),
+        #     #     '1080p': (1920, 1080),
+        #     #     '720p': (1280, 720),
+        #     #     '480p': (640, 480)
+        #     # }
 
-        def cv2_Random_gen(self, stop_flag:threading.Event, array_shape=(7680, 4320), fps=30):
-            # Define common resolutions
-            # resolutions = {
-            #     '8k': (7680, 4320),
-            #     '4k': (3840, 2160),
-            #     '1080p': (1920, 1080),
-            #     '720p': (1280, 720),
-            #     '480p': (640, 480)
-            # }
+        #     # # Get the resolution or default to 4k if size is not found
+        #     # resolution = resolutions.get(size, resolutions['4k'])
 
-            # # Get the resolution or default to 4k if size is not found
-            # resolution = resolutions.get(size, resolutions['4k'])
+        #     frame_time = 1.0 / fps  # Time per frame in seconds
+        #     random_frame:np.ndarray = np.random.randint(0, 256, array_shape, dtype=np.uint8)
 
-            frame_time = 1.0 / fps  # Time per frame in seconds
-            random_frame:np.ndarray = np.random.randint(0, 256, array_shape, dtype=np.uint8)
-
-            while not stop_flag.is_set():
-                # Generate a random grayscale frame (values between 0-255)
-                # random_frame = np.random.randint(0, 256, (resolution[1], resolution[0]), dtype=np.uint8)
+        #     while not stop_flag.is_set():
+        #         # Generate a random grayscale frame (values between 0-255)
+        #         # random_frame = np.random.randint(0, 256, (resolution[1], resolution[0]), dtype=np.uint8)
                 
-                # # Resize frame to match writer array shape
-                # resized_frame = cv2.resize(random_frame, (writer.array_shape[1], writer.array_shape[0]))
+        #         # # Resize frame to match writer array shape
+        #         # resized_frame = cv2.resize(random_frame, (writer.array_shape[1], writer.array_shape[0]))
 
-                # Yield the random frame
-                yield random_frame
+        #         # Yield the random frame
+        #         yield random_frame
 
-                # Sleep to control frame rate
-                # time.sleep(frame_time)
+        #         # Sleep to control frame rate
+        #         # time.sleep(frame_time)
 
         def __call__(self, *args, **kwargs):
             with self.listen_stop_flag() as stop_flag:
                 
-                if self.model.param.is_write():
-                    writer = self.model.param.writer()
-
-                    # frame_gen = self.cv2_Random_gen(stop_flag,writer.array_shape)
-                    frame_gen = self.cv2_VideoCapture_gen(self.model.args.camera,writer,stop_flag)
-                    
-                    start_time = time.time()
-                    # Add FPS text to the frame
-                    position = (10, 30)  # Top-left corner
-                    font = cv2.FONT_HERSHEY_SIMPLEX
-                    font_scale = 1
-                    color = (255, 255, 255)  # White color (use (0, 0, 0) for black on a grayscale image)
-                    thickness = 2
-                    
-                    for i,frame in enumerate(frame_gen):
-                        if i%10000==0:
-                            fps = 10000/(time.time()-start_time+1e-5)
-                            print(f"FPS: {fps:.2f} , {writer.id}")
-                            start_time = time.time()
-                            
-                        # Put text on the frame (converted to 3-channel to allow color text if needed)
-                        # text = f"FPS: {fps:.2f}"
-                        # frame_with_text = cv2.putText(frame, text, position, font, font_scale, color, thickness, cv2.LINE_AA)
-
-                        writer.write(frame)
+                if self.model.param.is_write():                    
+                    self.model.param._stream_reader = self.model.param.video_reader(self.model.args.camera)
+                    self.model.param._stream_writer = writer = self.model.param.writer()
+                    def frame_processor(i,frame,frame_metadata):
+                        # print(i, frame.shape, 'fps', frame_metadata.get('fps',0),end='\r')                        
+                        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                        frame = cv2.resize(frame, (writer.array_shape[1], writer.array_shape[0]))
+                        return frame,frame_metadata
+                    action = BidirectionalStreamService.Action(self.model,frame_processor)
+                    action()
 
                 else:
                     # reading
