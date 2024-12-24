@@ -2,11 +2,10 @@ import os
 import random
 import time
 from fastapi.responses import FileResponse, HTMLResponse
-from Config import SESSION_DURATION, APP_SECRET_KEY
 
 from User.UserAPIs import AuthService, UserModels, router as users_router
 from Task.Basic import BasicApp
-from Task.MT5Manager import BookService, MT5CopyLastRatesService,MT5Manager,MT5Account,Book
+from Task.Customs import CvCameraSharedMemoryService, Fibonacci, ServiceOrientedArchitecture
 
 from celery.app import task as Task
 from starlette.middleware.sessions import SessionMiddleware
@@ -110,32 +109,27 @@ class CeleryTask:
     
     @staticmethod
     @celery_app.task(bind=True)
-    def book_action(t: Task, acc: MT5Account, book: Book, action: str,**kwargs):
-        """
-        Generic task for performing book-related actions.
-        
-        :param acc: MT5Account object
-        :param book: Book object
-        :param action: The action to perform (e.g., 'getBooks', 'send', 'close', 'changeP', 'changeTS')
-        :param kwargs: Additional parameters for the action (e.g., price, tp, sl)
-        :return: The result of the action
-        """
+    def perform_action(t: Task, name: str, data: dict) -> int:
+        """Generic Celery task to execute any registered action."""
+        action_name, action_data = name, data
+        ACTION_REGISTRY: Dict[str, ServiceOrientedArchitecture] = {
+            'Fibonacci': Fibonacci,
+            'CvCameraSharedMemoryService': CvCameraSharedMemoryService,
+        }
+        if action_name not in ACTION_REGISTRY:
+            raise ValueError(f"Action '{action_name}' is not registered.")
 
-        model = BookService.Model.build(acc,book,action in ['send'])
-        model.task_id = t.request.id
-        ba = BookService.Action(model)
-        res = ba.change_run(action, kwargs)()
-        
-        if action == 'getBooks':
-            return {f'{b.symbol}-{b.price_open}-{b.volume}-{b.ticket}': b.model_dump() for b in res.ret.books}
-        elif action in ['send', 'changeP', 'changeTS', 'account_info']:
-            return res.ret.books[0].model_dump()
-        else:
-            return res.model_dump()
-        
-    @staticmethod
-    @api.get("/accounts/info")
-    def api_account_info(acc: MT5Account):
+        # Initialize the action model and action handler
+        class_space = ACTION_REGISTRY[action_name]
+        model_instance = class_space.Model(**action_data)
+        model_instance.task_id = t.request.id
+        action_instance = class_space.Action(model_instance)
+        res = action_instance().model_dump()
+        return CeleryTask.is_json_serializable(res)
+
+    @api.post("/action/perform")
+    def api_perform_action(action: dict = dict(
+            name='Fibonacci', data=dict(args=dict(n=10)))):
         api_ok()
         """Endpoint to fetch account information."""
         task = CeleryTask.book_action.delay(acc.model_dump(), Book().model_dump(), action='account_info')
@@ -149,13 +143,21 @@ class CeleryTask:
         task = CeleryTask.book_action.delay(acc.model_dump(), Book().model_dump(), action='getBooks')
         return {'task_id': task.id}
 
-
-    @staticmethod
-    @api.post("/books/send")
-    def api_book_send(acc: MT5Account, book: Book):
+    @api.get("/streams/write")
+    # 3840, 2160  480,640
+    def api_actions_camera_write(stream_key: str = 'camera:0', h: int = 2160*2*2, w: int = 3840*2*2):
         api_ok()
-        """Endpoint to send a book."""
-        task = CeleryTask.book_action.delay(acc.model_dump(), book.model_dump(), action='send')
+        info = BasicApp.store.get(f'streams:{stream_key}')
+        if info is not None:
+            raise HTTPException(status_code=503, detail={
+                                'error': f'stream of [streams:{stream_key}] has created'})
+
+        CCModel = CvCameraSharedMemoryService.Model
+        data_model = CCModel(param=CCModel.Param(
+            mode='write', stream_key=stream_key, array_shape=(h, w)))
+        act = dict(name='CvCameraSharedMemoryService',
+                   data=data_model.model_dump())
+        task = CeleryTask.perform_action.delay(**act)
         return {'task_id': task.id}
 
 
@@ -163,8 +165,17 @@ class CeleryTask:
     @api.post("/books/close")
     def api_book_close(acc: MT5Account, book: Book):
         api_ok()
-        """Endpoint to close a book."""
-        task = CeleryTask.book_action.delay(acc.model_dump(), book.model_dump(), action='close')
+        info = BasicApp.store.get(f'streams:{stream_key}')
+        if info is None:
+            raise HTTPException(status_code=503, detail={
+                                'error': f'not such stream of [streams:{stream_key}]'})
+
+        CCModel = CvCameraSharedMemoryService.Model
+        data_model = CCModel(param=CCModel.Param(
+            mode='read', stream_key=stream_key, array_shape=info['array_shape']))
+        act = dict(name='CvCameraSharedMemoryService',
+                   data=data_model.model_dump())
+        task = CeleryTask.perform_action.delay(**act)
         return {'task_id': task.id}
 
 
@@ -184,101 +195,50 @@ class CeleryTask:
         """Endpoint to change tp sl values of a book."""
         task = CeleryTask.book_action.delay(acc.model_dump(), book.model_dump(), action='changeTS', tp=tp, sl=sl)
         return {'task_id': task.id}
+        # build GUI
+        # I have a python api like following and need you to build primuevue GUI along the example.
+        # ```python        
+        # @api.post("/auth/local/fibonacci/")
+        # def api_fibonacci(fib_task: Fibonacci.Model,
+        #                 current_user: UserModels.User = Depends(AuthService.get_current_payload_if_not_local)):
+        #     api_ok()
+        #     task = CeleryTask.fibonacci.delay(fib_task.model_dump())
+        #     return {'task_id': task.id}
+        # # Request body
+        # # Example Value
+        # # Schema
+        # # {
+        # #   "task_id": "NO_NEED_INPUT",
+        # #   "param": {
+        # #     "mode": "fast"
+        # #   },
+        # #   "args": {
+        # #     "n": 1
+        # #   },
+        # #   "ret": {
+        # #     "n": -1
+        # #   }
+        # # }
+        # ```
 
-    
-    @staticmethod
-    @celery_app.task(bind=True)
-    def rates_copy(t:Task,acc:MT5Account,
-                   symbol:str,timeframe:str,count:int,debug:bool=False):
-        model = MT5CopyLastRatesService.Model.build(acc)
-        model.task_id = t.request.id
-        act = MT5CopyLastRatesService.Action(model)
-        res = act(symbol=symbol,timeframe=timeframe,count=count,debug=debug)
-        return res.ret.model_dump()
-    
-    @staticmethod
-    @api.get("/rates/")
-    def api_rates_copy(acc: MT5Account, symbol: str, timeframe: str, count: int, debug: bool = False):
-        api_ok()
-        """
-        Endpoint to copy rates for a given MT5 account, symbol, timeframe, and count.
-        
-        :param acc: MT5Account object
-        :param symbol: The symbol for which to copy rates
-        :param timeframe: The timeframe for which to copy rates
-        :param count: The number of rates to copy
-        :param debug: Optional flag to enable debugging
-        :return: Task ID of the Celery task
-        """
-        task = CeleryTask.rates_copy.delay(acc.model_dump(), symbol, timeframe, count, debug)
-        return {'task_id': task.id}
 
-class MockRESTapi:
-    api = FastAPI()
+        # ```vue gui example
+        # <p-tabpanel value="Profile">
+        #     <div>
+        #         <h2 class="text-xl font-bold mb-4">Edit User Info</h2>
+        #         <form @submit.prevent="api.editUserInfo">
+        #             <!-- UUID (Disabled) -->
+        #             <p-inputtext v-model="editForm.uuid" disabled placeholder="UUID"
+        #                 class="border p-2 rounded w-full mb-2"></p-inputtext>
 
-    @staticmethod
-    @api.post("/terminals/add")
-    async def add_terminal(broker: str, path: str):
-        """Mock Endpoint to add a terminal to MT5."""
-        return {'task_id': 'mock_task_id'}
+        #             <!-- Email (Disabled) -->
+        #             <p-inputtext v-model="editForm.email" disabled placeholder="Email"
+        #                 class="border p-2 rounded w-full mb-2"></p-inputtext>
 
-    @staticmethod
-    @api.get("/terminals/")
-    async def get_terminals():
-        """Mock Endpoint to get list of terminals."""
-        terminals_mock = {
-            "broker1": ["path1.exe", "path2.exe"],
-            "broker2": ["path3.exe"]
-        }
-        return terminals_mock
+        #             <p-button severity="danger" class="border p-2 rounded w-full mb-2 top-1">Remove
+        #                 Account</p-button>
+        #         </form>
+        #     </div>
+        # </p-tabpanel>
+        # ````
 
-    @staticmethod
-    @api.get("/books/")
-    async def get_books(acc: MT5Account):
-        """Mock Endpoint to get books for a given MT5 account."""
-        return {'task_id': 'mock_task_id'}
-
-    @staticmethod
-    @api.get("/accounts/info")
-    async def account_info(acc: MT5Account):
-        """Mock Endpoint to fetch account information."""
-        return {'task_id': 'mock_task_id'}
-
-    @staticmethod
-    @api.post("/books/send")
-    async def book_send(acc: MT5Account, book: Book):
-        """Mock Endpoint to send a book."""
-        return {'task_id': 'mock_task_id'}
-
-    @staticmethod
-    @api.post("/books/close")
-    async def book_close(acc: MT5Account, book: Book):
-        """Mock Endpoint to close a book."""
-        return {'task_id': 'mock_task_id'}
-
-    @staticmethod
-    @api.post("/books/change/price")
-    async def book_change_price(acc: MT5Account, book: Book, p: float):
-        """Mock Endpoint to change the price of a book."""
-        return {'task_id': 'mock_task_id'}
-
-    @staticmethod
-    @api.post("/books/change/tpsl")
-    async def book_change_tp_sl(acc: MT5Account, book: Book, tp: float, sl: float):
-        """Mock Endpoint to change TP/SL values of a book."""
-        return {'task_id': 'mock_task_id'}
-
-    @staticmethod
-    @api.get("/tasks/status/{task_id}")
-    async def task_status(task_id: str):
-        """Mock Endpoint to check the status of a task."""
-        # Simulate a database response for task status
-        states = ['PENDING','STARTED','SUCCESS','FAILURE','RETRY','REVOKED']
-        status = random.choice(states)
-        task_status_mock = {
-            "task_id": task_id,
-            "status": status,
-            "result": {"message": f"Task is {status.lower()}"}
-        }
-        time.sleep(1)
-        return task_status_mock
