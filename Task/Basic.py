@@ -25,34 +25,20 @@ except Exception as e:
     from Storages import SingletonKeyValueStorage
 
 class AppInterface:
-    @classmethod
-    def redis_client() -> redis.Redis: raise NotImplementedError('redis_client')
-    @classmethod
-    def store() -> SingletonKeyValueStorage: raise NotImplementedError('store')
-    @staticmethod
-    def check_services() -> bool: raise NotImplementedError('check_services')
-    @staticmethod
-    def send_data_to_task(task_id, data: dict): raise NotImplementedError('send_data_to_task')
-    @staticmethod
-    def listen_data_of_task(task_id, data_callback=lambda data: data, eternal=False): raise NotImplementedError('listen_data_of_task')
-    @staticmethod
-    def get_celery_app()->celery.Celery: raise NotImplementedError('get_celery_app')
-    @staticmethod
-    def check_rabbitmq_health(url=None, user='', password='') -> bool:('check_rabbitmq_health')
-    @staticmethod
-    def check_mongodb_health(url=None) -> bool:('check_mongodb_health')
-    @staticmethod
-    def get_tasks_collection(): raise NotImplementedError('get_tasks_collection')
-    @staticmethod
-    def get_tasks_list(): raise NotImplementedError('get_tasks_list')
-    @staticmethod
-    def get_task_meta(task_id: str): raise NotImplementedError('get_task_meta')
-    @staticmethod
-    def get_task_status(task_id: str): raise NotImplementedError('get_task_status')
-    @staticmethod
-    def set_task_started(task_model: 'ServiceOrientedArchitecture.Model'): raise NotImplementedError('set_task_started')
-    @staticmethod
-    def set_task_revoked(task_id): raise NotImplementedError('set_task_revoked')
+    def redis_client(self) -> redis.Redis: raise NotImplementedError('redis_client')
+    def store(self) -> SingletonKeyValueStorage: raise NotImplementedError('store')
+    def check_services(self) -> bool: raise NotImplementedError('check_services')
+    def send_data_to_task(self, task_id, data: dict): raise NotImplementedError('send_data_to_task')
+    def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False): raise NotImplementedError('listen_data_of_task')
+    def get_celery_app(self)->celery.Celery: raise NotImplementedError('get_celery_app')
+    def check_rabbitmq_health(self, url=None, user='', password='') -> bool:('check_rabbitmq_health')
+    def check_mongodb_health(self, url=None) -> bool:('check_mongodb_health')
+    def get_tasks_collection(self): raise NotImplementedError('get_tasks_collection')
+    def get_tasks_list(self): raise NotImplementedError('get_tasks_list')
+    def get_task_meta(self, task_id: str): raise NotImplementedError('get_task_meta')
+    def get_task_status(self, task_id: str): raise NotImplementedError('get_task_status')
+    def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'): raise NotImplementedError('set_task_started')
+    def set_task_revoked(self, task_id): raise NotImplementedError('set_task_revoked')
 
 class RabbitmqMongoApp(AppInterface):
     def __init__(self, rabbitmq_url:str, rabbitmq_user:str, rabbitmq_password:str, 
