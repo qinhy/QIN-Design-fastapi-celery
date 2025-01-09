@@ -3,9 +3,9 @@ from datetime import datetime
 
 from pydantic import field_validator
 try:
-    from .BasicModel import BasicStore,Controller4Basic,Model4Basic
+    from ..Storages.BasicModel import BasicStore,Controller4Basic,Model4Basic
 except Exception as e:
-    from BasicModel import BasicStore,Controller4Basic,Model4Basic
+    from Storages.BasicModel import BasicStore,Controller4Basic,Model4Basic
 
 import base64
 import uuid,hashlib

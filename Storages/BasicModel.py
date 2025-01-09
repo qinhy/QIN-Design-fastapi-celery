@@ -6,7 +6,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict, Field
 try:
-    from ..Storages import SingletonKeyValueStorage
+    from . import SingletonKeyValueStorage
 except Exception as e:
     from Storages import SingletonKeyValueStorage
 
@@ -145,6 +145,7 @@ class Model4Basic:
         children_id: list[str] = []
         _controller: Controller4Basic.AbstractGroupController = None
         def get_controller(self):return self._controller
+
 class BasicStore(SingletonKeyValueStorage):
     MODEL_CLASS_GROUP = Model4Basic
     
