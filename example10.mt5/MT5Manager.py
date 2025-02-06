@@ -5,7 +5,7 @@ import time
 import uuid
 from typing import Any, Dict, List
 
-from .Basic import ServiceOrientedArchitecture
+from Task.Basic import ServiceOrientedArchitecture
 try:
     import MetaTrader5 as mt5
 except Exception as e:
@@ -80,7 +80,7 @@ class MT5Manager:
     def __init__(self, id=None, results=None, terminals=None, is_singleton=None):
         self.uuid = uuid.uuid4() if id is None else id
         self.results: Dict[str, List[Any]] = None if results is None else results
-        self.terminals: Dict[str, Set[MT5Manager.TerminalLock]] = None if terminals is None else terminals
+        self.terminals: Dict[str, set[MT5Manager.TerminalLock]] = None if terminals is None else terminals
         self.is_singleton: bool = False if is_singleton is None else is_singleton
 
         # Discover terminal.exe files and initialize terminals
