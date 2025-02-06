@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API GUI</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 0;
+        }
+        .api-container {
+            max-width: 600px;
+            margin: auto;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .api {
+            margin-bottom: 20px;
+        }
+        .api input[type="text"], .api input[type="number"] {
+            width: calc(100% - 110px);
+            padding: 8px;
+            margin-right: 5px;
+        }
+        .api button {
+            padding: 8px 10px;
+            cursor: pointer;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 3px;
+        }
+        .api button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="api-container">
+        <h2>API GUI</h2>
+
+        <!-- List Tasks API -->
+        <div class="api">
+            <h3>List Tasks</h3>
+            <button onclick="fetchListTasks()">GET /tasks/</button>
+        </div>
+
+        <!-- Task Meta API -->
+        <div class="api">
+            <h3>Task Meta</h3>
+            <input type="text" id="taskIdMeta" placeholder="Enter task ID">
+            <button onclick="fetchTaskMeta()">GET /tasks/meta/{task_id}</button>
+        </div>
+
+        <!-- Task Stop API -->
+        <div class="api">
+            <h3>Task Stop</h3>
+            <input type="text" id="taskIdStop" placeholder="Enter task ID">
+            <button onclick="fetchTaskStop()">GET /tasks/stop/{task_id}</button>
+        </div>
+
+        <!-- Streams Write API -->
+        <div class="api">
+            <h3>Streams Write</h3>
+            <input type="text" id="streamKeyWrite" placeholder="Enter stream_key (default: camera:0)" value="camera:0">
+            <input type="number" id="streamHeight" placeholder="Enter height (default: 600)" value="600">
+            <input type="number" id="streamWidth" placeholder="Enter width (default: 800)" value="800">
+            <button onclick="fetchStreamsWrite()">GET /streams/write</button>
+        </div>
+
+        <!-- Streams Read API -->
+        <div class="api">
+            <h3>Streams Read</h3>
+            <input type="text" id="streamKeyRead" placeholder="Enter stream_key (default: camera:0)" value="camera:0">
+            <button onclick="fetchStreamsRead()">GET /streams/read</button>
+        </div>
+
+        <div id="output" style="margin-top: 20px; padding: 10px; border: 1px solid #ddd; background-color: #fff;"></div>
+    </div>
+
+    <script>
+        const apiUrl = 'http://127.0.0.1:8000'; // Replace with your API base URL
+
+        async function fetchListTasks() {
+            try {
+                const response = await fetch(`${apiUrl}/tasks/`);
+                const data = await response.json();
+                displayOutput(data);
+            } catch (error) {
+                displayOutput(error.message);
+            }
+        }
+
+        async function fetchTaskMeta() {
+            const taskId = document.getElementById('taskIdMeta').value;
+            if (!taskId) {
+                displayOutput("Task ID is required!");
+                return;
+            }
+            try {
+                const response = await fetch(`${apiUrl}/tasks/meta/${taskId}`);
+                const data = await response.json();
+                displayOutput(data);
+            } catch (error) {
+                displayOutput(error.message);
+            }
+        }
+
+        async function fetchTaskStop() {
+            const taskId = document.getElementById('taskIdStop').value;
+            if (!taskId) {
+                displayOutput("Task ID is required!");
+                return;
+            }
+            try {
+                const response = await fetch(`${apiUrl}/tasks/stop/${taskId}`);
+                const data = await response.json();
+                displayOutput(data);
+            } catch (error) {
+                displayOutput(error.message);
+            }
+        }
+
+        async function fetchStreamsWrite() {
+            const streamKey = document.getElementById('streamKeyWrite').value;
+            const streamHeight = document.getElementById('streamHeight').value;
+            const streamWidth = document.getElementById('streamWidth').value;
+
+            try {
+                const url = `${apiUrl}/streams/write?stream_key=${encodeURIComponent(streamKey)}&h=${streamHeight}&w=${streamWidth}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                displayOutput(data);
+            } catch (error) {
+                displayOutput(error.message);
+            }
+        }
+
+        async function fetchStreamsRead() {
+            const streamKey = document.getElementById('streamKeyRead').value;
+
+            try {
+                const url = `${apiUrl}/streams/read?stream_key=${encodeURIComponent(streamKey)}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                displayOutput(data);
+            } catch (error) {
+                displayOutput(error.message);
+            }
+        }
+
+        function displayOutput(data) {
+            const outputDiv = document.getElementById('output');
+            outputDiv.textContent = JSON.stringify(data, null, 2);
+        }
+    </script>
+</body>
+</html>
