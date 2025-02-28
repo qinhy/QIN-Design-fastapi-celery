@@ -10,19 +10,179 @@ import time
 import json
 
 import numpy as np
-import requests
+import pymongo
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
+import pymongo.errors
 import redis
 import pika
 import celery
 import celery.states
+import requests
 
 try:
-    from ..Storages import SingletonKeyValueStorage
+    from ..Storages import SingletonKeyValueStorage, EventDispatcherController, PythonDictStorage
 except Exception as e:
-    from Storages import SingletonKeyValueStorage
+    from Storages import SingletonKeyValueStorage, EventDispatcherController, PythonDictStorage
+
+class PubSubInterface:
+    ROOT_KEY = 'PubSub'
+
+    def __init__(self):
+        self._event_disp = EventDispatcherController(PythonDictStorage())
+    
+    def subscribe(self, topic: str, callback, eternal=False, id: str = None):
+        """Subscribe to a topic with a given callback."""
+        if id is None: id = str(uuid4())
+        self._event_disp.set(f'{PubSubInterface.ROOT_KEY}:{topic}:{id}', callback)
+        self._event_disp.set(f'{PubSubInterface.ROOT_KEY}:{topic}:{id}:eternal', eternal)
+        return id
+    
+    def unsubscribe(self, id: str):
+        """Unsubscribe from a topic using the given id."""
+        keys = self._event_disp.keys(f'{PubSubInterface.ROOT_KEY}:*:{id}')
+        if len(keys)==1:
+            key = keys[0]
+            if self._event_disp.exists(key):
+                self._event_disp.delete(key)
+                return True
+        return False
+    
+    def publish(self, topic: str, data:dict):
+         raise NotImplementedError('publish')
+
+    def call_subscribers(self,topic,data:dict):
+        for sub_key, subscriber in self.get_subscribers(topic):
+            if callable(subscriber):
+                subscriber(data)
+                if not self._event_disp.get(f'{sub_key}:eternal'):
+                    self._event_disp.delete(sub_key)
+
+    def get_subscribers(self, topic: str):
+        """Retrieve all subscribers for a given topic."""
+        return [(sub_key, self._event_disp.get(sub_key)) for sub_key in self._event_disp.keys(f'{PubSubInterface.ROOT_KEY}:{topic}:*')]
+    
+    def get_topics(self):
+        ts = [k for k in self._event_disp.keys(f'{PubSubInterface.ROOT_KEY}:*')]
+        ts = [k.split(':')[1] for k in ts]
+        return ts
+
+    def clear_subscribers(self, topic: str):
+        """Remove all subscribers from a specific topic."""
+        for sub_key in self._event_disp.keys(f'{PubSubInterface.ROOT_KEY}:{topic}:*'):
+            self._event_disp.delete(sub_key)
+
+class RabbitmqPubSub(PubSubInterface):
+    def __init__(self, rabbitmq_url:str, rabbitmq_user:str, rabbitmq_password:str,
+                 task_pubsub_name:str='RabbitmqPubSub'):
+        super().__init__()        
+        self.rabbitmq_url = rabbitmq_url
+        self.rabbitmq_user = rabbitmq_user
+        self.rabbitmq_password = rabbitmq_password
+        self.task_pubsub_name = task_pubsub_name
+        self.connection = None
+        self.channel = None
+        self.uuid = str(self._event_disp.model.uuid)
+    
+    def _conn(self):        
+        host, port = self.rabbitmq_url.split(':')
+        print(host, port)
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host))
+        channel = connection.channel()
+        channel.exchange_declare(exchange=self.task_pubsub_name, exchange_type='direct')
+        return connection,channel
+
+    def publish(self, topic: str, data: dict):
+        connection,channel = self._conn()
+        message = json.dumps({'topic': topic, 'data': data})
+        channel.basic_publish(exchange=self.task_pubsub_name, routing_key=self.ROOT_KEY, body=message)
+        connection.close()
+
+    def start_listener(self):
+        connection,channel = self._conn()
+        self.connection = connection
+        self.channel = channel
+
+        result = self.channel.queue_declare(queue='', exclusive=True)
+        queue_name = result.method.queue
+        self.channel.queue_bind(exchange=self.task_pubsub_name, queue=queue_name, routing_key=self.ROOT_KEY)
+
+        self.listener_thread = threading.Thread(target=self.listen_data_of_topic, args=(queue_name,), daemon=True)
+        self.listener_thread.start()
+
+    def listen_data_of_topic(self, queue_name):
+        def callback(ch, method, properties, body):
+            message:dict = json.loads(body)
+            topic = message.get('topic')
+            if not topic: return
+                            
+            self.call_subscribers(topic,message.get('data'))
+
+        self.channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
+        self.channel.start_consuming()
+
+    def stop_listener(self):
+        self.channel.stop_consuming()
+        self.connection.close()
+
+class RedisPubSub(PubSubInterface):
+    def __init__(self, redis_url: str, redis_port: int = 6379, redis_db: int = 0, redis_password: str = None,
+                 task_pubsub_name: str = 'RedisPubSub'):
+        super().__init__()
+        self.redis_url = redis_url
+        self.redis_port = redis_port
+        self.redis_db = redis_db
+        self.redis_password = redis_password
+        self.task_pubsub_name = task_pubsub_name
+        self.uuid = str(self._event_disp.model.uuid)
+
+        # Establish Redis connection
+        self.redis_pubsub_client = redis.Redis.from_url(self.redis_url)
+        # redis.Redis(
+        #     host=self.redis_host,
+        #     port=self.redis_port,
+        #     db=self.redis_db,
+        #     password=self.redis_password,
+        #     decode_responses=True
+        # )
+        self.pubsub = self.redis_pubsub_client.pubsub()
+        self.listener_thread = None
+
+    def publish(self, topic: str, data: dict):
+        """Publish a message to a topic."""
+        message = json.dumps({'topic': topic, 'data': data})
+        self.redis_pubsub_client.publish(self.ROOT_KEY, message)
+
+    def start_listener(self):
+        """Start listening to subscribed topics in a separate thread."""
+        self.listener_thread = threading.Thread(target=self.listen_data_of_topic, daemon=True)
+        self.listener_thread.start()
+
+    def listen_data_of_topic(self):
+        """Continuously listen for messages on subscribed topics."""
+        self.pubsub.subscribe(self.ROOT_KEY)
+        for message in self.pubsub.listen():
+            if message["type"] == "message":
+                message:dict = json.loads(message["data"])
+                topic = message.get('topic')
+                if not topic:continue
+                self.call_subscribers(topic,message.get('data'))
+
+    def unsubscribe(self, id: str):
+        """Unsubscribe from a topic and remove Redis subscription."""
+        keys = self._event_disp.keys(f'{PubSubInterface.ROOT_KEY}:*:{id}')
+        if len(keys) == 1:
+            topic = keys[0].split(":")[1]  # Extract topic name
+            self.pubsub.unsubscribe(topic)  # Unsubscribe from Redis
+            return super().unsubscribe(id)
+        return False
+
+    def stop_listener(self):
+        """Stop the Redis listener."""
+        if self.pubsub:
+            self.pubsub.close()
+        if self.listener_thread and self.listener_thread.is_alive():
+            self.listener_thread.join()
 
 class AppInterface:
     def redis_client(self) -> redis.Redis: raise NotImplementedError('redis_client')
@@ -40,9 +200,10 @@ class AppInterface:
     def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'): raise NotImplementedError('set_task_started')
     def set_task_revoked(self, task_id): raise NotImplementedError('set_task_revoked')
 
-class RabbitmqMongoApp(AppInterface):
+class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
     def __init__(self, rabbitmq_url:str, rabbitmq_user:str, rabbitmq_password:str, 
                  mongo_url:str, mongo_db:str, celery_meta:str, celery_rabbitmq_broker:str, task_pubsub_name='task_updates'):
+        super().__init__(rabbitmq_url, rabbitmq_user, rabbitmq_password,task_pubsub_name )
         self.rabbitmq_url = rabbitmq_url
         self.rabbitmq_user = rabbitmq_user
         self.rabbitmq_password = rabbitmq_password
@@ -53,6 +214,7 @@ class RabbitmqMongoApp(AppInterface):
         self.celery_rabbitmq_broker = celery_rabbitmq_broker
         self.task_pubsub_name = task_pubsub_name
         self._store = None
+        self.start_listener()
         
     def store(self):
         if self._store is None:
@@ -60,51 +222,53 @@ class RabbitmqMongoApp(AppInterface):
         return self._store
 
     def send_data_to_task(self, task_id, data: dict):
-        host, port = self.rabbitmq_url.split(':')
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host))
-        channel = connection.channel()
-        channel.exchange_declare(exchange=self.task_pubsub_name, exchange_type='direct')
+        self.publish(task_id,data)
+        # host, port = self.rabbitmq_url.split(':')
+        # connection = pika.BlockingConnection(pika.ConnectionParameters(host))
+        # channel = connection.channel()
+        # channel.exchange_declare(exchange=self.task_pubsub_name, exchange_type='direct')
 
-        message = json.dumps({'task_id': task_id, 'data': data})
-        channel.basic_publish(exchange=self.task_pubsub_name, routing_key=task_id, body=message)
-        connection.close()
+        # message = json.dumps({'task_id': task_id, 'data': data})
+        # channel.basic_publish(exchange=self.task_pubsub_name, routing_key=task_id, body=message)
+        # connection.close()
 
     def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False):
-        host, port = self.rabbitmq_url.split(':')
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host))
-        channel = connection.channel()
-        channel.exchange_declare(exchange=self.task_pubsub_name, exchange_type='direct')
+        self.subscribe(task_id,data_callback,eternal)
+        # host, port = self.rabbitmq_url.split(':')
+        # connection = pika.BlockingConnection(pika.ConnectionParameters(host))
+        # channel = connection.channel()
+        # channel.exchange_declare(exchange=self.task_pubsub_name, exchange_type='direct')
 
-        result = channel.queue_declare(queue='', exclusive=True)
-        queue_name = result.method.queue
-        channel.queue_bind(exchange=self.task_pubsub_name, queue=queue_name, routing_key=task_id)
+        # result = channel.queue_declare(queue='', exclusive=True)
+        # queue_name = result.method.queue
+        # channel.queue_bind(exchange=self.task_pubsub_name, queue=queue_name, routing_key=task_id)
 
-        def listen():
-            def callback(ch, method, properties, body):
-                if self.get_task_status(task_id) in celery.states.READY_STATES:
-                    channel.stop_consuming()
-                    connection.close()
-                    return
+        # def listen():
+        #     def callback(ch, method, properties, body):
+        #         if self.get_task_status(task_id) in celery.states.READY_STATES:
+        #             channel.stop_consuming()
+        #             connection.close()
+        #             return
                 
-                message = json.loads(body)
-                if message['task_id'] == task_id:
-                    data_callback(message['data'])
-                    if not eternal:
-                        channel.stop_consuming()
-                        connection.close()
-                        return
+        #         message = json.loads(body)
+        #         if message['task_id'] == task_id:
+        #             data_callback(message['data'])
+        #             if not eternal:
+        #                 channel.stop_consuming()
+        #                 connection.close()
+        #                 return
                 
-                if self.get_task_status(task_id) in celery.states.READY_STATES:
-                    channel.stop_consuming()
-                    connection.close()
-                    return
+        #         if self.get_task_status(task_id) in celery.states.READY_STATES:
+        #             channel.stop_consuming()
+        #             connection.close()
+        #             return
 
-            channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
-            channel.start_consuming()
+        #     channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
+        #     channel.start_consuming()
 
-        listener_thread = threading.Thread(target=listen)
-        listener_thread.daemon = True
-        listener_thread.start()
+        # listener_thread = threading.Thread(target=listen)
+        # listener_thread.daemon = True
+        # listener_thread.start()
 
     def get_celery_app(self):
         return celery.Celery(self.mongo_db, broker=self.celery_rabbitmq_broker,
@@ -126,7 +290,7 @@ class RabbitmqMongoApp(AppInterface):
             client = MongoClient(url, serverSelectionTimeoutMS=2000)
             client.admin.command('ping')
             return True
-        except ConnectionFailure:
+        except pymongo.errors.ConnectionFailure:
             return False
 
     def check_services(self) -> bool:
@@ -185,11 +349,13 @@ class RabbitmqMongoApp(AppInterface):
             res = {'error': 'Task not found'}
         return res
 
-class RedisApp(AppInterface):
+class RedisApp(AppInterface, RedisPubSub):
     def __init__(self, redis_url):
+        super().__init__(redis_url)
         self.redis_url = redis_url
         self._redis_client = None
         self._store = None
+        self.start_listener()
 
     def redis_client(self):
         if self._redis_client is None:
@@ -201,33 +367,35 @@ class RedisApp(AppInterface):
             self._store = SingletonKeyValueStorage().redis_backend()
         return self._store
 
-    def send_data_to_task(self, task_id, data):
-        message = json.dumps({'task_id': task_id, 'data': data})
-        self.redis_client().publish(task_id, message)
+    def send_data_to_task(self, task_id, data):        
+        self.publish(task_id,data)
+        # message = json.dumps({'task_id': task_id, 'data': data})
+        # self.redis_client().publish(task_id, message)
 
     def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False):
-        pubsub = self.redis_client().pubsub()
-        pubsub.subscribe(task_id)
+        self.subscribe(task_id,data_callback,eternal)
+        # pubsub = self.redis_client().pubsub()
+        # pubsub.subscribe(task_id)
 
-        def listen():
-            for message in pubsub.listen():
-                if self.get_task_status(task_id) in celery.states.READY_STATES:
-                    break
+        # def listen():
+        #     for message in pubsub.listen():
+        #         if self.get_task_status(task_id) in celery.states.READY_STATES:
+        #             break
 
-                if message['type'] == 'message':
-                    data = json.loads(message['data'])
-                    data_callback(data['data'])
-                    if not eternal:
-                        break
+        #         if message['type'] == 'message':
+        #             data = json.loads(message['data'])
+        #             data_callback(data['data'])
+        #             if not eternal:
+        #                 break
 
-                if self.get_task_status(task_id) in celery.states.READY_STATES:
-                    break
+        #         if self.get_task_status(task_id) in celery.states.READY_STATES:
+        #             break
             
-            pubsub.unsubscribe(task_id)
+        #     pubsub.unsubscribe(task_id)
 
-        listener_thread = threading.Thread(target=listen)
-        listener_thread.daemon = True
-        listener_thread.start()
+        # listener_thread = threading.Thread(target=listen)
+        # listener_thread.daemon = True
+        # listener_thread.start()
 
     def get_celery_app(self):
         return celery.Celery('tasks', broker=self.redis_url, backend=self.redis_url)
@@ -357,11 +525,11 @@ class AbstractObj(BaseModel):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        print(f'BasicApp.store().set({self.id},{self.__class__.__name__})')
+        # print(f'BasicApp.store().set({self.id},{self.__class__.__name__})')
         ServiceOrientedArchitecture.BasicApp.store().set(self.id,self.model_dump_json_dict())
     
     def __obj_del__(self):
-        print(f'BasicApp.store().delete({self.id})')
+        # print(f'BasicApp.store().delete({self.id})')
         ServiceOrientedArchitecture.BasicApp.store().delete(self.id)
     def __del__(self):
         self.__obj_del__()
