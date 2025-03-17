@@ -1,5 +1,7 @@
 from contextlib import contextmanager
 from datetime import datetime
+import io
+import logging
 from multiprocessing import shared_memory
 from typing import Any
 from uuid import uuid4
@@ -11,7 +13,7 @@ import json
 
 import numpy as np
 import pymongo
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 from pymongo import MongoClient
 import pymongo.errors
 import redis
@@ -472,10 +474,87 @@ class ServiceOrientedArchitecture:
             pass
         class Return(BaseModel):
             pass
+        class Logger(BaseModel):
+            pass
 
+        class Logger(BaseModel):
+            name: str  = "service" # Logger name
+            level: str = "INFO"  # Default log level
+            logs:str = ''
+
+            _log_buffer: io.StringIO = PrivateAttr()
+            _logger: logging.Logger = PrivateAttr()
+
+            def init(self,name:str=None):
+                if name is None:
+                    name = self.name
+                # Create a StringIO buffer for in-memory logging
+                self._log_buffer = io.StringIO()
+
+                # Configure logging
+                self._logger = logging.getLogger(name)
+                self._logger.setLevel(getattr(logging, self.level.upper(), logging.INFO))
+
+                # Formatter for log messages
+                formatter = logging.Formatter('%(asctime)s [%(name)s:%(levelname)s] %(message)s')
+
+                # In-Memory Handler
+                memory_handler = logging.StreamHandler(self._log_buffer)
+                memory_handler.setFormatter(formatter)
+                self._logger.addHandler(memory_handler)
+
+                # Console Handler (Optional, remove if not needed)
+                console_handler = logging.StreamHandler()
+                console_handler.setFormatter(formatter)
+                self._logger.addHandler(console_handler)
+                return self
+
+            def log(self, level: str, message: str):
+                """Logs a message at the specified level."""
+                log_method = getattr(self._logger, level.lower(), None)
+                if callable(log_method):
+                    log_method(message)
+                else:
+                    self._logger.error(f"Invalid log level: {level}")
+
+            def info(self, message: str):
+                """Logs an info message."""
+                self._logger.info(message)
+                self.save_logs()
+
+            def warning(self, message: str):
+                """Logs a warning message."""
+                self._logger.warning(message)
+                self.save_logs()
+
+            def error(self, message: str):
+                """Logs an error message."""
+                self._logger.error(message)
+                self.save_logs()
+
+            def debug(self, message: str):
+                """Logs a debug message."""
+                self._logger.debug(message)
+                self.save_logs()
+
+            def get_logs(self) -> str:
+                """Returns all logged messages stored in memory."""
+                return self._log_buffer.getvalue()
+            
+            def save_logs(self) -> str:
+                self.logs = self.get_logs()
+                return self.logs
+
+            def clear_logs(self):
+                """Clears the in-memory log buffer."""
+                self._log_buffer.truncate(0)
+                self._log_buffer.seek(0)
+                
         param:Param = Param()
         args:Args = Args()
         ret:Return = Return()
+        logger:Logger = Logger()
+
     class Action:
         def __init__(self, model):
             if isinstance(model, dict):
