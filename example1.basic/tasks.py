@@ -140,7 +140,7 @@ class CeleryTask(BasicCeleryTask):
 
         return {
             "task_id": task.id,
-            "scheduled_for_local": local_dt.isoformat(),
+            f"scheduled_for_{timezone}": local_dt.isoformat(),
             "scheduled_for_utc": execution_time_utc.isoformat(),
             "timezone": timezone
         }
