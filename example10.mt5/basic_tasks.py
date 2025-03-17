@@ -6,6 +6,7 @@ import pytz
 sys.path.append("..")
 
 from celery.app import task as Task
+from celery.signals import task_received
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -91,6 +92,14 @@ else:
          
 celery_app = BasicApp.get_celery_app()
 
+@task_received.connect
+def on_task_received(*args, **kwags):
+    request =  kwags.get('request')
+    if request is None:return
+    message =  request.__dict__['_message'].__dict__
+    BasicApp.set_task_status(message['_raw']['headers']['id'],
+                             message['_raw']['headers']['argsrepr'],'RECEIVED')
+    
 api = FastAPI()
 
 api.add_middleware(
