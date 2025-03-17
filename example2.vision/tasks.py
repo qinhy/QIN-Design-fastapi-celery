@@ -2,6 +2,8 @@
 import datetime
 import sys
 from typing import Optional
+
+from fastapi.responses import HTMLResponse, RedirectResponse
 sys.path.append("..")
 
 from fastapi import HTTPException
@@ -19,6 +21,11 @@ BasicCeleryTask.ACTION_REGISTRY = {
 
 class CeleryTask(BasicCeleryTask):
     api = api
+    
+    @staticmethod
+    @api.get("/", response_class=HTMLResponse)
+    async def get_doc_page():
+        return RedirectResponse("/docs")
     
     ############################# general function specific api
     @api.get("/streams/write")

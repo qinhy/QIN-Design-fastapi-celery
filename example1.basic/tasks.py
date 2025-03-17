@@ -2,6 +2,8 @@ import datetime
 import sys
 import threading
 from typing import Literal, Optional
+
+from fastapi.responses import HTMLResponse, RedirectResponse
 sys.path.append("..")
 
 from celery import Task
@@ -96,7 +98,11 @@ BasicCeleryTask.ACTION_REGISTRY = {
 
 class CeleryTask(BasicCeleryTask):
     api = api
-
+    
+    @staticmethod
+    @api.get("/", response_class=HTMLResponse)
+    async def get_doc_page():
+        return RedirectResponse("/docs")
     ########################### basic function
     @staticmethod
     @celery_app.task(bind=True)
