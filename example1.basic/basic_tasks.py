@@ -1,8 +1,8 @@
 import datetime
+import os
 import sys
+import threading
 from typing import Literal, Optional
-
-import pytz
 sys.path.append("..")
 
 from celery.app import task as Task
@@ -10,9 +10,11 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel, Field
     
 from Task.Customs import ServiceOrientedArchitecture
 from Task.Basic import AppInterface,RedisApp,RabbitmqMongoApp
+from celery.signals import task_received
 
 def config():
     import os
@@ -91,6 +93,14 @@ else:
          
 celery_app = BasicApp.get_celery_app()
 
+@task_received.connect
+def on_task_received(*args, **kwags):
+    request =  kwags.get('request')
+    if request is None:return
+    message =  request.__dict__['_message'].__dict__
+    BasicApp.set_task_status(message['_raw']['headers']['id'],
+                             message['_raw']['headers']['argsrepr'],'RECEIVED')
+
 api = FastAPI()
 
 api.add_middleware(
@@ -111,50 +121,7 @@ def api_ok():
 class BasicCeleryTask:
     ACTION_REGISTRY: dict[str, ServiceOrientedArchitecture] = {}
     
-    @staticmethod
-    @api.get("/", response_class=HTMLResponse)
-    async def get_doc_page():
-        return RedirectResponse("/docs")
     ########################### essential function
-    @staticmethod
-    def convert_to_utc(execution_time: str, timezone: str):
-        """
-        Converts a given local datetime string to UTC.
-
-        Args:
-            execution_time (str): The datetime string in 'YYYY-MM-DDTHH:MM:SS' format.
-            timezone (str): The timezone name (e.g., 'Asia/Tokyo').
-
-        Returns:
-            datetime.datetime: The UTC datetime for Celery.
-
-        Raises:
-            HTTPException: If the timezone is invalid, the datetime format is incorrect,
-                        or if the execution time is in the past.
-        """
-        now_utc = datetime.datetime.now(datetime.timezone.utc)
-
-        # Validate timezone
-        if timezone not in pytz.all_timezones:
-            raise HTTPException(status_code=400, detail="Invalid timezone. Use a valid timezone name.")
-
-        # Parse the input datetime
-        try:
-            local_dt = datetime.datetime.strptime(execution_time, "%Y-%m-%dT%H:%M:%S")
-            local_tz = pytz.timezone(timezone)
-            local_dt = local_tz.localize(local_dt)  # Convert to timezone-aware datetime
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid datetime format. Use YYYY-MM-DDTHH:MM:SS")
-
-        # Convert to UTC for Celery
-        execution_time_utc = local_dt.astimezone(pytz.utc)
-
-        # Ensure execution time is in the future
-        if execution_time_utc <= now_utc:
-            raise HTTPException(status_code=400, detail="Execution time must be in the future.")
-
-        return local_dt,execution_time_utc
-    
     @staticmethod
     def is_json_serializable(value) -> bool:
         res = isinstance(value, (int, float, bool, str,
@@ -258,30 +225,6 @@ class BasicCeleryTask:
         if execution_time: res['scheduled_for'] = execution_time
         return res
     
-    @api.post("/action/{name}/schedule/")
-    def api_schedule_perform_action(
-        name: str, 
-        data: dict,
-        execution_time: str = Query(datetime.datetime.now(datetime.timezone.utc
-          ).isoformat().split('.')[0], description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"),
-        timezone: Literal["UTC", "Asia/Tokyo", "America/New_York", "Europe/London", "Europe/Paris",
-                        "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"] = Query("Asia/Tokyo", 
-                        description="Choose a timezone from the list")
-    ):
-        """API to execute Fibonacci task at a specific date and time, with timezone support."""
-        # Convert to UTC for Celery
-        local_dt,execution_time_utc = BasicCeleryTask.convert_to_utc(execution_time,timezone)
-        
-        # Schedule the task
-        task = BasicCeleryTask.perform_action.apply_async(args=[name, data], eta=execution_time_utc)
-
-        return {
-            "task_id": task.id,
-            f"scheduled_for_{timezone}": local_dt.isoformat(),
-            "scheduled_for_utc": execution_time_utc.isoformat(),
-            "timezone": timezone
-        }
-
 
 
 

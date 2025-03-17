@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
     
 from Task.Customs import ServiceOrientedArchitecture
 from Task.Basic import AppInterface,RedisApp,RabbitmqMongoApp
+from celery.signals import task_received
 
 def config():
     import os
@@ -92,6 +93,14 @@ else:
          
 celery_app = BasicApp.get_celery_app()
 
+@task_received.connect
+def on_task_received(*args, **kwags):
+    request =  kwags.get('request')
+    if request is None:return
+    message =  request.__dict__['_message'].__dict__
+    BasicApp.set_task_status(message['_raw']['headers']['id'],
+                             message['_raw']['headers']['argsrepr'],'RECEIVED')
+
 api = FastAPI()
 
 api.add_middleware(
@@ -112,10 +121,6 @@ def api_ok():
 class BasicCeleryTask:
     ACTION_REGISTRY: dict[str, ServiceOrientedArchitecture] = {}
     
-    @staticmethod
-    @api.get("/", response_class=HTMLResponse)
-    async def get_doc_page():
-        return RedirectResponse("/docs")
     ########################### essential function
     @staticmethod
     def is_json_serializable(value) -> bool:
