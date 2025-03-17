@@ -200,7 +200,7 @@ class AppInterface:
     def get_task_meta(self, task_id: str): raise NotImplementedError('get_task_meta')
     def get_task_status(self, task_id: str): raise NotImplementedError('get_task_status')
     def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'): raise NotImplementedError('set_task_started')
-    def set_task_revoked(self, task_id): raise NotImplementedError('set_task_revoked')
+    def set_task_status(self, task_id, result='', status=celery.states.STARTED): raise NotImplementedError('set_task_status')
 
 class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
     def __init__(self, rabbitmq_url:str, rabbitmq_user:str, rabbitmq_password:str, 
@@ -331,25 +331,28 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
     def get_task_status(self, task_id: str):
         return self.get_task_meta(task_id).get('status', None)
 
-    def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'):
+    def set_task_status(self, task_id, result='', status=celery.states.STARTED):
         collection = self.get_tasks_collection()
         collection.update_one(
-            {'_id': task_model.task_id},
+            {'_id': task_id},
             {'$set': {
-                'status': celery.states.STARTED,
-                'result': task_model.model_dump_json()
+                'status': status,
+                'result': result
             }},
             upsert=True
         )
 
-    def set_task_revoked(self, task_id):
-        collection = self.get_tasks_collection()
-        update_result = collection.update_one({'_id': task_id}, {'$set': {'status': 'REVOKED'}})
-        if update_result.matched_count > 0:
-            res = collection.find_one({'_id': task_id})
-        else:
-            res = {'error': 'Task not found'}
-        return res
+    def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'):
+        self.set_task_status(task_model.task_id,task_model.model_dump_json(),celery.states.STARTED)
+
+    # def set_task_status(self, task_id, result='', status=celery.states.STARTED):
+    #     collection = self.get_tasks_collection()
+    #     update_result = collection.update_one({'_id': task_id}, {'$set': {'status': 'REVOKED'}})
+    #     if update_result.matched_count > 0:
+    #         res = collection.find_one({'_id': task_id})
+    #     else:
+    #         res = {'error': 'Task not found'}
+    #     return res
 
 class RedisApp(AppInterface, RedisPubSub):
     def __init__(self, redis_url):
@@ -442,27 +445,30 @@ class RedisApp(AppInterface, RedisPubSub):
     def get_task_status(self, task_id: str):
         return self.get_task_meta(task_id).get('status', None)
 
-    def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'):
+    def set_task_status(self, task_id, result='', status=celery.states.STARTED):
         """Marks a task as started in Redis."""
-        task_key = f'celery-task-meta-{task_model.task_id}'
+        task_key = f'celery-task-meta-{task_id}'
         task_data = {
-            'task_id': task_model.task_id,
-            'status': celery.states.STARTED,
-            'result': task_model.model_dump_json()  # Assuming `task_model` has this method
+            'task_id': task_id,
+            'status': status,
+            'result': result
         }
         self.redis_client().set(task_key, json.dumps(task_data))
 
-    def set_task_revoked(self, task_id):
-        """Marks a task as revoked in Redis."""
-        task_key = f'celery-task-meta-{task_id}'
-        task_data_json = self.redis_client().get(task_key)
-        if task_data_json:
-            task_data = json.loads(task_data_json)
-            task_data['status'] = 'REVOKED'
-            self.redis_client().set(task_key, json.dumps(task_data))
-            return task_data
-        else:
-            return {'error': 'Task not found'}
+    def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'):
+        self.set_task_status(task_model.task_id,task_model.model_dump_json(),celery.states.STARTED)
+
+    # def set_task_status(self, task_id, result='', status=celery.states.STARTED):
+    #     """Marks a task as revoked in Redis."""
+    #     task_key = f'celery-task-meta-{task_id}'
+    #     task_data_json = self.redis_client().get(task_key)
+    #     if task_data_json:
+    #         task_data = json.loads(task_data_json)
+    #         task_data['status'] = 'REVOKED'
+    #         self.redis_client().set(task_key, json.dumps(task_data))
+    #         return task_data
+    #     else:
+    #         return {'error': 'Task not found'}
 
 class ServiceOrientedArchitecture:
     BasicApp:AppInterface = None
@@ -576,7 +582,7 @@ class ServiceOrientedArchitecture:
             # Function to check if the task should be stopped, running in a separate thread
             def check_task_status(data:dict,task_id=task_id):
                 if data.get('status',None) == celery.states.REVOKED:
-                    ServiceOrientedArchitecture.BasicApp.set_task_revoked(task_id)
+                    ServiceOrientedArchitecture.BasicApp.set_task_status(task_id)
                     stop_flag.set()
             ServiceOrientedArchitecture.BasicApp.listen_data_of_task(task_id,check_task_status,True)
             
