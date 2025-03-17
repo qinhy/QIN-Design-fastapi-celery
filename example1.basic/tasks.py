@@ -1,13 +1,15 @@
+import datetime
 import os
 import sys
+from typing import Literal, Optional
 sys.path.append("..")
 
 from celery.app import task as Task
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel, Field
     
 from Task.Customs import ServiceOrientedArchitecture
 from Task.Basic import AppInterface,RedisApp,RabbitmqMongoApp
@@ -91,13 +93,16 @@ class Fibonacci(ServiceOrientedArchitecture):
     class Model(ServiceOrientedArchitecture.Model):
         
         class Param(BaseModel):
-            mode: str = 'fast'
+            mode: Literal['fast', 'slow'] = Field("fast", description="Execution mode, either 'fast' or 'slow'")
+
             def is_fast(self):
-                return self.mode=='fast'
+                return self.mode == 'fast'
+
         class Args(BaseModel):
-            n: int = 1
+            n: int = Field(1, description="The position of the Fibonacci number to compute")
+
         class Return(BaseModel):
-            n: int = -1
+            n: int = Field(-1, description="The computed Fibonacci number at position n")
 
         param:Param = Param()
         args:Args
@@ -209,51 +214,100 @@ class CeleryTask:
     @celery_app.task(bind=True)
     def fibonacci(t: Task, fib_task_model_dump: dict) -> int:
         """Celery task to calculate the nth Fibonacci number."""
-        fib_task_model_dump['task_id'] = t.request.id
         model = Fibonacci.Model(**fib_task_model_dump)
+        model.task_id=t.request.id
         model = Fibonacci.Action(model)()
-        res: Fibonacci.Model.Return = model.ret
-        # make sure that res is dict or other primitive objects for json serialization
-        return CeleryTask.is_json_serializable(res.model_dump())
+        return CeleryTask.is_json_serializable(model.ret.model_dump())
 
     @api.post("/fibonacci/")
-    def api_fibonacci(fib_task: Fibonacci.Model):
+    def api_fibonacci(fib_task: Fibonacci.Model,                      
+        eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")
+    ):
         api_ok()
-        task = CeleryTask.fibonacci.delay(fib_task.model_dump())
-        return {'task_id': task.id}
+        # Calculate execution time (eta)
+        now_t = datetime.datetime.now(datetime.timezone.utc)
+        execution_time = now_t + datetime.timedelta(seconds=eta) if eta > 0 else None
+
+        task = CeleryTask.fibonacci.apply_async(args=[fib_task.model_dump()], eta=execution_time)
+        
+        res = {'task_id': task.id}
+        if execution_time: res['scheduled_for'] = execution_time
+        return res
     
-    ############################# general function
+    ############################# general function    
+    ACTION_REGISTRY: dict[str, ServiceOrientedArchitecture] = {
+        'Fibonacci': Fibonacci,
+    }
+
     @celery_app.task(bind=True)
     def perform_action(t: Task, name: str, data: dict) -> int:
         """Generic Celery task to execute any registered action."""
         action_name, action_data = name, data
-        ACTION_REGISTRY: dict[str, ServiceOrientedArchitecture] = {
-            'Fibonacci': Fibonacci,
-        }
-        if action_name not in ACTION_REGISTRY:
+        if action_name not in CeleryTask.ACTION_REGISTRY:
             raise ValueError(f"Action '{action_name}' is not registered.")
 
         # Initialize the action model and action handler
-        class_space = ACTION_REGISTRY[action_name]
+        class_space = CeleryTask.ACTION_REGISTRY[action_name]
         model_instance = class_space.Model(**action_data)
-        model_instance.task_id = t.request.id
-        action_instance = class_space.Action(model_instance)
-        res = action_instance().model_dump()
-        return CeleryTask.is_json_serializable(res)
+        model_instance.task_id=t.request.id
+        model_instance = class_space.Action(model_instance)()
+        return CeleryTask.is_json_serializable(model_instance.model_dump())
 
-    @api.post("/action/perform")
-    def api_perform_action(action: dict = dict(
-            name='Fibonacci', data=dict(args=dict(n=10)))):
+
+    @api.get("/action/list")
+    def api_perform_action_list():
+        """Returns a list of all available actions that can be performed."""
         api_ok()
-        task = CeleryTask.perform_action.delay(action['name'], action['data'])
-        return {'task_id': task.id}
+        available_actions = []
+        for k,v in CeleryTask.ACTION_REGISTRY.items():
+            model_schema = {}
+            for kk,vv in zip(['param','args','ret'],[v.Model.Param,v.Model.Args,v.Model.Return]):
+                schema = vv.model_json_schema()
+                model_schema.update({
+                    kk: {
+                        key: {
+                            "type": value["type"],
+                            "description": value.get("description", "")
+                        }
+                        for key, value in schema["properties"].items() if 'type' in value
+                    },
+                    f"{kk}_required": schema.get("required", [])
+                })
+            available_actions.append({k:model_schema})
+        return {"available_actions": available_actions}
 
-    ############################# general function specific api
-
-    @api.post("/actions/fibonacci")
-    def api_actions_fibonacci(data: Fibonacci.Model):
+    @api.post("/action/{name}")
+    def api_perform_action(
+        name: str, 
+        data: dict,
+        eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")
+    ):
+        """API endpoint to execute a generic action asynchronously with optional delay."""
         api_ok()
-        """Endpoint to calculate Fibonacci number asynchronously using Celery."""
-        act = dict(name='Fibonacci', data=data.model_dump())
-        task = CeleryTask.perform_action.delay(**act)
-        return {'task_id': task.id}
+
+        # Validate that the requested action exists
+        if name not in CeleryTask.ACTION_REGISTRY:
+            return {"error": f"Action '{name}' is not available."}
+
+        # Calculate execution time (eta)
+        now_t = datetime.datetime.now(datetime.timezone.utc)
+        execution_time = now_t + datetime.timedelta(seconds=eta) if eta > 0 else None
+
+        # Schedule the task
+        task = CeleryTask.perform_action.apply_async(args=[name, data], eta=execution_time)
+        res = {'task_id': task.id}
+        if execution_time: res['scheduled_for'] = execution_time
+        return res
+    
+
+
+
+
+
+
+
+
+
+
+
+    
