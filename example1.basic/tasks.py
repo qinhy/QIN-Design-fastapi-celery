@@ -131,6 +131,7 @@ class CeleryTask(BasicCeleryTask):
                         "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"] = Query("Asia/Tokyo", 
                         description="Choose a timezone from the list")
     ):
+        api_ok()
         """API to execute Fibonacci task at a specific date and time, with timezone support."""
         # Convert to UTC for Celery
         local_dt,execution_time_utc = CeleryTask.convert_to_utc(execution_time,timezone)
