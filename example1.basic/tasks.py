@@ -2,10 +2,12 @@ import datetime
 import sys
 import threading
 from typing import Literal, Optional
+
+import pytz
 sys.path.append("..")
 
 from celery import Task
-from fastapi import Query
+from fastapi import HTTPException, Query
 from pydantic import BaseModel, Field
 
 from Task.Basic import ServiceOrientedArchitecture
@@ -122,11 +124,28 @@ class CeleryTask(BasicCeleryTask):
         if execution_time: res['scheduled_for'] = execution_time
         return res
     
+    @api.post("/fibonacci/schedule/")
+    def api_schedule_fibonacci(
+        fib_task: Fibonacci.Model,
+        execution_time: str = Query(datetime.datetime.now(datetime.timezone.utc
+          ).isoformat().split('.')[0], description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"),
+        timezone: Literal["UTC", "Asia/Tokyo", "America/New_York", "Europe/London", "Europe/Paris",
+                        "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"] = Query("Asia/Tokyo", 
+                        description="Choose a timezone from the list")
+    ):
+        """API to execute Fibonacci task at a specific date and time, with timezone support."""
+        # Convert to UTC for Celery
+        local_dt,execution_time_utc = CeleryTask.convert_to_utc(execution_time,timezone)
+        
+        # Schedule the task in UTC
+        task = CeleryTask.fibonacci.apply_async(args=[fib_task.model_dump()], eta=execution_time)
 
-
-
-
-
+        return {
+            "task_id": task.id,
+            "scheduled_for_local": local_dt.isoformat(),
+            "scheduled_for_utc": execution_time_utc.isoformat(),
+            "timezone": timezone
+        }
 
 
 
