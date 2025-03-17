@@ -7,9 +7,8 @@ sys.path.append("..")
 from fastapi import HTTPException
 from fastapi import Query
 
-from basic_tasks import BasicApp, BasicCeleryTask, api, api_ok
+from basic_tasks import BasicApp, BasicCeleryTask, celery_app, api, api_ok
 
-from Task.Customs import ServiceOrientedArchitecture
 from Task.Basic import ServiceOrientedArchitecture
 ServiceOrientedArchitecture.BasicApp = BasicApp
 from Vision import Service as VisonService
