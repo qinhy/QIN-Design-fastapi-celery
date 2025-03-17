@@ -1,7 +1,198 @@
+from Storages.Storage import EventDispatcherController, PythonDictStorage
+import uuid
+import unittest
+import json
+import threading
+import pika
+import threading
+import json
+import redis
+from uuid import uuid4
+
+class PubSubInterface(EventDispatcherController):
+    ROOT_KEY = 'PubSub'
+    
+    def subscribe(self, topic: str, callback, id: str = None):
+        """Subscribe to a topic with a given callback."""
+        if id is None:
+            id = str(uuid.uuid4())
+        self.set(f'{PubSubInterface.ROOT_KEY}:{topic}:{id}', callback)
+        return id
+    
+    def unsubscribe(self, id: str):
+        """Unsubscribe from a topic using the given id."""
+        keys = self.keys(f'{PubSubInterface.ROOT_KEY}:*:{id}')
+        if len(keys)==1:
+            key = keys[0]
+            if self.exists(key):
+                self.delete(key)
+                return True
+        return False
+    
+    def publish(self, topic: str, data:dict):
+         raise NotImplementedError('publish')
+
+    def get_subscribers(self, topic: str):
+        """Retrieve all subscribers for a given topic."""
+        return [(sub_key, self.get(sub_key)) for sub_key in self.keys(f'{PubSubInterface.ROOT_KEY}:{topic}:*')]
+    
+    def clear_topic(self, topic: str):
+        """Remove all subscribers from a specific topic."""
+        for sub_key in self.keys(f'{PubSubInterface.ROOT_KEY}:{topic}:*'):
+            self.delete(sub_key)
+
+
+class RabbitmqPubSub(PubSubInterface):
+    def __init__(self, rabbitmq_url:str, rabbitmq_user:str, rabbitmq_password:str,
+                 task_pubsub_name:str='RabbitmqPubSub'):
+        super().__init__(PythonDictStorage())
+        self.rabbitmq_url = rabbitmq_url
+        self.rabbitmq_user = rabbitmq_user
+        self.rabbitmq_password = rabbitmq_password
+        self.task_pubsub_name = task_pubsub_name
+        self.connection = None
+        self.channel = None
+        self.uuid = str(self.model.uuid)
+    
+    def _conn(self):        
+        host, port = self.rabbitmq_url.split(':')
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host,port))
+        channel = connection.channel()
+        channel.exchange_declare(exchange=self.task_pubsub_name, exchange_type='direct')
+        return connection,channel
+
+    def publish(self, topic: str, data: dict):
+        connection,channel = self._conn()
+        message = json.dumps({'topic': topic, 'data': data})
+        channel.basic_publish(exchange=self.task_pubsub_name, routing_key=self.uuid, body=message)
+        connection.close()
+
+    def start_listener(self):
+        connection,channel = self._conn()
+        self.connection = connection
+        self.channel = channel
+
+        result = self.channel.queue_declare(queue='', exclusive=True)
+        queue_name = result.method.queue
+        self.channel.queue_bind(exchange=self.task_pubsub_name, queue=queue_name, routing_key=self.uuid)
+
+        self.listener_thread = threading.Thread(target=self.listen_data_of_topic, args=(queue_name,), daemon=True)
+        self.listener_thread.start()
+
+    def listen_data_of_topic(self, queue_name):
+        def callback(ch, method, properties, body):
+            message:dict = json.loads(body)
+            topic = message.get('topic')
+            if not topic: return
+                            
+            for sub_key, subscriber in self.get_subscribers(topic):
+                if callable(subscriber): subscriber(message['data'])
+
+        self.channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
+        self.channel.start_consuming()
+
+    def stop_listener(self):
+        self.channel.stop_consuming()
+        self.connection.close()
+
+
+class RedisPubSub(PubSubInterface):
+    def __init__(self, redis_host: str, redis_port: int = 6379, redis_db: int = 0, redis_password: str = None,
+                 task_pubsub_name: str = 'RedisPubSub'):
+        super().__init__(PythonDictStorage())
+        self.redis_host = redis_host
+        self.redis_port = redis_port
+        self.redis_db = redis_db
+        self.redis_password = redis_password
+        self.task_pubsub_name = task_pubsub_name
+        self.uuid = str(uuid4())
+
+        # Establish Redis connection
+        self.redis_client = redis.Redis(
+            host=self.redis_host,
+            port=self.redis_port,
+            db=self.redis_db,
+            password=self.redis_password,
+            decode_responses=True
+        )
+        self.pubsub = self.redis_client.pubsub()
+        self.listener_thread = None
+
+    def publish(self, topic: str, data: dict):
+        """Publish a message to a topic."""
+        message = json.dumps({'topic': topic, 'data': data})
+        self.redis_client.publish(topic, message)
+
+    def start_listener(self):
+        """Start listening to subscribed topics in a separate thread."""
+        self.listener_thread = threading.Thread(target=self.listen_data_of_topic, daemon=True)
+        self.listener_thread.start()
+
+    def listen_data_of_topic(self):
+        """Continuously listen for messages on subscribed topics."""
+        for message in self.pubsub.listen():
+            if message["type"] == "message":
+                data = json.loads(message["data"])
+                topic = data.get('topic')
+                if not topic:
+                    continue
+                
+                for sub_key, subscriber in self.get_subscribers(topic):
+                    if callable(subscriber):
+                        subscriber(data['data'])
+
+    def subscribe(self, topic: str, callback, id: str = None):
+        """Subscribe to a topic and listen for messages."""
+        sub_id = super().subscribe(topic, callback, id)
+        self.pubsub.subscribe(topic)  # Subscribe to Redis channel
+        return sub_id
+
+    def unsubscribe(self, id: str):
+        """Unsubscribe from a topic and remove Redis subscription."""
+        keys = self.keys(f'{PubSubInterface.ROOT_KEY}:*:{id}')
+        if len(keys) == 1:
+            topic = keys[0].split(":")[1]  # Extract topic name
+            self.pubsub.unsubscribe(topic)  # Unsubscribe from Redis
+            return super().unsubscribe(id)
+        return False
+
+    def stop_listener(self):
+        """Stop the Redis listener."""
+        if self.pubsub:
+            self.pubsub.close()
+        if self.listener_thread and self.listener_thread.is_alive():
+            self.listener_thread.join()
+
+
+rabbitmq_url = "localhost:5672"
+rabbitmq_user = "guest"
+rabbitmq_password = "guest"
+pubsub = RabbitmqPubSub(rabbitmq_url, rabbitmq_user, rabbitmq_password)
+pubsub.start_listener()
+topic = "test_topic"
+data = {"key": "value"}
+pubsub.subscribe(topic, lambda data:print('get',data))
+pubsub.publish(topic, data)
+# pubsub.stop_listener()
+
+
+def message_handler(data):
+    print(f"Received message: {data}")
+redis_pubsub = RedisPubSub(redis_host="localhost")
+sub_id = redis_pubsub.subscribe("test_topic", message_handler)
+redis_pubsub.start_listener()
+redis_pubsub.publish("test_topic", {"message": "Hello, Redis PubSub!"})
+
+
+
+
+
+
+
+
+
 from contextlib import contextmanager
 from datetime import datetime
-import io
-import logging
 from multiprocessing import shared_memory
 from typing import Any
 from uuid import uuid4
@@ -13,7 +204,7 @@ import json
 
 import numpy as np
 import pymongo
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, Field
 from pymongo import MongoClient
 import pymongo.errors
 import redis
@@ -54,9 +245,10 @@ class PubSubInterface:
          raise NotImplementedError('publish')
 
     def call_subscribers(self,topic,data:dict):
+        print('call_subscribers',topic,data)
         for sub_key, subscriber in self.get_subscribers(topic):
             if callable(subscriber):
-                subscriber(data)
+                subscriber(data['data'])
                 if not self._event_disp.get(f'{sub_key}:eternal'):
                     self._event_disp.delete(sub_key)
 
@@ -64,12 +256,7 @@ class PubSubInterface:
         """Retrieve all subscribers for a given topic."""
         return [(sub_key, self._event_disp.get(sub_key)) for sub_key in self._event_disp.keys(f'{PubSubInterface.ROOT_KEY}:{topic}:*')]
     
-    def get_topics(self):
-        ts = [k for k in self._event_disp.keys(f'{PubSubInterface.ROOT_KEY}:*')]
-        ts = [k.split(':')[1] for k in ts]
-        return ts
-
-    def clear_subscribers(self, topic: str):
+    def clear_topic(self, topic: str):
         """Remove all subscribers from a specific topic."""
         for sub_key in self._event_disp.keys(f'{PubSubInterface.ROOT_KEY}:{topic}:*'):
             self._event_disp.delete(sub_key)
@@ -88,8 +275,7 @@ class RabbitmqPubSub(PubSubInterface):
     
     def _conn(self):        
         host, port = self.rabbitmq_url.split(':')
-        print(host, port)
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host))
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host,port))
         channel = connection.channel()
         channel.exchange_declare(exchange=self.task_pubsub_name, exchange_type='direct')
         return connection,channel
@@ -97,7 +283,7 @@ class RabbitmqPubSub(PubSubInterface):
     def publish(self, topic: str, data: dict):
         connection,channel = self._conn()
         message = json.dumps({'topic': topic, 'data': data})
-        channel.basic_publish(exchange=self.task_pubsub_name, routing_key=self.ROOT_KEY, body=message)
+        channel.basic_publish(exchange=self.task_pubsub_name, routing_key=self.uuid, body=message)
         connection.close()
 
     def start_listener(self):
@@ -107,7 +293,7 @@ class RabbitmqPubSub(PubSubInterface):
 
         result = self.channel.queue_declare(queue='', exclusive=True)
         queue_name = result.method.queue
-        self.channel.queue_bind(exchange=self.task_pubsub_name, queue=queue_name, routing_key=self.ROOT_KEY)
+        self.channel.queue_bind(exchange=self.task_pubsub_name, queue=queue_name, routing_key=self.uuid)
 
         self.listener_thread = threading.Thread(target=self.listen_data_of_topic, args=(queue_name,), daemon=True)
         self.listener_thread.start()
@@ -153,7 +339,8 @@ class RedisPubSub(PubSubInterface):
     def publish(self, topic: str, data: dict):
         """Publish a message to a topic."""
         message = json.dumps({'topic': topic, 'data': data})
-        self.redis_pubsub_client.publish(self.ROOT_KEY, message)
+        self.redis_pubsub_client.publish(self.uuid, message)
+        print('publish',self.uuid,topic,data)
 
     def start_listener(self):
         """Start listening to subscribed topics in a separate thread."""
@@ -162,12 +349,14 @@ class RedisPubSub(PubSubInterface):
 
     def listen_data_of_topic(self):
         """Continuously listen for messages on subscribed topics."""
-        self.pubsub.subscribe(self.ROOT_KEY)
-        for message in self.pubsub.listen():
+        self.pubsub.subscribe(self.uuid)
+        print('subscribe',self.uuid)
+        for message in self.pubsub.listen():            
+            print('subscribe get',self.uuid,message)
             if message["type"] == "message":
                 message:dict = json.loads(message["data"])
                 topic = message.get('topic')
-                if not topic:continue
+                if not topic:continue                
                 self.call_subscribers(topic,message.get('data'))
 
     def unsubscribe(self, id: str):
@@ -236,6 +425,8 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
 
     def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False):
         self.subscribe(task_id,data_callback,eternal)
+        print(self._event_disp.keys())
+        print(self._event_disp.keys())
         # host, port = self.rabbitmq_url.split(':')
         # connection = pika.BlockingConnection(pika.ConnectionParameters(host))
         # channel = connection.channel()
@@ -376,6 +567,7 @@ class RedisApp(AppInterface, RedisPubSub):
 
     def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False):
         self.subscribe(task_id,data_callback,eternal)
+        print(self._event_disp.keys())
         # pubsub = self.redis_client().pubsub()
         # pubsub.subscribe(task_id)
 
@@ -474,87 +666,10 @@ class ServiceOrientedArchitecture:
             pass
         class Return(BaseModel):
             pass
-        class Logger(BaseModel):
-            pass
 
-        class Logger(BaseModel):
-            name: str  = "service" # Logger name
-            level: str = "INFO"  # Default log level
-            logs:str = ''
-
-            _log_buffer: io.StringIO = PrivateAttr()
-            _logger: logging.Logger = PrivateAttr()
-
-            def init(self,name:str=None):
-                if name is None:
-                    name = self.name
-                # Create a StringIO buffer for in-memory logging
-                self._log_buffer = io.StringIO()
-
-                # Configure logging
-                self._logger = logging.getLogger(name)
-                self._logger.setLevel(getattr(logging, self.level.upper(), logging.INFO))
-
-                # Formatter for log messages
-                formatter = logging.Formatter('%(asctime)s [%(name)s:%(levelname)s] %(message)s')
-
-                # In-Memory Handler
-                memory_handler = logging.StreamHandler(self._log_buffer)
-                memory_handler.setFormatter(formatter)
-                self._logger.addHandler(memory_handler)
-
-                # Console Handler (Optional, remove if not needed)
-                console_handler = logging.StreamHandler()
-                console_handler.setFormatter(formatter)
-                self._logger.addHandler(console_handler)
-                return self
-
-            def log(self, level: str, message: str):
-                """Logs a message at the specified level."""
-                log_method = getattr(self._logger, level.lower(), None)
-                if callable(log_method):
-                    log_method(message)
-                else:
-                    self._logger.error(f"Invalid log level: {level}")
-
-            def info(self, message: str):
-                """Logs an info message."""
-                self._logger.info(message)
-                self.save_logs()
-
-            def warning(self, message: str):
-                """Logs a warning message."""
-                self._logger.warning(message)
-                self.save_logs()
-
-            def error(self, message: str):
-                """Logs an error message."""
-                self._logger.error(message)
-                self.save_logs()
-
-            def debug(self, message: str):
-                """Logs a debug message."""
-                self._logger.debug(message)
-                self.save_logs()
-
-            def get_logs(self) -> str:
-                """Returns all logged messages stored in memory."""
-                return self._log_buffer.getvalue()
-            
-            def save_logs(self) -> str:
-                self.logs = self.get_logs()
-                return self.logs
-
-            def clear_logs(self):
-                """Clears the in-memory log buffer."""
-                self._log_buffer.truncate(0)
-                self._log_buffer.seek(0)
-                
         param:Param = Param()
         args:Args = Args()
         ret:Return = Return()
-        logger:Logger = Logger()
-
     class Action:
         def __init__(self, model):
             if isinstance(model, dict):
@@ -575,6 +690,7 @@ class ServiceOrientedArchitecture:
             stop_flag = threading.Event()
             # Function to check if the task should be stopped, running in a separate thread
             def check_task_status(data:dict,task_id=task_id):
+                print(data)
                 if data.get('status',None) == celery.states.REVOKED:
                     ServiceOrientedArchitecture.BasicApp.set_task_revoked(task_id)
                     stop_flag.set()
@@ -604,11 +720,11 @@ class AbstractObj(BaseModel):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # print(f'BasicApp.store().set({self.id},{self.__class__.__name__})')
+        print(f'BasicApp.store().set({self.id},{self.__class__.__name__})')
         ServiceOrientedArchitecture.BasicApp.store().set(self.id,self.model_dump_json_dict())
     
     def __obj_del__(self):
-        # print(f'BasicApp.store().delete({self.id})')
+        print(f'BasicApp.store().delete({self.id})')
         ServiceOrientedArchitecture.BasicApp.store().delete(self.id)
     def __del__(self):
         self.__obj_del__()

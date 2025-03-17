@@ -64,35 +64,8 @@ class CvCameraSharedMemoryService(BidirectionalStreamService):
                 for i in nones:del model[i]
                 model = CvCameraSharedMemoryService.Model(**model)
             self.model: CvCameraSharedMemoryService.Model = model
+            self.logger = self.model.logger.init(name=f"CvCameraSharedMemoryService:{self.model.task_id}")
 
-        # def cv2_Random_gen(self, stop_flag:threading.Event, array_shape=(7680, 4320), fps=30):
-        #     # Define common resolutions
-        #     # resolutions = {
-        #     #     '8k': (7680, 4320),
-        #     #     '4k': (3840, 2160),
-        #     #     '1080p': (1920, 1080),
-        #     #     '720p': (1280, 720),
-        #     #     '480p': (640, 480)
-        #     # }
-
-        #     # # Get the resolution or default to 4k if size is not found
-        #     # resolution = resolutions.get(size, resolutions['4k'])
-
-        #     frame_time = 1.0 / fps  # Time per frame in seconds
-        #     random_frame:np.ndarray = np.random.randint(0, 256, array_shape, dtype=np.uint8)
-
-        #     while not stop_flag.is_set():
-        #         # Generate a random grayscale frame (values between 0-255)
-        #         # random_frame = np.random.randint(0, 256, (resolution[1], resolution[0]), dtype=np.uint8)
-                
-        #         # # Resize frame to match writer array shape
-        #         # resized_frame = cv2.resize(random_frame, (writer.array_shape[1], writer.array_shape[0]))
-
-        #         # Yield the random frame
-        #         yield random_frame
-
-        #         # Sleep to control frame rate
-        #         # time.sleep(frame_time)
 
         def __call__(self, *args, **kwargs):
             with self.listen_stop_flag() as stop_flag:
@@ -112,12 +85,12 @@ class CvCameraSharedMemoryService(BidirectionalStreamService):
                     # reading
                     reader = self.model.param.reader()
                     title = f'Shared Memory Reader Frame:{reader.id}'
-                    print("reading")
+                    self.logger.info("reading")
                     while not stop_flag.is_set():
                         # Read the frame from shared memory
                         frame,_ = reader.read()
                         if frame is None:
-                            print("No frame read from shared memory.")
+                            self.logger.info("No frame read from shared memory.")
                             continue
 
                         # Display the frame
@@ -126,7 +99,7 @@ class CvCameraSharedMemoryService(BidirectionalStreamService):
                         if cv2.waitKey(1) & 0xFF == ord('q'):
                             break
 
-                    cv2.destroyAllWindows()
+                    cv2.destroyWindow(title)
                 
                 return self.model
 
