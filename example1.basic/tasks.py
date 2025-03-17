@@ -2,12 +2,10 @@ import datetime
 import sys
 import threading
 from typing import Literal, Optional
-
-import pytz
 sys.path.append("..")
 
 from celery import Task
-from fastapi import HTTPException, Query
+from fastapi import Query
 from pydantic import BaseModel, Field
 
 from Task.Basic import ServiceOrientedArchitecture
