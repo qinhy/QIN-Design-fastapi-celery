@@ -8,7 +8,7 @@ sys.path.append("..")
 from celery.app import task as Task
 from fastapi import APIRouter, HTTPException, Query
 
-from Task.Basic import AppInterface, ServiceOrientedArchitecture
+from Task.Basic import AppInterface, ServiceOrientedArchitecture, TaskModel
 from celery.signals import task_received
 
 class BasicCeleryTask:
@@ -29,7 +29,7 @@ class BasicCeleryTask:
         self.router.get("/tasks/stop/{task_id}")(
                                     self.api_task_stop)
         self.router.get("/workers/")(
-                                    self.get_workers)
+                                    self.api_get_workers)
         self.router.get("/action/list")(
                                     self.api_perform_action_list)
         self.router.post("/action/{name}")(
@@ -129,7 +129,7 @@ class BasicCeleryTask:
         self.BasicApp.send_data_to_task(task_id,{'status': 'REVOKED'})
         # return self.BasicApp.set_task_revoked(task_id)
 
-    def get_workers(self,):
+    def api_get_workers(self,):
         # current_user: UserModels.User = Depends(AuthService.get_current_root_user)):
         self.api_ok()
         inspector = self.celery_app.control.inspect()
@@ -172,7 +172,7 @@ class BasicCeleryTask:
         name: str, 
         data: dict,
         eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")
-    ):
+    )->TaskModel:
         """API endpoint to execute a generic action asynchronously with optional delay."""
         self.api_ok()
 
@@ -186,8 +186,8 @@ class BasicCeleryTask:
 
         # Schedule the task
         task = self.perform_action.apply_async(args=[name, data], eta=execution_time)
-        res = {'task_id': task.id}
-        if execution_time: res['scheduled_for'] = execution_time
+        res = TaskModel(task_id=task.id)
+        if execution_time: res.scheduled_for_utc = execution_time
         return res
     
     def api_schedule_perform_action(self,
@@ -206,12 +206,12 @@ class BasicCeleryTask:
         # Schedule the task
         task = self.perform_action.apply_async(args=[name, data], eta=execution_time_utc)
 
-        return {
-            "task_id": task.id,
-            f"scheduled_for_{timezone}": local_dt.isoformat(),
-            "scheduled_for_utc": execution_time_utc.isoformat(),
-            "timezone": timezone
-        }
+        return TaskModel(
+            task_id=task.id,
+            scheduled_for_the_timezone=local_dt.isoformat(),
+            scheduled_for_utc=execution_time_utc.isoformat(),
+            timezone=timezone
+        )
 
 
 

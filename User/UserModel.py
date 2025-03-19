@@ -177,6 +177,7 @@ class UsersStore(BasicStore):
 
     def __init__(self) -> None:
         super().__init__()
+        self.tmp_user_uuids = {}
     
     def _get_class(self, id: str, modelclass=Model4User):
         return super()._get_class(id, modelclass)
@@ -197,8 +198,8 @@ class UsersStore(BasicStore):
         return self.find_all('User:*')
     
     def find_user_by_email(self,email)->Model4User.User:
-        user_uuid =  Model4User.User.static_gen_new_id(format_email(email))
-        return self.find(user_uuid)
+        self.tmp_user_uuids[email] = self.tmp_user_uuids.get(email,Model4User.User.static_gen_new_id(format_email(email)))
+        return self.find(self.tmp_user_uuids[email])
     
 
 def test():

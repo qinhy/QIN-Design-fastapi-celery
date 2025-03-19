@@ -1,18 +1,19 @@
+import datetime
 import os
 import sys
 sys.path.append("..")
 from config import *
 
 import threading
-from typing import Literal
+from typing import Literal, Optional
 from fastapi.responses import FileResponse
 from celery import Task
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Query
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from Task.Basic import AppInterface, RabbitmqMongoApp, RedisApp, ServiceOrientedArchitecture
+from Task.Basic import AppInterface, RabbitmqMongoApp, RedisApp, ServiceOrientedArchitecture, TaskModel
 from Task.BasicAPIs import BasicCeleryTask
 from User.UserAPIs import AuthService, UserModels, router as users_router
 
@@ -94,10 +95,27 @@ class CeleryTask(BasicCeleryTask):
     def __init__(self, BasicApp, celery_app,
                         ACTION_REGISTRY={'Fibonacci': Fibonacci,}):
         super().__init__(BasicApp, celery_app, ACTION_REGISTRY)
-        self.router.get("/")(self.get_doc_page)
-        # self.router.post("/fibonacci/")(self.api_fibonacci)
+        self.router.routes = []
+
+        self.router.get("/")(self.get_doc_page)        
+        self.router.get("/tasks/")(
+                                    self.api_auth_list_tasks)
+        self.router.get("/tasks/meta/{task_id}")(
+                                    self.api_auth_task_meta)
+        self.router.get("/tasks/stop/{task_id}")(
+                                    self.api_auth_task_stop)
+        self.router.get("/workers/")(
+                                    self.api_auth_get_workers)
+        self.router.get("/action/list")(
+                                    self.api_auth_perform_action_list)
+        self.router.post("/action/{name}")(
+                                    self.api_auth_perform_action)
+        self.router.post("/action/{name}/schedule/")(
+                                    self.api_auth_schedule_perform_action)
+        
+
         self.router.post("/auth/fibonacci/")(self.api_auth_fibonacci)
-        self.router.post("/auth/local/fibonacci/")(self.api_auth_except_local_fibonacci)
+        self.router.post("/auth/local/fibonacci/")(self.api_auth_fibonacci)
         
         @self.celery_app.task(bind=True)
         def fibonacci(t: Task, fib_task_model_dump: dict) -> int:
@@ -112,21 +130,65 @@ class CeleryTask(BasicCeleryTask):
     async def get_doc_page(self,):
         return FileResponse(os.path.join(os.path.dirname(__file__), "gui.html"))
     
-
-    ########################### basic function with auth
-    def api_auth_fibonacci(self, fib_task: Fibonacci.Model,
-                      current_payload: UserModels.User = Depends(AuthService.get_current_payload)):
-        self.api_ok()
-        task = self.fibonacci.delay(fib_task.model_dump())
-        return {'task_id': task.id}
+    def api_auth_list_tasks(self,
+        current_payload: UserModels.PayloadModel = Depends(AuthService.get_current_payload)):
+        user = UserModels.USER_DB.find_user_by_email(current_payload.email)
+        tasks_id = user.metadata.get('tasks_id',[])
+        return [self.BasicApp.get_task_meta(i) for i in tasks_id]
     
+    def api_auth_task_meta(self,task_id: str,
+        current_payload: UserModels.User = Depends(AuthService.get_current_payload)):
+        return self.api_task_meta(task_id)
     
-    def api_auth_except_local_fibonacci(self, fib_task: Fibonacci.Model,
-                      current_payload: UserModels.User = Depends(AuthService.get_current_payload_if_not_local)):
-        self.api_ok()
-        task = self.fibonacci.delay(fib_task.model_dump())
-        return {'task_id': task.id}
+    def api_auth_task_stop(self,task_id: str,
+        current_payload: UserModels.User = Depends(AuthService.get_current_payload)):
+        return self.api_task_stop(task_id)
+    
+    def api_auth_get_workers(self,
+        current_payload: UserModels.User = Depends(AuthService.get_current_payload)):
+        return self.api_get_workers()
+    
+    def api_auth_perform_action_list(self,
+        current_payload: UserModels.User = Depends(AuthService.get_current_payload)):
+        return self.api_perform_action_list()
+    
+    def _add_user_task(self,user_email:str,task:TaskModel):
+        user = UserModels.USER_DB.find_user_by_email(user_email)
+        tasks_id:list = user.metadata.get('tasks_id',[])
+        tasks_id.append(task.task_id)
+        user.metadata['tasks_id'] = tasks_id
+        user.get_controller().update(metadata=user.metadata)
 
+    def api_auth_perform_action(self,
+        name: str, 
+        data: dict,
+        eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)"),
+        current_payload: UserModels.PayloadModel = Depends(AuthService.get_current_payload)):
+        res = self.api_perform_action(name,data,eta)
+        self._add_user_task(current_payload.email,res)
+        return res
+    
+    def api_auth_schedule_perform_action(self,
+        name: str, 
+        data: dict,
+        execution_time: str = Query(datetime.datetime.now(datetime.timezone.utc
+          ).isoformat().split('.')[0], description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"),
+        timezone: Literal["UTC", "Asia/Tokyo", "America/New_York", "Europe/London", "Europe/Paris",
+                        "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"] = Query("Asia/Tokyo", 
+                        description="Choose a timezone from the list"),
+        current_payload: UserModels.User = Depends(AuthService.get_current_payload)):
+        res = self.api_schedule_perform_action(name,data,execution_time,timezone)
+        self._add_user_task(current_payload.email,res)        
+        return res
+    
+    ########################### basic function with auth    
+    async def api_auth_fibonacci(self, fib_task: Fibonacci.Model,                      
+        eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)"),
+        current_payload: UserModels.User = Depends(AuthService.get_current_payload)):
+        self.api_ok()
+        res = self.api_perform_action('Fibonacci',fib_task.model_dump(),eta)        
+        self._add_user_task(current_payload.email,res)
+        return res
 
 ########################################################
 api = FastAPI()

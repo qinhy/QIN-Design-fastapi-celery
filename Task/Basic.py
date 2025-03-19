@@ -3,7 +3,7 @@ from datetime import datetime
 import io
 import logging
 from multiprocessing import shared_memory
-from typing import Any
+from typing import Any, Optional
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -186,6 +186,15 @@ class RedisPubSub(PubSubInterface):
         if self.listener_thread and self.listener_thread.is_alive():
             self.listener_thread.join()
 
+class TaskModel(BaseModel):
+    task_id: str
+    status: Optional[str] = None
+    result: Optional[str] = None
+    date_done: Optional[datetime] = None
+    scheduled_for_the_timezone: Optional[str] = None
+    scheduled_for_utc: Optional[str] = None
+    timezone: Optional[str] = None
+
 class AppInterface:
     def redis_client(self) -> redis.Redis: raise NotImplementedError('redis_client')
     def store(self) -> SingletonKeyValueStorage: raise NotImplementedError('store')
@@ -196,7 +205,7 @@ class AppInterface:
     def check_rabbitmq_health(self, url=None, user='', password='') -> bool:('check_rabbitmq_health')
     def check_mongodb_health(self, url=None) -> bool:('check_mongodb_health')
     def get_tasks_collection(self): raise NotImplementedError('get_tasks_collection')
-    def get_tasks_list(self): raise NotImplementedError('get_tasks_list')
+    def get_tasks_list(self)->list[TaskModel]: raise NotImplementedError('get_tasks_list')
     def get_task_meta(self, task_id: str): raise NotImplementedError('get_task_meta')
     def get_task_status(self, task_id: str): raise NotImplementedError('get_task_status')
     def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'): raise NotImplementedError('set_task_started')
@@ -267,12 +276,12 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
         collection = self.get_tasks_collection()
         tasks = []
         for task in collection.find():
-            task_data = {
-                "task_id": task.get('_id'),
-                "status": task.get('status'),
-                "result": task.get('result'),
-                "date_done": task.get('date_done')
-            }
+            task_data = TaskModel(
+                task_id=task.get('_id'),
+                status=task.get('status'),
+                result=json.dumps(task.get('result')),
+                date_done=task.get('date_done')
+            )
             tasks.append(task_data)
         return tasks
 
@@ -349,12 +358,12 @@ class RedisApp(AppInterface, RedisPubSub):
             task_data_json = self.redis_client().get(key)
             if task_data_json:
                 task: dict = json.loads(task_data_json)
-                task_data = {
-                    "task_id": task.get('task_id'),
-                    "status": task.get('status'),
-                    "result": json.dumps(task.get('result')),
-                    "date_done": task.get('date_done')
-                }
+                task_data = TaskModel(
+                    task_id=task.get('_id'),
+                    status=task.get('status'),
+                    result=json.dumps(task.get('result')),
+                    date_done=task.get('date_done')
+                )
                 tasks.append(task_data)
         return tasks
 
@@ -372,12 +381,11 @@ class RedisApp(AppInterface, RedisPubSub):
     def set_task_status(self, task_id, result='', status=celery.states.STARTED):
         """Marks a task as started in Redis."""
         task_key = f'celery-task-meta-{task_id}'
-        task_data = {
-            'task_id': task_id,
-            'status': status,
-            'result': result
-        }
-        self.redis_client().set(task_key, json.dumps(task_data))
+        task_data = TaskModel(
+                task_id=task_id,
+                status=status,
+                result=result)
+        self.redis_client().set(task_key, json.dumps(task_data.model_dump()))
 
     def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'):
         self.set_task_status(task_model.task_id,task_model.model_dump_json(),celery.states.STARTED)

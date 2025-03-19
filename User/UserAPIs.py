@@ -34,6 +34,8 @@ import qrcode
 router = APIRouter()
 #######################################################################################
 class UserModels:
+    USER_DB = USER_DB
+    
     class User(Model4User.User):
         pass
         # username:str
