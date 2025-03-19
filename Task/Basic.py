@@ -471,7 +471,8 @@ class RedisApp(AppInterface, RedisPubSub):
     #         return {'error': 'Task not found'}
 
 class ServiceOrientedArchitecture:
-    BasicApp:AppInterface = None
+    # BasicApp:AppInterface = None
+
     class Model(BaseModel):
         task_id:str = 'AUTO_SET_BUT_NULL_NOW'
         class Param(BaseModel):
@@ -479,8 +480,6 @@ class ServiceOrientedArchitecture:
         class Args(BaseModel):
             pass
         class Return(BaseModel):
-            pass
-        class Logger(BaseModel):
             pass
 
         class Logger(BaseModel):
@@ -490,19 +489,24 @@ class ServiceOrientedArchitecture:
 
             _log_buffer: io.StringIO = PrivateAttr()
             _logger: logging.Logger = PrivateAttr()
+            _action_obj: Any = PrivateAttr()
 
-            def init(self,name:str=None):
+            def init(self,name:str=None,
+                     action_obj:'ServiceOrientedArchitecture.Action'=None):
                 if name is None:
                     name = self.name
+                self._action_obj = action_obj
                 # Create a StringIO buffer for in-memory logging
                 self._log_buffer = io.StringIO()
 
                 # Configure logging
                 self._logger = logging.getLogger(name)
-                self._logger.setLevel(getattr(logging, self.level.upper(), logging.INFO))
+                self._logger.setLevel(
+                    getattr(logging, self.level.upper(), logging.INFO))
 
                 # Formatter for log messages
-                formatter = logging.Formatter('%(asctime)s [%(name)s:%(levelname)s] %(message)s')
+                formatter = logging.Formatter(
+                    '%(asctime)s [%(name)s:%(levelname)s] %(message)s')
 
                 # In-Memory Handler
                 memory_handler = logging.StreamHandler(self._log_buffer)
@@ -520,76 +524,92 @@ class ServiceOrientedArchitecture:
                 log_method = getattr(self._logger, level.lower(), None)
                 if callable(log_method):
                     log_method(message)
+                    if self._action_obj:
+                        self._action_obj.send_data_to_task({'level':message})
+                    self.save_logs()
                 else:
                     self._logger.error(f"Invalid log level: {level}")
 
             def info(self, message: str):
-                """Logs an info message."""
-                self._logger.info(message)
-                self.save_logs()
+                self.log("INFO", message)
 
             def warning(self, message: str):
-                """Logs a warning message."""
-                self._logger.warning(message)
-                self.save_logs()
+                self.log("WARNING", message)
 
             def error(self, message: str):
-                """Logs an error message."""
-                self._logger.error(message)
-                self.save_logs()
+                self.log("ERROR", message)
 
             def debug(self, message: str):
-                """Logs a debug message."""
-                self._logger.debug(message)
-                self.save_logs()
+                self.log("DEBUG", message)
 
             def get_logs(self) -> str:
                 """Returns all logged messages stored in memory."""
                 return self._log_buffer.getvalue()
-            
+
             def save_logs(self) -> str:
+                """Saves logs to the `logs` attribute."""
                 self.logs = self.get_logs()
                 return self.logs
 
             def clear_logs(self):
-                """Clears the in-memory log buffer."""
+                """Clears the in-memory log buffer and resets the logger state."""
                 self._log_buffer.truncate(0)
                 self._log_buffer.seek(0)
+                self.logs = ""
+                
+                # Remove handlers to prevent duplicate logs
+                for handler in self._logger.handlers[:]:
+                    self._logger.removeHandler(handler)
+
                 
         param:Param = Param()
         args:Args = Args()
         ret:Return = Return()
-        logger:Logger = Logger()
+        _logger:Logger = Logger()
 
     class Action:
-        def __init__(self, model):
+        def __init__(self, model,BasicApp:AppInterface,level = 'INFO'):
+            outer_class_name:ServiceOrientedArchitecture = self.__class__.__qualname__.split('.')[0]
             if isinstance(model, dict):
                 nones = [k for k,v in model.items() if v is None]
                 for i in nones:del model[i]
-                model = ServiceOrientedArchitecture.Model(**model)
-            self.model: ServiceOrientedArchitecture.Model = model
+                model = outer_class_name.Model(**model)
+            self.model = model
+            self.BasicApp = BasicApp
+            self.logger = self.model._logger
+            self.logger.level = level
+            self.logger.init(
+                name=f"{outer_class_name.__class__.__name__}:{self.model.task_id}",action_obj=self)
+
+        def send_data_to_task(self, msg_dict={}):
+            self.BasicApp.send_data_to_task(self.model.task_id,msg_dict)
+
+        def listen_data_of_task(self, msg_lambda=lambda msg={}:None,eternal=False):
+            self.BasicApp.listen_data_of_task(self.model.task_id,msg_lambda,eternal)
+
+        def set_task_status(self,status):
+            self.BasicApp.set_task_status(self.model.task_id,self.model.model_dump_json(),status)
 
         def stop_service(self):
             task_id=self.model.task_id
-            ServiceOrientedArchitecture.BasicApp.send_data_to_task(task_id,{'status': 'REVOKED'})
+            self.BasicApp.send_data_to_task(task_id,{'status': 'REVOKED'})
 
         @contextmanager
         def listen_stop_flag(self):
-            task_id=self.model.task_id
-            ServiceOrientedArchitecture.BasicApp.set_task_started(self.model)
+            self.set_task_status(celery.states.STARTED)
             # A shared flag to communicate between threads
             stop_flag = threading.Event()
             # Function to check if the task should be stopped, running in a separate thread
-            def check_task_status(data:dict,task_id=task_id):
+            def check_task_status(data:dict):
                 if data.get('status',None) == celery.states.REVOKED:
-                    ServiceOrientedArchitecture.BasicApp.set_task_status(task_id)
+                    self.set_task_status(celery.states.REVOKED)
                     stop_flag.set()
-            ServiceOrientedArchitecture.BasicApp.listen_data_of_task(task_id,check_task_status,True)
+            self.listen_data_of_task(check_task_status,True)
             
             try:
                 yield stop_flag  # Provide the stop_flag to the `with` block
             finally:
-                ServiceOrientedArchitecture.BasicApp.send_data_to_task(self.model.task_id,{})
+                self.send_data_to_task({})
             return stop_flag
 
         def __call__(self, *args, **kwargs):

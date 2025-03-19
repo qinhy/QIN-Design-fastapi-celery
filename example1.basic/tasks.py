@@ -12,7 +12,6 @@ from pydantic import BaseModel, Field
 
 from Task.Basic import ServiceOrientedArchitecture
 from basic_tasks import BasicApp, BasicCeleryTask, celery_app, api, api_ok
-ServiceOrientedArchitecture.BasicApp = BasicApp
 
 class Fibonacci(ServiceOrientedArchitecture):
     class Model(ServiceOrientedArchitecture.Model):
@@ -34,12 +33,9 @@ class Fibonacci(ServiceOrientedArchitecture):
         ret:Return = Return()
 
     class Action(ServiceOrientedArchitecture.Action):
-        def __init__(self, model):
-            # Ensure model is a Fibonacci instance, even if a dict is passed
-            if isinstance(model, dict):
-                model = Fibonacci.Model(**model)
-            self.model: Fibonacci.Model = model
-            self.logger = self.model.logger.init(name=f"Fibonacci:{self.model.task_id}")
+        def __init__(self, model, BasicApp=BasicApp, level='INFO'):
+            super().__init__(model, BasicApp, level)
+            self.model:Fibonacci.Model = self.model
 
         def __call__(self, *args, **kwargs):
             """Executes the Fibonacci calculation based on the mode (fast/slow)."""
@@ -47,9 +43,9 @@ class Fibonacci(ServiceOrientedArchitecture):
                 n = self.model.args.n
 
                 if n <= 1:
-                    self.logger.info("n is " + str(n) + ", returning it directly.")
+                    self.logger.info(f"n is {n}, returning it directly.")
                     self.model.ret.n = n
-                    return
+                    return self.model
 
                 if self.model.param.is_fast():
                     self._compute_fast(n, stop_flag)
@@ -72,7 +68,7 @@ class Fibonacci(ServiceOrientedArchitecture):
                     return
                 a, b = b, a + b
 
-            self.logger.info("Fast mode result for n=" + str(n) + " is " + str(b))
+            self.logger.info(f'Fast mode result for n={n} is {b}')
             self.model.ret.n = b
 
         def _compute_slow(self, n, stop_flag:threading.Event):
@@ -88,7 +84,7 @@ class Fibonacci(ServiceOrientedArchitecture):
                 return fib_recursive(n - 1) + fib_recursive(n - 2)
 
             result = fib_recursive(n)
-            self.logger.info("Slow mode result for n=" + str(n) + " is " + str(result))
+            self.logger.info(f'Slow mode result for n={n} is {result}')
             self.model.ret.n = result
 
 

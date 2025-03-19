@@ -64,7 +64,7 @@ class CvCameraSharedMemoryService(BidirectionalStreamService):
                 for i in nones:del model[i]
                 model = CvCameraSharedMemoryService.Model(**model)
             self.model: CvCameraSharedMemoryService.Model = model
-            self.logger = self.model.logger.init(name=f"CvCameraSharedMemoryService:{self.model.task_id}")
+            self.logger = self.model._logger.init(name=f"CvCameraSharedMemoryService:{self.model.task_id}")
 
 
         def __call__(self, *args, **kwargs):
