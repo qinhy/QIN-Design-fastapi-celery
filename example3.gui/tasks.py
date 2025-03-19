@@ -1,25 +1,23 @@
-
 import datetime
 import os
 import sys
 sys.path.append("..")
 
-import json
 import threading
 import time
 from typing import Optional
 import cv2
-from fastapi.responses import FileResponse, HTMLResponse
-from pydantic import Field
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
+from fastapi import FastAPI, HTTPException, Query
+from pydantic import Field
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
+
+from Task.Basic import AppInterface, CommonStreamIO, RabbitmqMongoApp, RedisApp, ServiceOrientedArchitecture
+from Task.BasicAPIs import BasicCeleryTask
 from Vision.BasicModel import NumpyUInt8SharedMemoryStreamIO, VideoStreamReader
 
-from fastapi import HTTPException
-from fastapi import Query
-
-from basic_tasks import BasicCeleryTask, BasicApp, celery_app, api, api_ok
-from Task.Basic import CommonStreamIO, ServiceOrientedArchitecture
-ServiceOrientedArchitecture.BasicApp = BasicApp
 
 class CvCameraSharedMemoryService(ServiceOrientedArchitecture):
     class Model(ServiceOrientedArchitecture.Model):        
@@ -71,13 +69,14 @@ class CvCameraSharedMemoryService(ServiceOrientedArchitecture):
             return self
         
     class Action(ServiceOrientedArchitecture.Action):
-        def __init__(self, model, BasicApp=BasicApp, level='ERROR'):
+        def __init__(self, model, BasicApp, level='ERROR'):
             super().__init__(model, BasicApp, level)
             self.model: CvCameraSharedMemoryService.Model = self.model
+            
 
         def run(self,frame_processor,stop_flag:threading.Event):
-            stream_reader:CommonStreamIO.StreamReader = self.model.param._stream_reader
-            stream_writer:CommonStreamIO.StreamWriter = self.model.param._stream_writer
+            stream_reader:ServiceOrientedArchitectureObjects.CommonStreamIO.StreamReader = self.model.param._stream_reader
+            stream_writer:ServiceOrientedArchitectureObjects.CommonStreamIO.StreamWriter = self.model.param._stream_writer
             if stream_reader is None:raise ValueError('stream_reader is None')
             if stream_writer is None:raise ValueError('stream_writer is None')
             res = {'msg':''}
@@ -146,31 +145,28 @@ class CvCameraSharedMemoryService(ServiceOrientedArchitecture):
                 
                 return self.model
 
-
-BasicCeleryTask.ACTION_REGISTRY = {
-    'CvCameraSharedMemoryService': CvCameraSharedMemoryService,
-}
-
 class CeleryTask(BasicCeleryTask):
-    celery_app = celery_app
-    api = api
-    
-    @staticmethod
-    @api.get("/", response_class=HTMLResponse)
-    async def get_register_page():
-        return FileResponse(os.path.join(os.path.dirname(__file__), "gui.html"))
+    def __init__(self, BasicApp, celery_app,
+                        ACTION_REGISTRY={'CvCameraSharedMemoryService': CvCameraSharedMemoryService,}):
+        super().__init__(BasicApp, celery_app, ACTION_REGISTRY)
+        self.router.get("/")(self.get_doc_page)
+        self.router.get("/streams/write")(self.api_actions_camera_write)
+        self.router.get("/streams/read")(self.api_actions_camera_read)
+        
+
+    async def get_doc_page(self):
+        return FileResponse(os.path.join(os.path.dirname(__file__), "gui.html"))    
     
     ############################# general function specific api
-    @api.get("/streams/write")
     # 3840, 2160  480,640
-    def api_actions_camera_write(stream_key: str = 'camera:0', h: int = 600, w: int = 800,
+    def api_actions_camera_write(self, stream_key: str = 'camera:0', h: int = 600, w: int = 800,
         eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")
     ):
-        api_ok()
+        self.api_ok()
         now_t = datetime.datetime.now(datetime.timezone.utc)
         execution_time = now_t + datetime.timedelta(seconds=eta) if eta > 0 else None
         
-        info = BasicApp.store().get(f'streams:{stream_key}')
+        info = self.BasicApp.store().get(f'streams:{stream_key}')
         if info is not None:
             raise HTTPException(status_code=503, detail={
                                 'error': f'stream of [streams:{stream_key}] has created'})
@@ -179,21 +175,20 @@ class CeleryTask(BasicCeleryTask):
         data_model = CCModel(param=CCModel.Param(
             mode='write', stream_key=stream_key, array_shape=(h, w)))
 
-        task = CeleryTask.perform_action.apply_async(
+        task = self.perform_action.apply_async(
             args=['CvCameraSharedMemoryService', data_model.model_dump()], eta=execution_time)
         
         return {'task_id': task.id}
 
 
-    @api.get("/streams/read")
-    def api_actions_camera_read(stream_key: str = 'camera:0',
+    def api_actions_camera_read(self, stream_key: str = 'camera:0',
         eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")
     ):
-        api_ok()
+        self.api_ok()
         now_t = datetime.datetime.now(datetime.timezone.utc)
         execution_time = now_t + datetime.timedelta(seconds=eta) if eta > 0 else None
         
-        info = BasicApp.store().get(f'streams:{stream_key}')
+        info = self.BasicApp.store().get(f'streams:{stream_key}')
         if info is None:
             raise HTTPException(status_code=503, detail={
                                 'error': f'not such stream of [streams:{stream_key}]'})
@@ -202,7 +197,36 @@ class CeleryTask(BasicCeleryTask):
         data_model = CCModel(param=CCModel.Param(
             mode='read', stream_key=stream_key, array_shape=info['array_shape']))
         
-        task = CeleryTask.perform_action.apply_async(
+        task = self.perform_action.apply_async(
             args=['CvCameraSharedMemoryService', data_model.model_dump()], eta=execution_time)
         
         return {'task_id': task.id}
+
+########################################################
+from config import *
+if APP_BACK_END=='redis':
+    BasicApp:AppInterface = RedisApp(REDIS_URL)
+elif APP_BACK_END=='mongodbrabbitmq':
+    BasicApp:AppInterface = RabbitmqMongoApp(RABBITMQ_URL,RABBITMQ_USER,RABBITMQ_PASSWORD,
+                                             MONGO_URL,MONGO_DB,CELERY_META,
+                                             CELERY_RABBITMQ_BROKER)
+else:
+    raise ValueError(f'no back end of {APP_BACK_END}')
+ServiceOrientedArchitecture.BasicApp=BasicApp
+
+api = FastAPI()
+
+api.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*',],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+api.add_middleware(SessionMiddleware,
+                    secret_key=APP_SECRET_KEY, max_age=SESSION_DURATION)
+
+
+celery_app = BasicApp.get_celery_app()
+api.include_router(CeleryTask(BasicApp,celery_app).router, prefix="", tags=["fibonacci"])
+    

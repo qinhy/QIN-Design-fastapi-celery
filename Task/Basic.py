@@ -225,52 +225,9 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
 
     def send_data_to_task(self, task_id, data: dict):
         self.publish(task_id,data)
-        # host, port = self.rabbitmq_url.split(':')
-        # connection = pika.BlockingConnection(pika.ConnectionParameters(host))
-        # channel = connection.channel()
-        # channel.exchange_declare(exchange=self.task_pubsub_name, exchange_type='direct')
-
-        # message = json.dumps({'task_id': task_id, 'data': data})
-        # channel.basic_publish(exchange=self.task_pubsub_name, routing_key=task_id, body=message)
-        # connection.close()
 
     def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False):
         self.subscribe(task_id,data_callback,eternal)
-        # host, port = self.rabbitmq_url.split(':')
-        # connection = pika.BlockingConnection(pika.ConnectionParameters(host))
-        # channel = connection.channel()
-        # channel.exchange_declare(exchange=self.task_pubsub_name, exchange_type='direct')
-
-        # result = channel.queue_declare(queue='', exclusive=True)
-        # queue_name = result.method.queue
-        # channel.queue_bind(exchange=self.task_pubsub_name, queue=queue_name, routing_key=task_id)
-
-        # def listen():
-        #     def callback(ch, method, properties, body):
-        #         if self.get_task_status(task_id) in celery.states.READY_STATES:
-        #             channel.stop_consuming()
-        #             connection.close()
-        #             return
-                
-        #         message = json.loads(body)
-        #         if message['task_id'] == task_id:
-        #             data_callback(message['data'])
-        #             if not eternal:
-        #                 channel.stop_consuming()
-        #                 connection.close()
-        #                 return
-                
-        #         if self.get_task_status(task_id) in celery.states.READY_STATES:
-        #             channel.stop_consuming()
-        #             connection.close()
-        #             return
-
-        #     channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
-        #     channel.start_consuming()
-
-        # listener_thread = threading.Thread(target=listen)
-        # listener_thread.daemon = True
-        # listener_thread.start()
 
     def get_celery_app(self):
         return celery.Celery(self.mongo_db, broker=self.celery_rabbitmq_broker,
@@ -345,15 +302,6 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
     def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'):
         self.set_task_status(task_model.task_id,task_model.model_dump_json(),celery.states.STARTED)
 
-    # def set_task_status(self, task_id, result='', status=celery.states.STARTED):
-    #     collection = self.get_tasks_collection()
-    #     update_result = collection.update_one({'_id': task_id}, {'$set': {'status': 'REVOKED'}})
-    #     if update_result.matched_count > 0:
-    #         res = collection.find_one({'_id': task_id})
-    #     else:
-    #         res = {'error': 'Task not found'}
-    #     return res
-
 class RedisApp(AppInterface, RedisPubSub):
     def __init__(self, redis_url):
         super().__init__(redis_url)
@@ -374,33 +322,9 @@ class RedisApp(AppInterface, RedisPubSub):
 
     def send_data_to_task(self, task_id, data):        
         self.publish(task_id,data)
-        # message = json.dumps({'task_id': task_id, 'data': data})
-        # self.redis_client().publish(task_id, message)
 
     def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False):
         self.subscribe(task_id,data_callback,eternal)
-        # pubsub = self.redis_client().pubsub()
-        # pubsub.subscribe(task_id)
-
-        # def listen():
-        #     for message in pubsub.listen():
-        #         if self.get_task_status(task_id) in celery.states.READY_STATES:
-        #             break
-
-        #         if message['type'] == 'message':
-        #             data = json.loads(message['data'])
-        #             data_callback(data['data'])
-        #             if not eternal:
-        #                 break
-
-        #         if self.get_task_status(task_id) in celery.states.READY_STATES:
-        #             break
-            
-        #     pubsub.unsubscribe(task_id)
-
-        # listener_thread = threading.Thread(target=listen)
-        # listener_thread.daemon = True
-        # listener_thread.start()
 
     def get_celery_app(self):
         return celery.Celery('tasks', broker=self.redis_url, backend=self.redis_url)
@@ -457,18 +381,6 @@ class RedisApp(AppInterface, RedisPubSub):
 
     def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'):
         self.set_task_status(task_model.task_id,task_model.model_dump_json(),celery.states.STARTED)
-
-    # def set_task_status(self, task_id, result='', status=celery.states.STARTED):
-    #     """Marks a task as revoked in Redis."""
-    #     task_key = f'celery-task-meta-{task_id}'
-    #     task_data_json = self.redis_client().get(task_key)
-    #     if task_data_json:
-    #         task_data = json.loads(task_data_json)
-    #         task_data['status'] = 'REVOKED'
-    #         self.redis_client().set(task_key, json.dumps(task_data))
-    #         return task_data
-    #     else:
-    #         return {'error': 'Task not found'}
 
 class ServiceOrientedArchitecture:
     BasicApp:AppInterface = None
@@ -612,7 +524,6 @@ class ServiceOrientedArchitecture:
             return self.model
 
 ##################### IO 
-
 def now_utc():
     return datetime.now().replace(tzinfo=ZoneInfo("UTC"))
 

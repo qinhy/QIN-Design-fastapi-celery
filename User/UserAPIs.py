@@ -1,10 +1,11 @@
 import os
 from .UserModel import Model4User, text2hash2base32Str, text2hash2base64Str, UsersStore
-APP_BACK_END = os.environ['APP_BACK_END']
-APP_INVITE_CODE = os.environ['APP_INVITE_CODE']
-APP_SECRET_KEY = os.environ['APP_SECRET_KEY']
-ALGORITHM = os.environ['ALGORITHM']
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ['ACCESS_TOKEN_EXPIRE_MINUTES'])
+
+APP_BACK_END = os.getenv('APP_BACK_END', 'redis')  # Defaulting to a common local endpoint
+APP_INVITE_CODE = os.getenv('APP_INVITE_CODE', '123')  # Replace with appropriate default
+APP_SECRET_KEY = os.getenv('APP_SECRET_KEY', 'super_secret_key')  # Caution: replace with a strong key in production
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', 30))
 MONGO_URL = os.getenv('MONGO_URL', 'mongodb://localhost:27017')
 REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
 
