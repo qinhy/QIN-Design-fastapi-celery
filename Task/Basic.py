@@ -3,7 +3,7 @@ from datetime import datetime
 import io
 import logging
 from multiprocessing import shared_memory
-from typing import Any
+from typing import Any, Optional
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -186,6 +186,15 @@ class RedisPubSub(PubSubInterface):
         if self.listener_thread and self.listener_thread.is_alive():
             self.listener_thread.join()
 
+class TaskModel(BaseModel):
+    task_id: str
+    status: Optional[str] = None
+    result: Optional[str] = None
+    date_done: Optional[datetime] = None
+    scheduled_for_the_timezone: Optional[str] = None
+    scheduled_for_utc: Optional[str] = None
+    timezone: Optional[str] = None
+
 class AppInterface:
     def redis_client(self) -> redis.Redis: raise NotImplementedError('redis_client')
     def store(self) -> SingletonKeyValueStorage: raise NotImplementedError('store')
@@ -196,7 +205,7 @@ class AppInterface:
     def check_rabbitmq_health(self, url=None, user='', password='') -> bool:('check_rabbitmq_health')
     def check_mongodb_health(self, url=None) -> bool:('check_mongodb_health')
     def get_tasks_collection(self): raise NotImplementedError('get_tasks_collection')
-    def get_tasks_list(self): raise NotImplementedError('get_tasks_list')
+    def get_tasks_list(self)->list[TaskModel]: raise NotImplementedError('get_tasks_list')
     def get_task_meta(self, task_id: str): raise NotImplementedError('get_task_meta')
     def get_task_status(self, task_id: str): raise NotImplementedError('get_task_status')
     def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'): raise NotImplementedError('set_task_started')
@@ -225,52 +234,9 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
 
     def send_data_to_task(self, task_id, data: dict):
         self.publish(task_id,data)
-        # host, port = self.rabbitmq_url.split(':')
-        # connection = pika.BlockingConnection(pika.ConnectionParameters(host))
-        # channel = connection.channel()
-        # channel.exchange_declare(exchange=self.task_pubsub_name, exchange_type='direct')
-
-        # message = json.dumps({'task_id': task_id, 'data': data})
-        # channel.basic_publish(exchange=self.task_pubsub_name, routing_key=task_id, body=message)
-        # connection.close()
 
     def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False):
         self.subscribe(task_id,data_callback,eternal)
-        # host, port = self.rabbitmq_url.split(':')
-        # connection = pika.BlockingConnection(pika.ConnectionParameters(host))
-        # channel = connection.channel()
-        # channel.exchange_declare(exchange=self.task_pubsub_name, exchange_type='direct')
-
-        # result = channel.queue_declare(queue='', exclusive=True)
-        # queue_name = result.method.queue
-        # channel.queue_bind(exchange=self.task_pubsub_name, queue=queue_name, routing_key=task_id)
-
-        # def listen():
-        #     def callback(ch, method, properties, body):
-        #         if self.get_task_status(task_id) in celery.states.READY_STATES:
-        #             channel.stop_consuming()
-        #             connection.close()
-        #             return
-                
-        #         message = json.loads(body)
-        #         if message['task_id'] == task_id:
-        #             data_callback(message['data'])
-        #             if not eternal:
-        #                 channel.stop_consuming()
-        #                 connection.close()
-        #                 return
-                
-        #         if self.get_task_status(task_id) in celery.states.READY_STATES:
-        #             channel.stop_consuming()
-        #             connection.close()
-        #             return
-
-        #     channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
-        #     channel.start_consuming()
-
-        # listener_thread = threading.Thread(target=listen)
-        # listener_thread.daemon = True
-        # listener_thread.start()
 
     def get_celery_app(self):
         return celery.Celery(self.mongo_db, broker=self.celery_rabbitmq_broker,
@@ -310,12 +276,12 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
         collection = self.get_tasks_collection()
         tasks = []
         for task in collection.find():
-            task_data = {
-                "task_id": task.get('_id'),
-                "status": task.get('status'),
-                "result": task.get('result'),
-                "date_done": task.get('date_done')
-            }
+            task_data = TaskModel(
+                task_id=task.get('_id'),
+                status=task.get('status'),
+                result=json.dumps(task.get('result')),
+                date_done=task.get('date_done')
+            )
             tasks.append(task_data)
         return tasks
 
@@ -345,15 +311,6 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
     def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'):
         self.set_task_status(task_model.task_id,task_model.model_dump_json(),celery.states.STARTED)
 
-    # def set_task_status(self, task_id, result='', status=celery.states.STARTED):
-    #     collection = self.get_tasks_collection()
-    #     update_result = collection.update_one({'_id': task_id}, {'$set': {'status': 'REVOKED'}})
-    #     if update_result.matched_count > 0:
-    #         res = collection.find_one({'_id': task_id})
-    #     else:
-    #         res = {'error': 'Task not found'}
-    #     return res
-
 class RedisApp(AppInterface, RedisPubSub):
     def __init__(self, redis_url):
         super().__init__(redis_url)
@@ -374,33 +331,9 @@ class RedisApp(AppInterface, RedisPubSub):
 
     def send_data_to_task(self, task_id, data):        
         self.publish(task_id,data)
-        # message = json.dumps({'task_id': task_id, 'data': data})
-        # self.redis_client().publish(task_id, message)
 
     def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False):
         self.subscribe(task_id,data_callback,eternal)
-        # pubsub = self.redis_client().pubsub()
-        # pubsub.subscribe(task_id)
-
-        # def listen():
-        #     for message in pubsub.listen():
-        #         if self.get_task_status(task_id) in celery.states.READY_STATES:
-        #             break
-
-        #         if message['type'] == 'message':
-        #             data = json.loads(message['data'])
-        #             data_callback(data['data'])
-        #             if not eternal:
-        #                 break
-
-        #         if self.get_task_status(task_id) in celery.states.READY_STATES:
-        #             break
-            
-        #     pubsub.unsubscribe(task_id)
-
-        # listener_thread = threading.Thread(target=listen)
-        # listener_thread.daemon = True
-        # listener_thread.start()
 
     def get_celery_app(self):
         return celery.Celery('tasks', broker=self.redis_url, backend=self.redis_url)
@@ -425,12 +358,12 @@ class RedisApp(AppInterface, RedisPubSub):
             task_data_json = self.redis_client().get(key)
             if task_data_json:
                 task: dict = json.loads(task_data_json)
-                task_data = {
-                    "task_id": task.get('task_id'),
-                    "status": task.get('status'),
-                    "result": json.dumps(task.get('result')),
-                    "date_done": task.get('date_done')
-                }
+                task_data = TaskModel(
+                    task_id=task.get('_id'),
+                    status=task.get('status'),
+                    result=json.dumps(task.get('result')),
+                    date_done=task.get('date_done')
+                )
                 tasks.append(task_data)
         return tasks
 
@@ -448,30 +381,18 @@ class RedisApp(AppInterface, RedisPubSub):
     def set_task_status(self, task_id, result='', status=celery.states.STARTED):
         """Marks a task as started in Redis."""
         task_key = f'celery-task-meta-{task_id}'
-        task_data = {
-            'task_id': task_id,
-            'status': status,
-            'result': result
-        }
-        self.redis_client().set(task_key, json.dumps(task_data))
+        task_data = TaskModel(
+                task_id=task_id,
+                status=status,
+                result=result)
+        self.redis_client().set(task_key, json.dumps(task_data.model_dump()))
 
     def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'):
         self.set_task_status(task_model.task_id,task_model.model_dump_json(),celery.states.STARTED)
 
-    # def set_task_status(self, task_id, result='', status=celery.states.STARTED):
-    #     """Marks a task as revoked in Redis."""
-    #     task_key = f'celery-task-meta-{task_id}'
-    #     task_data_json = self.redis_client().get(task_key)
-    #     if task_data_json:
-    #         task_data = json.loads(task_data_json)
-    #         task_data['status'] = 'REVOKED'
-    #         self.redis_client().set(task_key, json.dumps(task_data))
-    #         return task_data
-    #     else:
-    #         return {'error': 'Task not found'}
-
 class ServiceOrientedArchitecture:
     BasicApp:AppInterface = None
+
     class Model(BaseModel):
         task_id:str = 'AUTO_SET_BUT_NULL_NOW'
         class Param(BaseModel):
@@ -479,8 +400,6 @@ class ServiceOrientedArchitecture:
         class Args(BaseModel):
             pass
         class Return(BaseModel):
-            pass
-        class Logger(BaseModel):
             pass
 
         class Logger(BaseModel):
@@ -491,7 +410,8 @@ class ServiceOrientedArchitecture:
             _log_buffer: io.StringIO = PrivateAttr()
             _logger: logging.Logger = PrivateAttr()
 
-            def init(self,name:str=None):
+            def init(self,name:str=None,
+                     action_obj:'ServiceOrientedArchitecture.Action'=None):
                 if name is None:
                     name = self.name
                 # Create a StringIO buffer for in-memory logging
@@ -499,10 +419,12 @@ class ServiceOrientedArchitecture:
 
                 # Configure logging
                 self._logger = logging.getLogger(name)
-                self._logger.setLevel(getattr(logging, self.level.upper(), logging.INFO))
+                self._logger.setLevel(
+                    getattr(logging, self.level.upper(), logging.INFO))
 
                 # Formatter for log messages
-                formatter = logging.Formatter('%(asctime)s [%(name)s:%(levelname)s] %(message)s')
+                formatter = logging.Formatter(
+                    '%(asctime)s [%(name)s:%(levelname)s] %(message)s')
 
                 # In-Memory Handler
                 memory_handler = logging.StreamHandler(self._log_buffer)
@@ -520,83 +442,96 @@ class ServiceOrientedArchitecture:
                 log_method = getattr(self._logger, level.lower(), None)
                 if callable(log_method):
                     log_method(message)
+                    self.save_logs()
                 else:
                     self._logger.error(f"Invalid log level: {level}")
 
             def info(self, message: str):
-                """Logs an info message."""
-                self._logger.info(message)
-                self.save_logs()
+                self.log("INFO", message)
 
             def warning(self, message: str):
-                """Logs a warning message."""
-                self._logger.warning(message)
-                self.save_logs()
+                self.log("WARNING", message)
 
             def error(self, message: str):
-                """Logs an error message."""
-                self._logger.error(message)
-                self.save_logs()
+                self.log("ERROR", message)
 
             def debug(self, message: str):
-                """Logs a debug message."""
-                self._logger.debug(message)
-                self.save_logs()
+                self.log("DEBUG", message)
 
             def get_logs(self) -> str:
                 """Returns all logged messages stored in memory."""
                 return self._log_buffer.getvalue()
-            
+
             def save_logs(self) -> str:
+                """Saves logs to the `logs` attribute."""
                 self.logs = self.get_logs()
                 return self.logs
 
             def clear_logs(self):
-                """Clears the in-memory log buffer."""
+                """Clears the in-memory log buffer and resets the logger state."""
                 self._log_buffer.truncate(0)
                 self._log_buffer.seek(0)
+                self.logs = ""
+                
+                # Remove handlers to prevent duplicate logs
+                for handler in self._logger.handlers[:]:
+                    self._logger.removeHandler(handler)
+
                 
         param:Param = Param()
         args:Args = Args()
         ret:Return = Return()
-        logger:Logger = Logger()
+        _logger:Logger = Logger()
 
     class Action:
-        def __init__(self, model):
+        def __init__(self, model,BasicApp:AppInterface,level = 'INFO'):
+            outer_class_name:ServiceOrientedArchitecture = self.__class__.__qualname__.split('.')[0]
             if isinstance(model, dict):
                 nones = [k for k,v in model.items() if v is None]
                 for i in nones:del model[i]
-                model = ServiceOrientedArchitecture.Model(**model)
-            self.model: ServiceOrientedArchitecture.Model = model
+                model = outer_class_name.Model(**model)
+            self.model = model
+            self.BasicApp = BasicApp
+            self.logger = self.model._logger
+            self.logger.level = level
+            self.logger.init(
+                name=f"{outer_class_name.__class__.__name__}:{self.model.task_id}",action_obj=self)
+
+        def send_data_to_task(self, msg_dict={}):
+            self.BasicApp.send_data_to_task(self.model.task_id,msg_dict)
+
+        def listen_data_of_task(self, msg_lambda=lambda msg={}:None,eternal=False):
+            self.BasicApp.listen_data_of_task(self.model.task_id,msg_lambda,eternal)
+
+        def set_task_status(self,status):
+            self.BasicApp.set_task_status(self.model.task_id,self.model.model_dump_json(),status)
 
         def stop_service(self):
             task_id=self.model.task_id
-            ServiceOrientedArchitecture.BasicApp.send_data_to_task(task_id,{'status': 'REVOKED'})
+            self.BasicApp.send_data_to_task(task_id,{'status': 'REVOKED'})
 
         @contextmanager
         def listen_stop_flag(self):
-            task_id=self.model.task_id
-            ServiceOrientedArchitecture.BasicApp.set_task_started(self.model)
+            self.set_task_status(celery.states.STARTED)
             # A shared flag to communicate between threads
             stop_flag = threading.Event()
             # Function to check if the task should be stopped, running in a separate thread
-            def check_task_status(data:dict,task_id=task_id):
+            def check_task_status(data:dict):
                 if data.get('status',None) == celery.states.REVOKED:
-                    ServiceOrientedArchitecture.BasicApp.set_task_status(task_id)
+                    self.set_task_status(celery.states.REVOKED)
                     stop_flag.set()
-            ServiceOrientedArchitecture.BasicApp.listen_data_of_task(task_id,check_task_status,True)
+            self.listen_data_of_task(check_task_status,True)
             
             try:
                 yield stop_flag  # Provide the stop_flag to the `with` block
             finally:
-                ServiceOrientedArchitecture.BasicApp.send_data_to_task(self.model.task_id,{})
+                self.send_data_to_task({})
             return stop_flag
 
         def __call__(self, *args, **kwargs):
             return self.model
 
 ##################### IO 
-
 def now_utc():
     return datetime.now().replace(tzinfo=ZoneInfo("UTC"))
 
@@ -616,6 +551,7 @@ class AbstractObj(BaseModel):
     def __obj_del__(self):
         # print(f'BasicApp.store().delete({self.id})')
         ServiceOrientedArchitecture.BasicApp.store().delete(self.id)
+    
     def __del__(self):
         self.__obj_del__()
 
@@ -880,6 +816,7 @@ class CommonStreamIO(CommonIO):
         def __del__(self):
             self.__obj_del__()
             ServiceOrientedArchitecture.BasicApp.store().delete(self.stream_id())
+
 class BidirectionalStream:
     class Bidirectional:
         id: str= Field(default_factory=lambda:f"BidirectionalStream.Bidirectional:{uuid4()}")
