@@ -471,7 +471,7 @@ class RedisApp(AppInterface, RedisPubSub):
     #         return {'error': 'Task not found'}
 
 class ServiceOrientedArchitecture:
-    # BasicApp:AppInterface = None
+    BasicApp:AppInterface = None
 
     class Model(BaseModel):
         task_id:str = 'AUTO_SET_BUT_NULL_NOW'
@@ -489,13 +489,11 @@ class ServiceOrientedArchitecture:
 
             _log_buffer: io.StringIO = PrivateAttr()
             _logger: logging.Logger = PrivateAttr()
-            _action_obj: Any = PrivateAttr()
 
             def init(self,name:str=None,
                      action_obj:'ServiceOrientedArchitecture.Action'=None):
                 if name is None:
                     name = self.name
-                self._action_obj = action_obj
                 # Create a StringIO buffer for in-memory logging
                 self._log_buffer = io.StringIO()
 
@@ -524,8 +522,6 @@ class ServiceOrientedArchitecture:
                 log_method = getattr(self._logger, level.lower(), None)
                 if callable(log_method):
                     log_method(message)
-                    if self._action_obj:
-                        self._action_obj.send_data_to_task({'level':message})
                     self.save_logs()
                 else:
                     self._logger.error(f"Invalid log level: {level}")
@@ -636,6 +632,7 @@ class AbstractObj(BaseModel):
     def __obj_del__(self):
         # print(f'BasicApp.store().delete({self.id})')
         ServiceOrientedArchitecture.BasicApp.store().delete(self.id)
+    
     def __del__(self):
         self.__obj_del__()
 
@@ -900,6 +897,7 @@ class CommonStreamIO(CommonIO):
         def __del__(self):
             self.__obj_del__()
             ServiceOrientedArchitecture.BasicApp.store().delete(self.stream_id())
+
 class BidirectionalStream:
     class Bidirectional:
         id: str= Field(default_factory=lambda:f"BidirectionalStream.Bidirectional:{uuid4()}")

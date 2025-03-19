@@ -1,7 +1,9 @@
 import datetime
+import os
 import sys
 from typing import Literal, Optional
 
+from fastapi.responses import FileResponse, HTMLResponse
 import pytz
 sys.path.append("..")
 
@@ -10,8 +12,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, Query
     
-from Task.Customs import ServiceOrientedArchitecture
-from Task.Basic import AppInterface,RedisApp,RabbitmqMongoApp
+
+from Task.Basic import AppInterface,RedisApp,RabbitmqMongoApp, ServiceOrientedArchitecture
 from celery.signals import task_received
 
 def config():
@@ -119,6 +121,10 @@ def api_ok():
 class BasicCeleryTask:
     ACTION_REGISTRY: dict[str, ServiceOrientedArchitecture] = {}
     
+    @staticmethod
+    @api.get("/", response_class=HTMLResponse)
+    async def get_register_page():
+        return FileResponse(os.path.join(os.path.dirname(__file__), "gui.html"))
     ########################### essential function
     @staticmethod
     def convert_to_utc(execution_time: str, timezone: str):

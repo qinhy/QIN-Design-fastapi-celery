@@ -10,8 +10,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, Query
     
-from Task.Customs import ServiceOrientedArchitecture
-from Task.Basic import AppInterface,RedisApp,RabbitmqMongoApp
+
+from Task.Basic import AppInterface,RedisApp,RabbitmqMongoApp, ServiceOrientedArchitecture
 from celery.signals import task_received
 
 def config():

@@ -12,7 +12,6 @@ from fastapi import Query
 from basic_tasks import BasicApp, BasicCeleryTask, celery_app, api, api_ok
 
 from Task.Basic import ServiceOrientedArchitecture
-ServiceOrientedArchitecture.BasicApp = BasicApp
 from Vision import Service as VisonService
 
 BasicCeleryTask.ACTION_REGISTRY = {
