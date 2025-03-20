@@ -286,4 +286,6 @@ class Tests(unittest.TestCase):
                          obj.model_dump_json_dict(),
                          "The retrieved value should match the child value.")
 
-Tests().test_all()
+
+
+
