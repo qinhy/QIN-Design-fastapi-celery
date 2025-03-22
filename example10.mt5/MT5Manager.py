@@ -86,40 +86,77 @@ class MT5Manager:
         # Discover terminal.exe files and initialize terminals
         self.terminals = self._discover_terminals()
 
-    def _discover_terminals(self, start_directory="C:\\Program Files", max_depth=2):
+
+    def _discover_terminals(self,
+        start_directories=["C:\\Program Files (x86)", "C:\\Program Files"],
+        max_depth=5
+    ):
         """
-        Discover terminal.exe files and initialize terminals with broker names.
+        Search for MT5 'terminal.exe' or 'terminal64.exe' in the given start_directories.
+        Return a dictionary of {broker_name: set_of_terminal_locks}.
         """
+
         broker_info = []
-        start_depth = start_directory.count(os.sep)
 
-        # Walk through the directory tree
-        for root, dirs, files in os.walk(start_directory):
-            current_depth = root.count(os.sep) - start_depth
-            if current_depth > max_depth:
-                # Skip directories deeper than max_depth
-                dirs[:] = []
-                continue
+        # Iterate over each start directory
+        for start_directory in start_directories:
+            # Capture how deep we start to measure depth
+            start_depth = start_directory.count(os.sep)
 
-            # Check if terminal.exe exists in the current directory
-            if "terminal.exe" in files:
-                # Extract broker name from the path
-                parts = root.split(os.sep)
-                for part in parts:
-                    if "MT5" in part or "MetaTrader 5" in part:
-                        broker_name = part.replace(" MT5", "").replace(" MetaTrader 5", "")
-                        broker_info.append({"Broker Name": broker_name, "Path": os.path.join(root, "terminal.exe")})
-                        break
-        
-        # Initialize terminals dictionary
-        terminals = {}
+            # Walk the directory tree up to max_depth
+            for root, dirs, files in os.walk(start_directory):
+                current_depth = root.count(os.sep) - start_depth
+                if current_depth > max_depth:
+                    # Don’t go deeper than max_depth
+                    dirs[:] = []
+                    continue
+
+                # Check for either "terminal.exe" or "terminal64.exe"
+                if "terminal.exe" in files or "terminal64.exe" in files:
+                    # We'll name them identically "terminal.exe" for convenience
+                    if "terminal.exe" in files:
+                        terminal_name = "terminal.exe"
+                    else:
+                        terminal_name = "terminal64.exe"
+
+                    # Attempt to extract a "broker name" from the path
+                    # Look for any folder part containing "MT5" or "MetaTrader"
+                    # and use that part. Adjust as necessary.
+                    parts = root.split(os.sep)
+                    broker_name = None
+                    for part in parts:
+                        if "MT5" in part.upper() or "METATRADER" in part.upper():
+                            # Example: "BrokerName MT5" -> "BrokerName", etc.
+                            broker_name = (
+                                part.replace(" MT5", "")
+                                    .replace(" MetaTrader 5", "")
+                                    .replace("MT5", "")
+                                    .replace("MetaTrader", "")
+                                    .strip()
+                            )
+                            break
+
+                    # Fallback if broker name not found in the usual pattern
+                    if not broker_name:
+                        broker_name = parts[-1]  # last folder name
+
+                    exe_path = os.path.join(root, terminal_name)
+                    broker_info.append({
+                        "Broker Name": broker_name,
+                        "Path": exe_path
+                    })
+
+        # Build the final terminals dictionary
+        terminals:Dict[str, set[MT5Manager.TerminalLock]] = {}
         for broker in broker_info:
-            broker_name = broker["Broker Name"]
+            broker_name:str = broker["Broker Name"]
+            broker_name = broker_name.replace(' ','')
             exe_path = broker["Path"]
             if broker_name not in terminals:
                 terminals[broker_name] = set()
+            # This TerminalLock is just an example “holder” class from your snippet
             terminals[broker_name].add(MT5Manager.TerminalLock(exe_path=exe_path))
-        
+
         return terminals
 
     def get_singleton(self):

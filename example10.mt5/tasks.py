@@ -1,11 +1,9 @@
 import datetime
 import sys
-import threading
-from typing import Literal, Optional
-
-from fastapi.responses import HTMLResponse, RedirectResponse
-
 sys.path.append("..")
+
+from typing import Literal, Optional
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from celery import Task
 from fastapi import FastAPI, Query
