@@ -79,7 +79,7 @@ class MT5Manager:
 
     def __init__(self, id=None, results=None, terminals=None, is_singleton=None):
         self.uuid = uuid.uuid4() if id is None else id
-        self.results: Dict[str, List[Any]] = None if results is None else results
+        self.results: Dict[str, List[Any]] = {} if results is None else results
         self.terminals: Dict[str, set[MT5Manager.TerminalLock]] = None if terminals is None else terminals
         self.is_singleton: bool = False if is_singleton is None else is_singleton
 
@@ -160,7 +160,7 @@ class MT5Manager:
         return terminals
 
     def get_singleton(self):
-        return self.__class__(self.uuid, self.results, self.terminals, self.is_singleton)
+        return self.__class__(self._uuid, self._results, self._terminals, self._is_singleton)
 
     def add_terminal(self, account_server='XMTrading', exe_path="path/to/your/terminal64.exe"):
         if account_server not in self.terminals:
