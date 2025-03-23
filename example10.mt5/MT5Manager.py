@@ -79,16 +79,15 @@ class MT5Manager:
 
     def __init__(self, id=None, results=None, terminals=None, is_singleton=None):
         self.uuid = uuid.uuid4() if id is None else id
-        self.results: Dict[str, List[Any]] = {} if results is None else results
-        self.terminals: Dict[str, set[MT5Manager.TerminalLock]] = None if terminals is None else terminals
+        self.results: Dict[str, List[Any]] = None if results is None else results
+        self.terminals: Dict[str, set[MT5Manager.TerminalLock]] = {} if terminals is None else terminals
         self.is_singleton: bool = False if is_singleton is None else is_singleton
+        if len(self.terminals)==0:
+            self.terminals.update(self._discover_terminals())
 
-        # Discover terminal.exe files and initialize terminals
-        self.terminals = self._discover_terminals()
-
-
-    def _discover_terminals(self,
-        start_directories=["C:\\Program Files (x86)", "C:\\Program Files"],
+    @staticmethod
+    def _discover_terminals(
+        start_directories:list[str]=["C:\\Program Files (x86)", "C:\\Program Files"],
         max_depth=5
     ):
         """

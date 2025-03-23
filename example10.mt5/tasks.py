@@ -66,7 +66,7 @@ class CeleryTask(BasicCeleryTask):
     async def get_doc_page(self,):
         return RedirectResponse("/docs")
     
-    ###########################
+    ########################### basic service
     async def api_book_service(self, acc: MT5Account, book: Book, action: str,
         eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")
     ):
@@ -102,43 +102,7 @@ class CeleryTask(BasicCeleryTask):
             "scheduled_for_utc": execution_time_utc.isoformat(),
             "timezone": timezone
         }
-
-    async def api_account_info(self, acc: MT5Account):
-        """Endpoint to fetch account information."""
-        return self.api_book_service(acc.model_dump(), Book().model_dump(), action='account_info')
     
-    async def api_get_books(self, acc: MT5Account):
-        """Endpoint to get books for a given MT5 account."""
-        return self.api_book_service(acc.model_dump(), Book().model_dump(), action='getBooks')
-
-    async def api_book_send(self, acc: MT5Account, book: Book):
-        """Endpoint to send a book."""
-        return self.api_book_service(acc.model_dump(), book.model_dump(), action='send')
-
-    async def api_schedule_book_send(self, acc: MT5Account, book: Book,
-        execution_time: str = Query(datetime.datetime.now(datetime.timezone.utc
-          ).isoformat().split('.')[0],
-           description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"),
-        timezone: Literal["UTC", "Asia/Tokyo", "America/New_York",
-                          "Europe/London", "Europe/Paris",
-                          "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"
-                          ] = Query("Asia/Tokyo", 
-                                    description="Choose a timezone from the list")
-    ):
-        return self.api_schedule_book_service(acc.model_dump(), book.model_dump(), 'send', execution_time,timezone)
-
-    async def api_book_close(self, acc: MT5Account, book: Book):
-        """Endpoint to close a book."""
-        return self.api_book_service(acc.model_dump(), book.model_dump(), action='close')
-    
-    async def api_book_change_price(self, acc: MT5Account, book: Book, p: float):
-        """Endpoint to change the price of a book."""
-        return self.api_book_service(acc.model_dump(), book.model_dump(), action='changeP', p=p)
-
-    async def api_book_change_tp_sl(self, acc: MT5Account, book: Book, tp: float, sl: float):
-        """Endpoint to change tp sl values of a book."""
-        return self.api_book_service(acc.model_dump(), book.model_dump(), action='changeTS', tp=tp, sl=sl)
-
     async def api_rates_copy(self, acc: MT5Account, symbol: str, timeframe: str, count: int, debug: bool = False):
         """
         Endpoint to copy rates for a given MT5 account, symbol, timeframe, and count.
@@ -152,6 +116,44 @@ class CeleryTask(BasicCeleryTask):
         """
         task = self.celery_rates_copy.delay(acc.model_dump(), symbol, timeframe, count, debug)
         return {'task_id': task.id}
+    
+    ########################### reuse basic service async and await
+    async def api_account_info(self, acc: MT5Account):
+        """Endpoint to fetch account information."""
+        return await self.api_book_service(acc, Book(), action='account_info', eta=0)
+    
+    async def api_get_books(self, acc: MT5Account):
+        """Endpoint to get books for a given MT5 account."""
+        return await self.api_book_service(acc, Book(), action='getBooks', eta=0)
+
+    async def api_book_send(self, acc: MT5Account, book: Book):
+        """Endpoint to send a book."""
+        return await self.api_book_service(acc, book, action='send', eta=0)
+
+    async def api_schedule_book_send(self, acc: MT5Account, book: Book,
+        execution_time: str = Query(datetime.datetime.now(datetime.timezone.utc
+          ).isoformat().split('.')[0],
+           description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"),
+        timezone: Literal["UTC", "Asia/Tokyo", "America/New_York",
+                          "Europe/London", "Europe/Paris",
+                          "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"
+                          ] = Query("Asia/Tokyo", 
+                                    description="Choose a timezone from the list")
+    ):
+        return await self.api_schedule_book_service(acc.model_dump(), book.model_dump(), 'send', execution_time,timezone)
+
+    async def api_book_close(self, acc: MT5Account, book: Book):
+        """Endpoint to close a book."""
+        return await self.api_book_service(acc, book, action='close', eta=0)
+    
+    async def api_book_change_price(self, acc: MT5Account, book: Book, p: float):
+        """Endpoint to change the price of a book."""
+        return await self.api_book_service(acc, book, action='changeP', p=p, eta=0)
+
+    async def api_book_change_tp_sl(self, acc: MT5Account, book: Book, tp: float, sl: float):
+        """Endpoint to change tp sl values of a book."""
+        return await self.api_book_service(acc, book, action='changeTS', tp=tp, sl=sl, eta=0)
+
 ########################################################
 
 api = FastAPI()

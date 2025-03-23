@@ -359,7 +359,7 @@ class RedisApp(AppInterface, RedisPubSub):
             if task_data_json:
                 task: dict = json.loads(task_data_json)
                 task_data = TaskModel(
-                    task_id=task.get('_id'),
+                    task_id=task.get('task_id'),
                     status=task.get('status'),
                     result=json.dumps(task.get('result')),
                     date_done=task.get('date_done')
