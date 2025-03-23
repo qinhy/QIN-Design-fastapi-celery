@@ -130,8 +130,9 @@ class CeleryTask(BasicCeleryTask):
         """Endpoint to send a book."""
         return await self.api_book_service(acc, book, action='send', eta=0)
 
-    async def api_schedule_book_send(self, acc: MT5Account, book: Book,
-        execution_time: str = Query(datetime.datetime.now(datetime.timezone.utc
+    async def api_schedule_book_send(self, acc: MT5Account, 
+    symbol:str='USDJPY',sl:float=147.0,tp:float=150.0,price_open:float=148.0,volume:float=0.01,
+    execution_time: str = Query(datetime.datetime.now(datetime.timezone.utc
           ).isoformat().split('.')[0],
            description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"),
         timezone: Literal["UTC", "Asia/Tokyo", "America/New_York",
@@ -140,6 +141,7 @@ class CeleryTask(BasicCeleryTask):
                           ] = Query("Asia/Tokyo", 
                                     description="Choose a timezone from the list")
     ):
+        book = Book(symbol=symbol,sl=sl,tp=tp,price_open=price_open,volume=volume).as_plan()
         return await self.api_schedule_book_service(acc, book, 'send', execution_time,timezone)
 
     async def api_book_close(self, acc: MT5Account, book: Book):
