@@ -21,17 +21,17 @@ class CeleryTask(BasicCeleryTask):
     def __init__(self, BasicApp, celery_app,
                         ACTION_REGISTRY={'BookService': BookService,}):
         super().__init__(BasicApp, celery_app, ACTION_REGISTRY)
-        self.router.get("/", response_class=HTMLResponse)(self.get_doc_page)
+        self.router.get( "/")(self.get_doc_page)
         self.router.post("/bookservice/")(self.api_book_service)
         self.router.post("/bookservice/schedule/")(self.api_schedule_book_service)
-        self.router.get("/accounts/info")(self.api_account_info)
-        self.router.get("/books/")(self.api_get_books)
+        self.router.get( "/accounts/info")(self.api_account_info)
+        self.router.get( "/books/")(self.api_get_books)
         self.router.post("/books/send")(self.api_book_send)
         self.router.post("/books/send/schedule")(self.api_schedule_book_send)
         self.router.post("/books/close")(self.api_book_close)
         self.router.post("/books/change/price")(self.api_book_change_price)
         self.router.post("/books/change/tpsl")(self.api_book_change_tp_sl)
-        self.router.get("/rates/")(self.api_rates_copy)
+        self.router.get( "/rates/")(self.api_rates_copy)
         
         @self.celery_app.task(bind=True)
         def celery_book_service(t: Task, acc: MT5Account, book: Book, action: str,**kwargs):
@@ -140,7 +140,7 @@ class CeleryTask(BasicCeleryTask):
                           ] = Query("Asia/Tokyo", 
                                     description="Choose a timezone from the list")
     ):
-        return await self.api_schedule_book_service(acc.model_dump(), book.model_dump(), 'send', execution_time,timezone)
+        return await self.api_schedule_book_service(acc, book, 'send', execution_time,timezone)
 
     async def api_book_close(self, acc: MT5Account, book: Book):
         """Endpoint to close a book."""
