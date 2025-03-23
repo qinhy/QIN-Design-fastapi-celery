@@ -12,6 +12,7 @@ import time
 import json
 
 import numpy as np
+from Storages.BasicModel import Model4Basic
 import pymongo
 from pydantic import BaseModel, Field, PrivateAttr
 from pymongo import MongoClient
@@ -26,6 +27,11 @@ try:
     from ..Storages import SingletonKeyValueStorage, EventDispatcherController, PythonDictStorage
 except Exception as e:
     from Storages import SingletonKeyValueStorage, EventDispatcherController, PythonDictStorage
+
+try:
+    from ..Storages.BasicModel import BasicStore,Controller4Basic,Model4Basic
+except Exception as e:
+    from Storages.BasicModel import BasicStore,Controller4Basic,Model4Basic
 
 class PubSubInterface:
     ROOT_KEY = 'PubSub'
@@ -197,7 +203,7 @@ class TaskModel(BaseModel):
 
 class AppInterface:
     def redis_client(self) -> redis.Redis: raise NotImplementedError('redis_client')
-    def store(self) -> SingletonKeyValueStorage: raise NotImplementedError('store')
+    def store(self) -> BasicStore: raise NotImplementedError('store')
     def check_services(self) -> bool: raise NotImplementedError('check_services')
     def send_data_to_task(self, task_id, data: dict): raise NotImplementedError('send_data_to_task')
     def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False): raise NotImplementedError('listen_data_of_task')
@@ -229,7 +235,7 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
         
     def store(self):
         if self._store is None:
-            self._store = SingletonKeyValueStorage().mongo_backend(self.mongo_url)
+            self._store = BasicStore().mongo_backend(self.mongo_url)
         return self._store
 
     def send_data_to_task(self, task_id, data: dict):
@@ -326,7 +332,7 @@ class RedisApp(AppInterface, RedisPubSub):
 
     def store(self):
         if self._store is None:
-            self._store = SingletonKeyValueStorage().redis_backend()
+            self._store = BasicStore().redis_backend()
         return self._store
 
     def send_data_to_task(self, task_id, data):        
@@ -535,47 +541,9 @@ class ServiceOrientedArchitecture:
 def now_utc():
     return datetime.now().replace(tzinfo=ZoneInfo("UTC"))
 
-class AbstractObj(BaseModel):
-    id: str= Field(default_factory=lambda:f"AbstractObj:{uuid4()}")
-    rank: list = [0]
-    create_time: datetime = Field(default_factory=now_utc)
-    update_time: datetime = Field(default_factory=now_utc)
-    status: str = ""
-    metadata: dict = {}
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        # print(f'BasicApp.store().set({self.id},{self.__class__.__name__})')
-        ServiceOrientedArchitecture.BasicApp.store().set(self.id,self.model_dump_json_dict())
-    
-    def __obj_del__(self):
-        # print(f'BasicApp.store().delete({self.id})')
-        ServiceOrientedArchitecture.BasicApp.store().delete(self.id)
-    
-    def __del__(self):
-        self.__obj_del__()
-
-    def storage(self):return ServiceOrientedArchitecture.BasicApp.store()
-
-    def store(self):
-        self.storage().set(self.id,self.model_dump_json_dict())
-        return self
-
-    def _update_timestamp(self): self.update_time = now_utc()
-
-    def update_db(self, **kwargs):
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-        self._update_timestamp()
-        self.store()
-        return self
-
-    def model_dump_json_dict(self)->dict:
-        return json.loads(self.model_dump_json())
-         
 class CommonIO:
-    class Base(AbstractObj):            
+    class Base(Model4Basic.AbstractObj):       
+        auto_del:bool = True     
         def write(self,data):
             raise ValueError("[CommonIO.Reader]: This is Reader can not write")
         def read(self):

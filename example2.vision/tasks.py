@@ -74,11 +74,13 @@ class CvCameraSharedMemoryService(ServiceOrientedArchitecture):
             
 
         def run(self,frame_processor,stop_flag:threading.Event):
-            stream_reader:ServiceOrientedArchitectureObjects.CommonStreamIO.StreamReader = self.model.param._stream_reader
-            stream_writer:ServiceOrientedArchitectureObjects.CommonStreamIO.StreamWriter = self.model.param._stream_writer
+            stream_reader:CommonStreamIO.StreamReader = self.model.param._stream_reader
+            stream_writer:CommonStreamIO.StreamWriter = self.model.param._stream_writer
             if stream_reader is None:raise ValueError('stream_reader is None')
             if stream_writer is None:raise ValueError('stream_writer is None')
             res = {'msg':''}
+            BasicApp.store().add_new_obj(stream_reader)
+            BasicApp.store().add_new_obj(stream_writer)
             try:
                 for frame_count,(image,frame_metadata) in enumerate(stream_reader):
                     if stop_flag.is_set(): break
