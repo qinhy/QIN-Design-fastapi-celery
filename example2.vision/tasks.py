@@ -155,7 +155,7 @@ class CeleryTask(BasicCeleryTask):
         self.router.get("/streams/read")(self.api_actions_camera_read)
         
     
-    async def get_doc_page(self,):
+    def get_doc_page(self,):
         return RedirectResponse("/docs")
     
     ############################# general function specific api
@@ -163,9 +163,6 @@ class CeleryTask(BasicCeleryTask):
     def api_actions_camera_write(self, stream_key: str = 'camera:0', h: int = 600, w: int = 800,
         eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")
     ):
-        self.api_ok()
-        now_t = datetime.datetime.now(datetime.timezone.utc)
-        execution_time = now_t + datetime.timedelta(seconds=eta) if eta > 0 else None
         
         info = self.BasicApp.store().get(f'streams:{stream_key}')
         if info is not None:
@@ -176,19 +173,12 @@ class CeleryTask(BasicCeleryTask):
         data_model = CCModel(param=CCModel.Param(
             mode='write', stream_key=stream_key, array_shape=(h, w)))
 
-        task = self.perform_action.apply_async(
-            args=['CvCameraSharedMemoryService', data_model.model_dump()], eta=execution_time)
-        
-        return {'task_id': task.id}
-
+        return self.api_perform_action('CvCameraSharedMemoryService',
+                    data_model.model_dump(),eta=eta)
 
     def api_actions_camera_read(self, stream_key: str = 'camera:0',
         eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")
-    ):
-        self.api_ok()
-        now_t = datetime.datetime.now(datetime.timezone.utc)
-        execution_time = now_t + datetime.timedelta(seconds=eta) if eta > 0 else None
-        
+    ):        
         info = self.BasicApp.store().get(f'streams:{stream_key}')
         if info is None:
             raise HTTPException(status_code=503, detail={
@@ -198,10 +188,8 @@ class CeleryTask(BasicCeleryTask):
         data_model = CCModel(param=CCModel.Param(
             mode='read', stream_key=stream_key, array_shape=info['array_shape']))
         
-        task = self.perform_action.apply_async(
-            args=['CvCameraSharedMemoryService', data_model.model_dump()], eta=execution_time)
-        
-        return {'task_id': task.id}
+        return self.api_perform_action('CvCameraSharedMemoryService',
+                    data_model.model_dump(),eta=eta)
 
 ########################################################
 from config import *

@@ -197,15 +197,15 @@ class TaskModel(BaseModel):
     status: Optional[str] = None
     result: Optional[str] = None
     date_done: Optional[datetime] = None
-    scheduled_for_the_timezone: Optional[str] = None
-    scheduled_for_utc: Optional[str] = None
+    scheduled_for_the_timezone: Optional[datetime] = None
+    scheduled_for_utc: Optional[datetime] = None
     timezone: Optional[str] = None
 
-class AppInterface:
+class AppInterface(PubSubInterface):
     def redis_client(self) -> redis.Redis: raise NotImplementedError('redis_client')
     def store(self) -> BasicStore: raise NotImplementedError('store')
     def check_services(self) -> bool: raise NotImplementedError('check_services')
-    def send_data_to_task(self, task_id, data: dict): raise NotImplementedError('send_data_to_task')
+    def send_data_to_task(self, task_id, data: dict)->None: raise NotImplementedError('send_data_to_task')
     def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False): raise NotImplementedError('listen_data_of_task')
     def get_celery_app(self)->celery.Celery: raise NotImplementedError('get_celery_app')
     def check_rabbitmq_health(self, url=None, user='', password='') -> bool:('check_rabbitmq_health')
@@ -242,7 +242,7 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
         self.publish(task_id,data)
 
     def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False):
-        self.subscribe(task_id,data_callback,eternal)
+        return self.subscribe(task_id,data_callback,eternal)
 
     def get_celery_app(self):
         return celery.Celery(self.mongo_db, broker=self.celery_rabbitmq_broker,
@@ -298,7 +298,7 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
             del res['_id']
             return res
         else:
-            return {}
+            return None
 
     def get_task_status(self, task_id: str):
         return self.get_task_meta(task_id).get('status', None)
@@ -339,7 +339,7 @@ class RedisApp(AppInterface, RedisPubSub):
         self.publish(task_id,data)
 
     def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False):
-        self.subscribe(task_id,data_callback,eternal)
+        return self.subscribe(task_id,data_callback,eternal)
 
     def get_celery_app(self):
         return celery.Celery('tasks', broker=self.redis_url, backend=self.redis_url)
@@ -379,7 +379,7 @@ class RedisApp(AppInterface, RedisPubSub):
         if task_data_json:
             task_data = json.loads(task_data_json)
             return task_data
-        return {}
+        return None
 
     def get_task_status(self, task_id: str):
         return self.get_task_meta(task_id).get('status', None)
@@ -487,7 +487,7 @@ class ServiceOrientedArchitecture:
         param:Param = Param()
         args:Args = Args()
         ret:Return = Return()
-        _logger:Logger = Logger()
+        logger:Logger = Logger()
 
     class Action:
         def __init__(self, model,BasicApp:AppInterface,level = 'INFO'):
@@ -498,16 +498,19 @@ class ServiceOrientedArchitecture:
                 model = outer_class_name.Model(**model)
             self.model = model
             self.BasicApp = BasicApp
-            self.logger = self.model._logger
+            self.logger = self.model.logger
             self.logger.level = level
             self.logger.init(
                 name=f"{outer_class_name.__class__.__name__}:{self.model.task_id}",action_obj=self)
+            self.listen_data_of_task_uuids = []
 
         def send_data_to_task(self, msg_dict={}):
             self.BasicApp.send_data_to_task(self.model.task_id,msg_dict)
 
         def listen_data_of_task(self, msg_lambda=lambda msg={}:None,eternal=False):
-            self.BasicApp.listen_data_of_task(self.model.task_id,msg_lambda,eternal)
+            id = self.BasicApp.listen_data_of_task(self.model.task_id,msg_lambda,eternal)
+            self.listen_data_of_task_uuids.append(id)
+            return id
 
         def set_task_status(self,status):
             self.BasicApp.set_task_status(self.model.task_id,self.model.model_dump_json(),status)
@@ -515,6 +518,13 @@ class ServiceOrientedArchitecture:
         def stop_service(self):
             task_id=self.model.task_id
             self.BasicApp.send_data_to_task(task_id,{'status': 'REVOKED'})
+
+        def dispose(self):
+            for i in self.listen_data_of_task_uuids:
+                self.BasicApp.unsubscribe(i)
+            
+        def __del__(self):
+            self.dispose()
 
         @contextmanager
         def listen_stop_flag(self):
