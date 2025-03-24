@@ -89,7 +89,7 @@ class RabbitmqPubSub(PubSubInterface):
     
     def _conn(self):        
         host, port = self.rabbitmq_url.split(':')
-        print(host, port)
+        # print(host, port)
         connection = pika.BlockingConnection(pika.ConnectionParameters(host))
         channel = connection.channel()
         channel.exchange_declare(exchange=self.task_pubsub_name, exchange_type='direct')
@@ -200,17 +200,25 @@ class AppInterface(PubSubInterface):
     def redis_client(self) -> redis.Redis: raise NotImplementedError('redis_client')
     def store(self) -> BasicStore: raise NotImplementedError('store')
     def check_services(self) -> bool: raise NotImplementedError('check_services')
-    def send_data_to_task(self, task_id, data: dict)->None: raise NotImplementedError('send_data_to_task')
-    def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False): raise NotImplementedError('listen_data_of_task')
     def get_celery_app(self)->celery.Celery: raise NotImplementedError('get_celery_app')
     def check_rabbitmq_health(self, url=None, user='', password='') -> bool:('check_rabbitmq_health')
     def check_mongodb_health(self, url=None) -> bool:('check_mongodb_health')
     def get_tasks_collection(self): raise NotImplementedError('get_tasks_collection')
     def get_tasks_list(self)->list[TaskModel]: raise NotImplementedError('get_tasks_list')
     def get_task_meta(self, task_id: str)->dict: raise NotImplementedError('get_task_meta')
-    def get_task_status(self, task_id: str): return self.get_task_meta(task_id).get('status', None)
-    def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'): raise NotImplementedError('set_task_started')
     def set_task_status(self, task_id, result='', status=celery.states.STARTED): raise NotImplementedError('set_task_status')
+
+    def get_task_status(self, task_id: str):
+        return self.get_task_meta(task_id).get('status', None)   
+    
+    def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'):
+        self.set_task_status(task_model.task_id,task_model.model_dump_json(),celery.states.STARTED)
+
+    def send_data_to_task(self, task_id, data):        
+        self.publish(task_id,data)
+        
+    def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False):
+        return self.subscribe(task_id,data_callback,eternal)
 
 class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
     def __init__(self, rabbitmq_url:str, rabbitmq_user:str, rabbitmq_password:str, 
@@ -232,12 +240,6 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
         if self._store is None:
             self._store = BasicStore().mongo_backend(self.mongo_url)
         return self._store
-
-    def send_data_to_task(self, task_id, data: dict):
-        self.publish(task_id,data)
-
-    def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False):
-        return self.subscribe(task_id,data_callback,eternal)
 
     def get_celery_app(self):
         return celery.Celery(self.mongo_db, broker=self.celery_rabbitmq_broker,
@@ -306,9 +308,6 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
             upsert=True
         )
 
-    def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'):
-        self.set_task_status(task_model.task_id,task_model.model_dump_json(),celery.states.STARTED)
-
 class RedisApp(AppInterface, RedisPubSub):
     def __init__(self, redis_url):
         super().__init__(redis_url)
@@ -326,12 +325,6 @@ class RedisApp(AppInterface, RedisPubSub):
         if self._store is None:
             self._store = BasicStore().redis_backend()
         return self._store
-
-    def send_data_to_task(self, task_id, data):        
-        self.publish(task_id,data)
-
-    def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False):
-        return self.subscribe(task_id,data_callback,eternal)
 
     def get_celery_app(self):
         return celery.Celery('tasks', broker=self.redis_url, backend=self.redis_url)
@@ -381,9 +374,6 @@ class RedisApp(AppInterface, RedisPubSub):
                 status=status,
                 result=result)
         self.redis_client().set(task_key, json.dumps(task_data.model_dump()))
-
-    def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'):
-        self.set_task_status(task_model.task_id,task_model.model_dump_json(),celery.states.STARTED)
 
 class ServiceOrientedArchitecture:
     BasicApp:AppInterface = None
@@ -551,4 +541,12 @@ class ServiceOrientedArchitecture:
 
         def __call__(self, *args, **kwargs):
             return self.model
+        
+
+
+
+
+
+
+
         

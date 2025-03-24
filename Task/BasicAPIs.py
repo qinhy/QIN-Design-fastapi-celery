@@ -1,17 +1,18 @@
-import datetime
 import sys
+sys.path.append("..")
+
 import time
+import datetime
+import pytz
 from typing import Literal, Optional
 
 from fastapi.responses import StreamingResponse
-import pytz
-sys.path.append("..")
-
-from celery.app import task as Task
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from Task.Basic import AppInterface, ServiceOrientedArchitecture, TaskModel
+from celery.app import task as Task
 from celery.signals import task_received
+
+from Task.Basic import AppInterface, ServiceOrientedArchitecture, TaskModel
 
 class BasicCeleryTask:
     def __init__(self,
