@@ -197,8 +197,8 @@ class TaskModel(BaseModel):
     status: Optional[str] = None
     result: Optional[str] = None
     date_done: Optional[datetime] = None
-    scheduled_for_the_timezone: Optional[str] = None
-    scheduled_for_utc: Optional[str] = None
+    scheduled_for_the_timezone: Optional[datetime] = None
+    scheduled_for_utc: Optional[datetime] = None
     timezone: Optional[str] = None
 
 class AppInterface:
@@ -298,7 +298,7 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
             del res['_id']
             return res
         else:
-            return {}
+            return None
 
     def get_task_status(self, task_id: str):
         return self.get_task_meta(task_id).get('status', None)
@@ -379,7 +379,7 @@ class RedisApp(AppInterface, RedisPubSub):
         if task_data_json:
             task_data = json.loads(task_data_json)
             return task_data
-        return {}
+        return None
 
     def get_task_status(self, task_id: str):
         return self.get_task_meta(task_id).get('status', None)
@@ -487,7 +487,7 @@ class ServiceOrientedArchitecture:
         param:Param = Param()
         args:Args = Args()
         ret:Return = Return()
-        _logger:Logger = Logger()
+        logger:Logger = Logger()
 
     class Action:
         def __init__(self, model,BasicApp:AppInterface,level = 'INFO'):
@@ -498,7 +498,7 @@ class ServiceOrientedArchitecture:
                 model = outer_class_name.Model(**model)
             self.model = model
             self.BasicApp = BasicApp
-            self.logger = self.model._logger
+            self.logger = self.model.logger
             self.logger.level = level
             self.logger.init(
                 name=f"{outer_class_name.__class__.__name__}:{self.model.task_id}",action_obj=self)

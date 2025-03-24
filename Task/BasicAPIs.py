@@ -56,11 +56,12 @@ class BasicCeleryTask:
         def on_task_received(*args, **kwags):
             request =  kwags.get('request')
             if request is None:return
-            message =  request.__dict__['_message'].__dict__
-            BasicApp.set_task_status(message['_raw']['headers']['id'],
-                                    message['_raw']['headers']['argsrepr'],'RECEIVED')
+            headers =  request.__dict__['_message'].headers
+            BasicApp.set_task_status(headers['id'],
+                            headers['argsrepr'],'RECEIVED')
             
         self.perform_action = perform_action
+        self.on_task_received = on_task_received
 
     
     ########################### essential function        
@@ -122,7 +123,9 @@ class BasicCeleryTask:
 
     def api_task_meta(self,task_id: str):
         self.api_ok()
-        return self.BasicApp.get_task_meta(task_id)
+        res = self.BasicApp.get_task_meta(task_id)
+        if res is None:raise HTTPException(status_code=404, detail="task not found")
+        return res
 
     def api_task_stop(self,task_id: str):
         self.api_ok()
@@ -188,7 +191,7 @@ class BasicCeleryTask:
         task = self.perform_action.apply_async(args=[name, data], eta=execution_time)
         res = TaskModel(task_id=task.id)
         if execution_time: res.scheduled_for_utc = execution_time
-        return res
+        return res.model_dump(exclude_unset=True)
     
     def api_schedule_perform_action(self,
         name: str, 
@@ -208,10 +211,10 @@ class BasicCeleryTask:
 
         return TaskModel(
             task_id=task.id,
-            scheduled_for_the_timezone=local_dt.isoformat(),
-            scheduled_for_utc=execution_time_utc.isoformat(),
+            scheduled_for_the_timezone=local_dt,
+            scheduled_for_utc=execution_time_utc,
             timezone=timezone
-        )
+        ).model_dump(exclude_unset=True)
 
 
 

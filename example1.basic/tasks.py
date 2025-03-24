@@ -32,9 +32,13 @@ class Fibonacci(ServiceOrientedArchitecture):
         class Return(BaseModel):
             n: int = Field(-1, description="The computed Fibonacci number at position n")
 
+        class Logger(ServiceOrientedArchitecture.Model.Logger):
+            pass
+
         param:Param = Param()
         args:Args
         ret:Return = Return()
+        logger:Logger = Logger(name='Fibonacci')
 
     class Action(ServiceOrientedArchitecture.Action):
         def __init__(self, model, BasicApp, level='INFO'):
@@ -109,47 +113,25 @@ class CeleryTask(BasicCeleryTask):
 
         self.fibonacci = fibonacci
     
-    async def get_doc_page(self,):
+    def get_doc_page(self,):
         return RedirectResponse("/docs")
     
     ########################### basic function
-    async def api_fibonacci(self, fib_task: Fibonacci.Model,                      
+    def api_fibonacci(self, fib_task: Fibonacci.Model,                      
         eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")
     ):
-        self.api_ok()
-        # Calculate execution time (eta)
-        now_t = datetime.datetime.now(datetime.timezone.utc)
-        execution_time = now_t + datetime.timedelta(seconds=eta) if eta > 0 else None
-
-        task = self.fibonacci.apply_async(args=[fib_task.model_dump()], eta=execution_time)
-        
-        res = {'task_id': task.id}
-        if execution_time: res['scheduled_for'] = execution_time
-        return res
+        return self.api_perform_action('Fibonacci',
+                                fib_task.model_dump(),eta=eta)
     
-    async def api_schedule_fibonacci(self,
+    def api_schedule_fibonacci(self,
         fib_task: Fibonacci.Model,
-        execution_time: str = Query(datetime.datetime.now(datetime.timezone.utc
-          ).isoformat().split('.')[0], description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"),
+        execution_time: str = Query(datetime.datetime.now(datetime.timezone.utc).isoformat().split('.')[0], description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"),
         timezone: Literal["UTC", "Asia/Tokyo", "America/New_York", "Europe/London", "Europe/Paris",
                         "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"] = Query("Asia/Tokyo", 
                         description="Choose a timezone from the list")
     ):
-        self.api_ok()
-        """API to execute Fibonacci task at a specific date and time, with timezone support."""
-        # Convert to UTC for Celery
-        local_dt,execution_time_utc = self.convert_to_utc(execution_time,timezone)
-        
-        # Schedule the task in UTC
-        task = self.fibonacci.apply_async(args=[fib_task.model_dump()], eta=execution_time)
-
-        return {
-            "task_id": task.id,
-            f"scheduled_for_{timezone}": local_dt.isoformat(),
-            "scheduled_for_utc": execution_time_utc.isoformat(),
-            "timezone": timezone
-        }
-
+        return self.api_schedule_perform_action('Fibonacci',
+                fib_task.model_dump(),execution_time,timezone)
 
 ########################################################
 api = FastAPI()
