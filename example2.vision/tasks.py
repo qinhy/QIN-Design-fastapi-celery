@@ -79,44 +79,54 @@ class CvCameraSharedMemoryService(ServiceOrientedArchitecture):
             if stream_reader is None:raise ValueError('stream_reader is None')
             if stream_writer is None:raise ValueError('stream_writer is None')
             res = {'msg':''}
-            BasicApp.store().add_new_obj(stream_reader)
-            BasicApp.store().add_new_obj(stream_writer)
-            try:
-                for frame_count,(image,frame_metadata) in enumerate(stream_reader):
-                    if stop_flag.is_set(): break
-                    if frame_count%100==0:
-                        start_time = time.time()
-                    else:
-                        elapsed_time = time.time() - start_time + 1e-5
-                        frame_metadata['fps'] = fps = (frame_count%100) / elapsed_time
-                        
-                    image,frame_processor_metadata = frame_processor(frame_count,image,frame_metadata)
-                    frame_metadata.update(frame_processor_metadata)
-                    stream_writer.write(image,frame_metadata)
+            # try:
+            for frame_count,(image,frame_metadata) in enumerate(stream_reader):
+                if stop_flag.is_set(): break
+                if frame_metadata is None:
+                    frame_metadata = {}
 
-                    if frame_count%1000==100:
-                        steam_info = stream_writer.get_steam_info()
-                        steam_info['fps'] = fps
-                        stream_writer.set_steam_info(steam_info)
-                        msg = f"id:{steam_info['id']},fps:{fps:.2f},stream_key:{steam_info['stream_key']},array_shape:{steam_info['array_shape']}"
-                        self.logger.info(msg)
-                        self.send_data_to_task({'msg':msg})
+                if frame_count%100==0:
+                    start_time = time.time()
+                else:
+                    elapsed_time = time.time() - start_time + 1e-5
+                    frame_metadata['fps'] = fps = (frame_count%100) / elapsed_time
+                    
+                image,frame_processor_metadata = frame_processor(frame_count,image,frame_metadata)
+                frame_metadata.update(frame_processor_metadata)
+                stream_writer.write(image,frame_metadata)
 
-            except Exception as e:
-                    res['error'] = str(e)
-                    print(res)
-            finally:
-                stream_reader.close()
-                stream_writer.close()
-                return res   
+                if frame_count%1000==100:
+                    steam_info = stream_writer.get_steam_info()
+                    steam_info['fps'] = fps
+                    stream_writer.set_steam_info(steam_info)
+                    msg = f"id:{steam_info['id']},fps:{fps:.2f},stream_key:{steam_info['stream_key']},array_shape:{steam_info['array_shape']}"
+                    self.logger.info(msg)
+                    self.send_data_to_task({'msg':msg})
+            
+
+            stream_reader.close()
+            stream_writer.close()
+
+            # except Exception as e:
+            #         res['error'] = str(e)
+            #         print(res)
+            # finally:
+            #     stream_reader.close()
+            #     stream_writer.close()
+            #     return res   
 
                 
         def __call__(self, *args, **kwargs):
             with self.listen_stop_flag() as stop_flag:
                 
-                if self.model.param.is_write():                    
+                if self.model.param.is_write():
                     self.model.param._stream_reader = self.model.param.video_reader(self.model.args.camera)
                     self.model.param._stream_writer = writer = self.model.param.writer()
+
+                    tmp_stream_writer = BasicApp.store().add_new_obj(self.model.param._stream_writer)
+                    self.model.param._stream_writer.init_controller(self.BasicApp.store())
+                    self.model.param._stream_writer._id = tmp_stream_writer._id
+
                     def frame_processor(i,frame,frame_metadata):
                         # print(i, frame.shape, 'fps', frame_metadata.get('fps',0),end='\r')
                         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)

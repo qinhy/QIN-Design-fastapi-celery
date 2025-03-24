@@ -786,14 +786,13 @@ class CommonStreamIO(CommonIO):
             super().__init__(**kwargs)
             tmp = self.model_dump_json_dict()
             tmp['id'] = self.stream_id()
-            ServiceOrientedArchitecture.BasicApp.store().set(self.stream_id(),tmp)
             
         def write(self, data, metadata={}):
             raise ValueError("[StreamWriter]: 'write' not implemented")
         
         def __del__(self):
             self.__obj_del__()
-            ServiceOrientedArchitecture.BasicApp.store().delete(self.stream_id())
+            self.get_controller().storage().delete(self.stream_id())
 
 class BidirectionalStream:
     class Bidirectional:

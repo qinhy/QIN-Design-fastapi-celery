@@ -163,6 +163,7 @@ class NumpyUInt8SharedMemoryStreamIO(NumpyUInt8SharedMemoryIO,CommonStreamIO):
             return self.model_dump()            
         def set_steam_info(self,data:dict):
             self.get_controller().update(**data)
+            self.get_controller().storage().set(self.stream_key,data)
 
     class StreamReader(NumpyUInt8SharedMemoryIO.Reader, CommonStreamIO.StreamReader, Base):
         id: str= Field(default_factory=lambda:f"NumpyUInt8SharedMemoryStreamIO.StreamReader:{uuid.uuid4()}")
