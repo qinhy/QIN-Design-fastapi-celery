@@ -1,12 +1,14 @@
 import datetime
 import sys
+import time
 from typing import Literal, Optional
 
+from fastapi.responses import StreamingResponse
 import pytz
 sys.path.append("..")
 
 from celery.app import task as Task
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from Task.Basic import AppInterface, ServiceOrientedArchitecture, TaskModel
 from celery.signals import task_received
@@ -28,6 +30,8 @@ class BasicCeleryTask:
                                     self.api_task_meta)
         self.router.get("/tasks/stop/{task_id}")(
                                     self.api_task_stop)
+        self.router.get("/tasks/sub/{task_id}")(
+                                    self.api_listen_data_of_task)
         self.router.get("/workers/")(
                                     self.api_get_workers)
         self.router.get("/action/list")(
@@ -132,6 +136,40 @@ class BasicCeleryTask:
         self.BasicApp.send_data_to_task(task_id,{'status': 'REVOKED'})
         # return self.BasicApp.set_task_revoked(task_id)
 
+    def api_listen_data_of_task(self, task_id: str,
+                                      request: Request):
+        self.api_ok()
+        meta = self.BasicApp.get_task_meta(task_id)
+        if meta is None:raise HTTPException(status_code=404, detail="task not found")
+
+        async def stream_task_messages(task_id: str, request: Request, BasicApp:AppInterface=None):
+            yield_queue = []
+
+            def handle_msg(msg: str):
+                yield_queue.append(msg)
+
+            # Start listener
+            listener_id = BasicApp.listen_data_of_task(task_id, handle_msg,True)
+            
+            try:
+                while True:
+                    # Break if client disconnected
+                    if await request.is_disconnected():
+                        print(f"[Info] Client disconnected from task {task_id}")
+                        break
+
+                    while yield_queue:
+                        msg = yield_queue.pop(0)
+                        yield f"data: {msg}\n\n"
+                        time.sleep(0.1)  # prevent tight loop
+                    else:
+                        time.sleep(0.1)  # prevent tight loop
+            finally:
+                BasicApp.unsubscribe(listener_id)
+
+        return StreamingResponse(
+            stream_task_messages(task_id,request,self.BasicApp),
+            media_type="text/event-stream")
     def api_get_workers(self,):
         # current_user: UserModels.User = Depends(AuthService.get_current_root_user)):
         self.api_ok()

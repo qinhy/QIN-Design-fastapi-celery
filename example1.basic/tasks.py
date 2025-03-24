@@ -45,13 +45,18 @@ class Fibonacci(ServiceOrientedArchitecture):
             super().__init__(model, BasicApp, level)
             self.model:Fibonacci.Model = self.model
 
+        def log_and_send(self, info:str):
+            self.logger.info(info)
+            self.send_data_to_task({'info':info})
+
         def __call__(self, *args, **kwargs):
             """Executes the Fibonacci calculation based on the mode (fast/slow)."""
             with self.listen_stop_flag() as stop_flag:
                 n = self.model.args.n
 
                 if n <= 1:
-                    self.logger.info(f"n is {n}, returning it directly.")
+                    info = f"n is {n}, returning it directly."
+                    self.log_and_send(info)
                     self.model.ret.n = n
                     return self.model
 
@@ -67,7 +72,8 @@ class Fibonacci(ServiceOrientedArchitecture):
 
         def _compute_fast(self, n, stop_flag:threading.Event):
             """Computes Fibonacci sequence using an iterative approach (fast mode)."""
-            self.logger.info("Entering fast mode.")
+            info = "Entering fast mode."
+            self.log_and_send(info)
 
             a, b = 0, 1
             for i in range(2, n + 1):
@@ -76,12 +82,14 @@ class Fibonacci(ServiceOrientedArchitecture):
                     return
                 a, b = b, a + b
 
-            self.logger.info(f'Fast mode result for n={n} is {b}')
+            info = f'Fast mode result for n={n} is {b}'
+            self.log_and_send(info)
             self.model.ret.n = b
 
         def _compute_slow(self, n, stop_flag:threading.Event):
             """Computes Fibonacci sequence using a recursive approach (slow mode)."""
-            self.logger.info("Entering slow mode.")
+            info = "Entering slow mode."
+            self.log_and_send(info)
 
             def fib_recursive(n):
                 if stop_flag.is_set():
@@ -92,7 +100,8 @@ class Fibonacci(ServiceOrientedArchitecture):
                 return fib_recursive(n - 1) + fib_recursive(n - 2)
 
             result = fib_recursive(n)
-            self.logger.info(f'Slow mode result for n={n} is {result}')
+            info = f'Slow mode result for n={n} is {result}'
+            self.log_and_send(info)
             self.model.ret.n = result
 
 class CeleryTask(BasicCeleryTask):
