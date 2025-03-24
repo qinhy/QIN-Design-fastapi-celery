@@ -227,9 +227,9 @@ class BasicCeleryTask:
 
         # Schedule the task
         task = self.perform_action.apply_async(args=[name, data], eta=execution_time)
-        res = TaskModel(task_id=task.id)
-        if execution_time: res.scheduled_for_utc = execution_time
-        return res.model_dump(exclude_unset=True)
+        return TaskModel(task_id=task.id,
+                        scheduled_for_utc = execution_time
+                        ).model_dump(exclude_unset=True)
     
     def api_schedule_perform_action(self,
         name: str, 
@@ -242,15 +242,15 @@ class BasicCeleryTask:
     ):
         """API to execute Fibonacci task at a specific date and time, with timezone support."""
         # Convert to UTC for Celery
-        local_dt,execution_time_utc = self.convert_to_utc(execution_time,timezone)
+        local_dt,execution_time = self.convert_to_utc(execution_time,timezone)
         
         # Schedule the task
-        task = self.perform_action.apply_async(args=[name, data], eta=execution_time_utc)
+        task = self.perform_action.apply_async(args=[name, data], eta=execution_time)
 
         return TaskModel(
             task_id=task.id,
             scheduled_for_the_timezone=local_dt,
-            scheduled_for_utc=execution_time_utc,
+            scheduled_for_utc=execution_time,
             timezone=timezone
         ).model_dump(exclude_unset=True)
 
