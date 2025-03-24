@@ -1,4 +1,5 @@
 import datetime
+import json
 from multiprocessing import shared_memory
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -160,10 +161,7 @@ class VideoStreamReader:
 class NumpyUInt8SharedMemoryStreamIO(NumpyUInt8SharedMemoryIO,CommonStreamIO):
     class Base(NumpyUInt8SharedMemoryIO.Base,CommonStreamIO.Base):
         def get_steam_info(self)->dict:
-            return self.model_dump()            
-        def set_steam_info(self,data:dict):
-            self.get_controller().update(**data)
-
+            return self.model_dump()
     class StreamReader(NumpyUInt8SharedMemoryIO.Reader, CommonStreamIO.StreamReader, Base):
         id: str= Field(default_factory=lambda:f"NumpyUInt8SharedMemoryStreamIO.StreamReader:{uuid.uuid4()}")
         def read(self,copy=True)->tuple[Any,dict]:

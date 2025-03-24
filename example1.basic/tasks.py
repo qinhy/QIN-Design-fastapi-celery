@@ -46,7 +46,7 @@ class Fibonacci(ServiceOrientedArchitecture):
             self.model:Fibonacci.Model = self.model
 
         def log_and_send(self, info:str):
-            self.logger.info(info)
+            self.logger.log(self.logger.level,info)
             self.send_data_to_task({'info':info})
 
         def __call__(self, *args, **kwargs):

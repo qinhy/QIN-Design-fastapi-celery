@@ -553,7 +553,7 @@ def now_utc():
 
 class CommonIO:
     class Base(Model4Basic.AbstractObj):       
-        auto_del:bool = True     
+        auto_del:bool = True
         def write(self,data):
             raise ValueError("[CommonIO.Reader]: This is Reader can not write")
         def read(self):
@@ -749,6 +749,7 @@ class CommonStreamIO(CommonIO):
         fps:float = 0
         stream_key: str = 'NULL'
         is_close: bool = False
+        auto_del: bool = False
         
         def stream_id(self):
             return f'streams:{self.stream_key}'
@@ -770,6 +771,7 @@ class CommonStreamIO(CommonIO):
         
     class StreamReader(CommonIO.Reader, Base):
         id: str= Field(default_factory=lambda:f"CommonStreamIO.StreamReader:{uuid4()}")
+        
         def read(self)->tuple[Any,dict]:
             return super().read(),{}
         
@@ -786,14 +788,20 @@ class CommonStreamIO(CommonIO):
             super().__init__(**kwargs)
             tmp = self.model_dump_json_dict()
             tmp['id'] = self.stream_id()
-            ServiceOrientedArchitecture.BasicApp.store().set(self.stream_id(),tmp)
             
         def write(self, data, metadata={}):
             raise ValueError("[StreamWriter]: 'write' not implemented")
         
-        def __del__(self):
-            self.__obj_del__()
-            ServiceOrientedArchitecture.BasicApp.store().delete(self.stream_id())
+        def set_steam_info(self,data:dict):
+            self.get_controller().update(**data)
+            self.get_controller().storage(
+                ).set('streams:'+self.stream_key,
+                json.loads(json.dumps(data, default=str)))
+            
+        def __obj_del__(self):
+            self.get_controller().storage().delete('streams:'+self.stream_key)
+            self.get_controller().delete()
+        
 
 class BidirectionalStream:
     class Bidirectional:

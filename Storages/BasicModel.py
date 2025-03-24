@@ -142,7 +142,8 @@ class Model4Basic:
             class_type = self.__class__.__name__+'Controller'
             res = {c.__name__:c for c in [i for k,i in modelclass.__dict__.items() if '_' not in k]}
             res = res.get(class_type, None)
-            if res is None: raise ValueError(f'No such class of {class_type}')
+            if res is None: print(f'No such class of {class_type} use AbstractObjController')# raise ValueError(f'No such class of {class_type}')
+            res = Controller4Basic.AbstractObjController
             return res
         def get_controller(self): return self._controller
         def init_controller(self,store):self._controller = self._get_controller_class()(store,self)
