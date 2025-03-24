@@ -227,5 +227,5 @@ api.add_middleware(SessionMiddleware,
 
 
 celery_app = BasicApp.get_celery_app()
-api.include_router(CeleryTask(BasicApp,celery_app).router, prefix="", tags=["fibonacci"])
+api.include_router(CeleryTask(BasicApp,celery_app).router, prefix="", tags=["vision"])
     
