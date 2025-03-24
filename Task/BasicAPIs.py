@@ -134,7 +134,7 @@ class BasicCeleryTask:
     def api_task_stop(self,task_id: str):
         self.api_ok()
         self.BasicApp.send_data_to_task(task_id,{'status': 'REVOKED'})
-        # return self.BasicApp.set_task_revoked(task_id)
+        self.BasicApp.set_task_status(task_id,'','REVOKED')
 
     def api_listen_data_of_task(self, task_id: str,
                                       request: Request):
@@ -228,8 +228,8 @@ class BasicCeleryTask:
         # Schedule the task
         task = self.perform_action.apply_async(args=[name, data], eta=execution_time)
         return TaskModel(task_id=task.id,
-                        scheduled_for_utc = execution_time
-                        ).model_dump(exclude_unset=True)
+                        scheduled_for_utc=execution_time
+                        ).model_dump(exclude_none=True)
     
     def api_schedule_perform_action(self,
         name: str, 
@@ -252,7 +252,7 @@ class BasicCeleryTask:
             scheduled_for_the_timezone=local_dt,
             scheduled_for_utc=execution_time,
             timezone=timezone
-        ).model_dump(exclude_unset=True)
+        ).model_dump(exclude_none=True)
 
 
 

@@ -2,19 +2,14 @@ from contextlib import contextmanager
 from datetime import datetime
 import io
 import logging
-from multiprocessing import shared_memory
-from typing import Any, Optional
+from typing import Optional
 from uuid import uuid4
-from zoneinfo import ZoneInfo
 
 import threading
-import time
 import json
 
-import numpy as np
-from Storages.BasicModel import Model4Basic
 import pymongo
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, PrivateAttr
 from pymongo import MongoClient
 import pymongo.errors
 import redis
@@ -24,14 +19,14 @@ import celery.states
 import requests
 
 try:
-    from ..Storages import SingletonKeyValueStorage, EventDispatcherController, PythonDictStorage
+    from ..Storages import EventDispatcherController, PythonDictStorage
 except Exception as e:
-    from Storages import SingletonKeyValueStorage, EventDispatcherController, PythonDictStorage
+    from Storages import EventDispatcherController, PythonDictStorage
 
 try:
-    from ..Storages.BasicModel import BasicStore,Controller4Basic,Model4Basic
+    from ..Storages.BasicModel import BasicStore
 except Exception as e:
-    from Storages.BasicModel import BasicStore,Controller4Basic,Model4Basic
+    from Storages.BasicModel import BasicStore
 
 class PubSubInterface:
     ROOT_KEY = 'PubSub'
@@ -212,8 +207,8 @@ class AppInterface(PubSubInterface):
     def check_mongodb_health(self, url=None) -> bool:('check_mongodb_health')
     def get_tasks_collection(self): raise NotImplementedError('get_tasks_collection')
     def get_tasks_list(self)->list[TaskModel]: raise NotImplementedError('get_tasks_list')
-    def get_task_meta(self, task_id: str): raise NotImplementedError('get_task_meta')
-    def get_task_status(self, task_id: str): raise NotImplementedError('get_task_status')
+    def get_task_meta(self, task_id: str)->dict: raise NotImplementedError('get_task_meta')
+    def get_task_status(self, task_id: str): return self.get_task_meta(task_id).get('status', None)
     def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'): raise NotImplementedError('set_task_started')
     def set_task_status(self, task_id, result='', status=celery.states.STARTED): raise NotImplementedError('set_task_status')
 
@@ -299,10 +294,7 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
             return res
         else:
             return None
-
-    def get_task_status(self, task_id: str):
-        return self.get_task_meta(task_id).get('status', None)
-
+            
     def set_task_status(self, task_id, result='', status=celery.states.STARTED):
         collection = self.get_tasks_collection()
         collection.update_one(
@@ -380,10 +372,7 @@ class RedisApp(AppInterface, RedisPubSub):
             task_data = json.loads(task_data_json)
             return task_data
         return None
-
-    def get_task_status(self, task_id: str):
-        return self.get_task_meta(task_id).get('status', None)
-
+        
     def set_task_status(self, task_id, result='', status=celery.states.STARTED):
         """Marks a task as started in Redis."""
         task_key = f'celery-task-meta-{task_id}'
@@ -409,6 +398,12 @@ class ServiceOrientedArchitecture:
             pass
 
         class Logger(BaseModel):
+            class Levels:
+                ERROR:str='ERROR'
+                WARNING:str='WARNING'
+                INFO:str='INFO'
+                DEBUG:str='DEBUG'
+                
             name: str  = "service" # Logger name
             level: str = "INFO"  # Default log level
             logs:str = ''
@@ -490,7 +485,7 @@ class ServiceOrientedArchitecture:
         logger:Logger = Logger()
 
     class Action:
-        def __init__(self, model,BasicApp:AppInterface,level = 'INFO'):
+        def __init__(self, model,BasicApp:AppInterface,level=None):
             outer_class_name:ServiceOrientedArchitecture = self.__class__.__qualname__.split('.')[0]
             if isinstance(model, dict):
                 nones = [k for k,v in model.items() if v is None]
@@ -499,6 +494,7 @@ class ServiceOrientedArchitecture:
             self.model = model
             self.BasicApp = BasicApp
             self.logger = self.model.logger
+            if level is None:level=ServiceOrientedArchitecture.Model.Logger.Levels.INFO
             self.logger.level = level
             self.logger.init(
                 name=f"{outer_class_name.__class__.__name__}:{self.model.task_id}",action_obj=self)
@@ -515,6 +511,9 @@ class ServiceOrientedArchitecture:
         def set_task_status(self,status):
             self.BasicApp.set_task_status(self.model.task_id,self.model.model_dump_json(),status)
 
+        def get_task_status(self):
+            return self.BasicApp.get_task_status(self.model.task_id)
+
         def stop_service(self):
             task_id=self.model.task_id
             self.BasicApp.send_data_to_task(task_id,{'status': 'REVOKED'})
@@ -527,430 +526,29 @@ class ServiceOrientedArchitecture:
             self.dispose()
 
         @contextmanager
-        def listen_stop_flag(self):
-            self.set_task_status(celery.states.STARTED)
+        def listen_stop_flag(self):            
             # A shared flag to communicate between threads
             stop_flag = threading.Event()
-            # Function to check if the task should be stopped, running in a separate thread
-            def check_task_status(data:dict):
-                if data.get('status',None) == celery.states.REVOKED:
-                    self.set_task_status(celery.states.REVOKED)
-                    stop_flag.set()
-            self.listen_data_of_task(check_task_status,True)
-            
-            try:
-                yield stop_flag  # Provide the stop_flag to the `with` block
-            finally:
-                self.send_data_to_task({})
+
+            status = self.get_task_status()
+            if status == celery.states.REVOKED:
+                stop_flag.set()
+                yield stop_flag
+            else:
+                self.set_task_status(celery.states.STARTED)
+                # Function to check if the task should be stopped, running in a separate thread
+                def check_task_status(data:dict):
+                    if data.get('status',None) == celery.states.REVOKED:
+                        self.set_task_status(celery.states.REVOKED)
+                        stop_flag.set()
+                self.listen_data_of_task(check_task_status,True)
+                
+                try:
+                    yield stop_flag  # Provide the stop_flag to the `with` block
+                finally:
+                    self.send_data_to_task({})
             return stop_flag
 
         def __call__(self, *args, **kwargs):
             return self.model
-
-##################### IO 
-def now_utc():
-    return datetime.now().replace(tzinfo=ZoneInfo("UTC"))
-
-class CommonIO:
-    class Base(Model4Basic.AbstractObj):       
-        auto_del:bool = True
-        def write(self,data):
-            raise ValueError("[CommonIO.Reader]: This is Reader can not write")
-        def read(self):
-            raise ValueError("[CommonIO.Writer]: This is Writer can not read") 
-        def close(self):
-            raise ValueError("[CommonIO.Base]: 'close' not implemented")
-    class Reader(Base):
-        def read(self)->Any:
-            raise ValueError("[CommonIO.Reader]: 'read' not implemented")
-    class Writer(Base):
-        def write(self,data):
-            raise ValueError("[CommonIO.Writer]: 'write' not implemented")
-
-class GeneralSharedMemoryIO(CommonIO):
-    class Base(CommonIO.Base):
-        shm_name: str = Field(..., description="The name of the shared memory segment")
-        create: bool = Field(default=False, description="Flag indicating whether to create or attach to shared memory")
-        shm_size: int = Field(..., description="The size of the shared memory segment in bytes")
-
-        _shm:shared_memory.SharedMemory
-        _buffer:memoryview
-
-        def build_buffer(self):
-            # Initialize shared memory with the validated size and sanitized name
-            self._shm = shared_memory.SharedMemory(name=self.shm_name, create=self.create, size=self.shm_size)
-            self._buffer = memoryview(self._shm.buf)  # View into the shared memory buffer
-            return self
-                
-        def close(self):
-            """Detach from the shared memory."""
-            # Release the memoryview before closing the shared memory
-            if hasattr(self,'_buffer') and self._buffer is not None:
-                self._buffer.release()
-                del self._buffer
-            if hasattr(self,'_shm'):
-                self._shm.close()  # Detach from shared memory
-
-        def __del__(self):            
-            self.__obj_del__()
-            self.close()
-
-    class Reader(CommonIO.Reader, Base):
-        id: str= Field(default_factory=lambda:f"GeneralSharedMemoryIO.Reader:{uuid4()}")
-        def read(self, size: int = None) -> bytes:
-            """Read binary data from shared memory."""
-            if size is None or size > self.shm_size:
-                size = self.shm_size  # Read the whole buffer by default
-            return bytes(self._buffer[:size])  # Convert memoryview to bytes
-  
-    class Writer(CommonIO.Writer, Base):
-        id: str= Field(default_factory=lambda:f"GeneralSharedMemoryIO.Writer:{uuid4()}")
-        def write(self, data: bytes):
-            """Write binary data to shared memory."""
-            if len(data) > self.shm_size:
-                raise ValueError(f"Data size exceeds shared memory size ({len(data)} > {self.shm_size})")
-            
-            # Write the binary data to shared memory
-            self._buffer[:len(data)] = data
         
-        def close(self):
-            super().close()
-            if hasattr(self,'_shm'):
-                self._shm.unlink()  # Unlink (remove) the shared memory segment after writing
-    
-    @staticmethod
-    def reader(shm_name: str, shm_size: int):
-        return GeneralSharedMemoryIO.Reader(shm_name=shm_name, create=False, shm_size=shm_size).build_buffer()
-    
-    @staticmethod
-    def writer(shm_name: str, shm_size: int):
-        return GeneralSharedMemoryIO.Writer(shm_name=shm_name, create=True, shm_size=shm_size).build_buffer()
-   
-class NumpyUInt8SharedMemoryIO(GeneralSharedMemoryIO):
-    class Base(GeneralSharedMemoryIO.Base):
-        array_shape: tuple = Field(..., description="Shape of the NumPy array to store in shared memory")
-        _dtype: np.dtype = np.uint8
-        _shared_array: np.ndarray
-        def __init__(self, **kwargs):
-            kwargs['shm_size'] = np.prod(kwargs['array_shape']) * np.dtype(np.uint8).itemsize
-            super().__init__(**kwargs)
-            
-        def build_buffer(self):
-            super().build_buffer()
-            self._shared_array = np.ndarray(self.array_shape, dtype=self._dtype, buffer=self._buffer)
-            return self
-
-    class Reader(GeneralSharedMemoryIO.Reader, Base):
-        id: str= Field(default_factory=lambda:f"NumpyUInt8SharedMemoryIO.Reader:{uuid4()}")
-        def read(self,copy=True) -> np.ndarray:
-            return self._shared_array.copy() if copy else self._shared_array
-            # binary_data = super().read(size=self.shm_size)
-            # return np.frombuffer(binary_data, dtype=self._dtype).reshape(self.array_shape)
-    
-    class Writer(GeneralSharedMemoryIO.Writer, Base):
-        id: str= Field(default_factory=lambda:f"NumpyUInt8SharedMemoryIO.Writer:{uuid4()}")
-        def write(self, data: np.ndarray):
-            if data.shape != self.array_shape:
-                raise ValueError(f"Data shape {data.shape} does not match expected shape {self.array_shape}.")
-            if data.dtype != self._dtype:
-                raise ValueError(f"Data type {data.dtype} does not match expected type {self._dtype}.")            
-            self._shared_array[:] = data[:]
-            # super().write(data.tobytes())
-
-    @staticmethod
-    def reader(shm_name: str, array_shape: tuple):
-        shm_size = np.prod(array_shape) * np.dtype(np.uint8).itemsize
-        return NumpyUInt8SharedMemoryIO.Reader(shm_size=shm_size,
-                                    shm_name=shm_name, create=False, array_shape=array_shape).build_buffer()
-    
-    @staticmethod
-    def writer(shm_name: str, array_shape: tuple):
-        shm_size = np.prod(array_shape) * np.dtype(np.uint8).itemsize
-        return NumpyUInt8SharedMemoryIO.Writer(shm_size=shm_size,
-                                    shm_name=shm_name, create=True, array_shape=array_shape).build_buffer()
-
-class NumpyUInt8SharedMemoryQueue:
-    def __init__(self, shm_prefix: str, num_blocks: int, block_size: int, item_shape: tuple):
-        """
-        Create a queue using multiple shared memory blocks.
-        Args:
-            shm_prefix (str): Prefix for shared memory block names.
-            num_blocks (int): Number of blocks in the queue.
-            block_size (int): Maximum number of items per block.
-            item_shape (tuple): Shape of each item in the queue.
-        """
-        self.num_blocks = num_blocks
-        self.block_size = block_size
-        self.item_shape = item_shape
-        self.total_capacity = num_blocks * block_size
-
-        # Create NumpyUInt8SharedMemoryIO instances for each block
-        self.blocks = [
-            NumpyUInt8SharedMemoryIO.writer(
-                shm_name=f"{shm_prefix}_block_{i}",
-                array_shape=(block_size, *item_shape),
-            )
-            for i in range(num_blocks)
-        ]
-
-        # Metadata
-        self.head = 0  # Global index for dequeue
-        self.tail = 0  # Global index for enqueue
-
-    def enqueue(self, item: np.ndarray):
-        if item.shape != self.item_shape:
-            raise ValueError(f"Item shape {item.shape} does not match expected shape {self.item_shape}.")
-
-        # Determine the block and position within the block
-        block_idx = self.tail // self.block_size
-        pos_in_block = self.tail % self.block_size
-
-        # Write item to the block
-        self.blocks[block_idx]._shared_array[pos_in_block] = item
-
-        # Update the tail index
-        self.tail = (self.tail + 1) % self.total_capacity
-
-        # If the queue is full, move the head forward (overwrite old data)
-        if self.tail == self.head:
-            self.head = (self.head + 1) % self.total_capacity
-
-    def dequeue(self) -> np.ndarray:
-        if self.head == self.tail:
-            raise ValueError("Queue is empty.")
-
-        # Determine the block and position within the block
-        block_idx = self.head // self.block_size
-        pos_in_block = self.head % self.block_size
-
-        # Read item from the block
-        item = self.blocks[block_idx]._shared_array[pos_in_block].copy()
-
-        # Update the head index
-        self.head = (self.head + 1) % self.total_capacity
-
-        return item
-
-    def is_empty(self) -> bool:
-        return self.head == self.tail
-
-    def is_full(self) -> bool:
-        return (self.tail + 1) % self.total_capacity == self.head
-
-    def current_size(self) -> int:
-        """Returns the current number of items in the queue."""
-        if self.tail >= self.head:
-            return self.tail - self.head
-        return self.total_capacity - (self.head - self.tail)
-
-##################### stream IO 
-class CommonStreamIO(CommonIO):
-    class Base(CommonIO.Base):
-        fps:float = 0
-        stream_key: str = 'NULL'
-        is_close: bool = False
-        auto_del: bool = False
-        
-        def stream_id(self):
-            return f'streams:{self.stream_key}'
-
-        def write(self, data, metadata={}):
-            raise ValueError("[CommonStreamIO.Reader]: This is Reader can not write")
-        
-        def read(self):
-            raise ValueError("[CommonStreamIO.Writer]: This is Writer can not read") 
-        
-        def close(self):
-            raise ValueError("[StreamWriter]: 'close' not implemented")
-        
-        def get_steam_info(self)->dict:
-            raise ValueError("[StreamWriter]: 'get_steam_info' not implemented")
-            
-        def set_steam_info(self,data):
-            raise ValueError("[StreamWriter]: 'set_steam_info' not implemented")
-        
-    class StreamReader(CommonIO.Reader, Base):
-        id: str= Field(default_factory=lambda:f"CommonStreamIO.StreamReader:{uuid4()}")
-        
-        def read(self)->tuple[Any,dict]:
-            return super().read(),{}
-        
-        def __iter__(self):
-            return self
-
-        def __next__(self):
-            return self.read()        
-        
-    class StreamWriter(CommonIO.Writer, Base):
-        id: str= Field(default_factory=lambda:f"CommonStreamIO.StreamWriter:{uuid4()}")
-
-        def __init__(self, **kwargs):
-            super().__init__(**kwargs)
-            tmp = self.model_dump_json_dict()
-            tmp['id'] = self.stream_id()
-            
-        def write(self, data, metadata={}):
-            raise ValueError("[StreamWriter]: 'write' not implemented")
-        
-        def set_steam_info(self,data:dict):
-            self.get_controller().update(**data)
-            self.get_controller().storage(
-                ).set('streams:'+self.stream_key,
-                json.loads(json.dumps(data, default=str)))
-            
-        def __obj_del__(self):
-            self.get_controller().storage().delete('streams:'+self.stream_key)
-            self.get_controller().delete()
-        
-
-class BidirectionalStream:
-    class Bidirectional:
-        id: str= Field(default_factory=lambda:f"BidirectionalStream.Bidirectional:{uuid4()}")
-        def __init__(self, frame_processor=lambda i,frame,frame_metadata:(frame,frame_metadata),
-                        stream_reader:CommonStreamIO.StreamReader=None,stream_writer:CommonStreamIO.StreamWriter=None):
-            
-            self.frame_processor = frame_processor
-            self.stream_writer = stream_writer
-            self.stream_reader = stream_reader
-            self.streams:list[CommonStreamIO.Base] = [self.stream_reader, self.stream_writer]
-            
-        def run(self):
-            for s in self.streams:
-                if s is None:raise ValueError('stream is None')
-                
-            res = {'msg':''}
-            try:
-                for frame_count,(image,frame_metadata) in enumerate(self.stream_reader):
-                    if frame_count%100==0:
-                        start_time = time.time()
-                    else:
-                        elapsed_time = time.time() - start_time + 1e-5
-                        frame_metadata['fps'] = fps = (frame_count%100) / elapsed_time
-                    
-
-                    image,frame_processor_metadata = self.frame_processor(frame_count,image,frame_metadata)
-                    frame_metadata.update(frame_processor_metadata)
-                    self.stream_writer.write(image,frame_metadata)
-
-                    if frame_count%1000==100:
-                        metadata = self.stream_writer.get_steam_info()
-                        if metadata.get('is_close',False):
-                            for s in self.streams:
-                                s.close()
-                            break
-                        metadata['fps'] = fps
-                        self.stream_writer.set_steam_info(metadata)
-
-            except Exception as e:
-                    res['error'] = str(e)
-                    print(res)
-            finally:
-                for s in self.streams:
-                    s.close()
-                return res
-
-    class WriteOnly(Bidirectional):
-        id: str= Field(default_factory=lambda:f"BidirectionalStream.WriteOnly:{uuid4()}")
-        def __init__(self, frame_processor=lambda i,frame,frame_metadata:(frame,frame_metadata),
-                    stream_writer:CommonStreamIO.StreamWriter=None):
-            self.frame_processor = frame_processor
-            self.stream_writer = stream_writer
-            self.streams:list[CommonStreamIO.Base] = [self.stream_writer]
-            
-            def mock_stream():
-                while True: yield None,{}
-            self.stream_reader = mock_stream()
-
-    class ReadOnly(Bidirectional):
-        id: str= Field(default_factory=lambda:f"BidirectionalStream.ReadOnly:{uuid4()}")
-        def __init__(self, frame_processor=lambda i,frame,frame_metadata:(frame,frame_metadata),
-                    stream_reader:CommonStreamIO.StreamReader=None):
-            
-            self.frame_processor = frame_processor
-            self.stream_reader = stream_reader
-
-        def run(self):
-            if self.stream_reader is None:raise ValueError('stream_reader is None')
-            res = {'msg':''}
-            try:
-                for frame_count,(image,frame_metadata) in enumerate(self.stream_reader):
-                    if frame_count%100==0:
-                        start_time = time.time()
-                    else:
-                        elapsed_time = time.time() - start_time + 1e-5
-                        frame_metadata['fps'] = fps = (frame_count%100) / elapsed_time
-
-                    image,frame_metadata = self.frame_processor(frame_count,image,frame_metadata)
-
-                    if frame_count%1000==100:
-                        if self.stream_reader.get_steam_info().get('is_close',False):
-                            self.stream_reader.close()
-                            break
-                        
-            except Exception as e:
-                    res['error'] = str(e)
-                    print(res)
-            finally:
-                self.stream_reader.close()
-                res['msg'] += f'\nstream {self.stream_reader.stream_key} reader.close()'
-                return res
-
-    @staticmethod
-    def bidirectional(frame_processor,stream_reader:CommonStreamIO.Reader,stream_writer:CommonStreamIO.Writer):
-        return BidirectionalStream.Bidirectional(frame_processor,stream_reader,stream_writer)
-
-    @staticmethod
-    def readOnly(frame_processor,stream_reader:CommonStreamIO.Reader):
-        return BidirectionalStream.ReadOnly(frame_processor,stream_reader)
-
-    @staticmethod
-    def writeOnly(frame_processor,stream_writer:CommonStreamIO.Writer):
-        return BidirectionalStream.WriteOnly(frame_processor,stream_writer)
-
-try:
-    import redis   
-
-    class RedisIO(CommonIO):
-        class Base(CommonIO.Base):
-            key: str
-
-            redis_host: str = Field(default='localhost', description="The Redis server hostname")
-            redis_port: int = Field(default=6379, description="The Redis server port")
-            redis_db: int = Field(default=0, description="The Redis database index")
-            _redis_client:redis.Redis = None
-            
-            def __init__(self, **kwargs):
-                super().__init__(**kwargs)
-                self._redis_client = redis.Redis(host=self.redis_host, port=self.redis_port, db=self.redis_db)
-            
-            def close(self):
-                del self._redis_client
-                
-        class Reader(CommonIO.Reader, Base):            
-            def read(self):
-                data = self._redis_client.get(self.key)
-                if data is None:
-                    raise ValueError(f"No data found for key: {self.key}")
-                return data  # Returning the raw binary data stored under the key
-        
-        class Writer(CommonIO.Writer, Base):
-            def write(self, data: bytes):
-                if not isinstance(data, bytes):
-                    raise ValueError("Data must be in binary format (bytes)")
-                self._redis_client.set(self.key, data)  # Store binary data under the given key
-            def close(self):
-                self._redis_client.delete(self.key)
-                return super().close()
-
-        @staticmethod
-        def reader(key: str, redis_host: str = 'localhost', redis_port: int = 6379, redis_db: int = 0):
-            return RedisIO.Reader(key=key, redis_host=redis_host, redis_port=redis_port, redis_db=redis_db)
-
-        @staticmethod
-        def writer(key: str, redis_host: str = 'localhost', redis_port: int = 6379, redis_db: int = 0):
-            return RedisIO.Writer(key=key, redis_host=redis_host, redis_port=redis_port, redis_db=redis_db)
-
-except Exception as e:
-    print('No redis support')
-except Exception as e:
-    print('No redis support')

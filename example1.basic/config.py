@@ -22,7 +22,6 @@ def find_advanced_config(possible_paths=None):
 
     return None
 
-
 def set_consumer_timeout(config_path, timeout_ms):
     new_block = f'[\n  {{rabbit, [\n    {{consumer_timeout, {timeout_ms}}}\n  ]}}\n].\n'
 
@@ -60,7 +59,6 @@ def set_consumer_timeout(config_path, timeout_ms):
         file.write(content)
 
     return config_path
-
 
 def get_consumer_timeout(config_path):
     if not os.path.isfile(config_path):
