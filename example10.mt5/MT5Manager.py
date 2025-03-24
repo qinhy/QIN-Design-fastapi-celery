@@ -519,10 +519,14 @@ class BookService(ServiceOrientedArchitecture):
 
         class Return(BaseModel):
             books:list[Book] = []
+
+        class Logger(ServiceOrientedArchitecture.Model.Logger):
+            pass
         
         param:Param
         args:Args = Args()
         ret:Return = Return()
+        logger:Logger = Logger(name='BookService')
 
         @staticmethod
         def build(acc:MT5Account,book:Book,plan=False):
@@ -557,15 +561,22 @@ class BookService(ServiceOrientedArchitecture):
 
             super().__init__(account)
             self.book = self.model.param.book
+        
+        def log_and_send(self,info:str):
+            self.logger.log(info)
+            self.send_data_to_task(info)
 
         def change_run(self, func_name, kwargs):
+            self.log_and_send(f'change run: {func_name}, {kwargs}')
             self.model.args = BookService.Model.Args(**kwargs)
             self.book_run = lambda: getattr(self.book, func_name)(**kwargs)
             return self
 
         def run(self):
             # tbs = {f'{b.symbol}-{b.price_open}-{b.volume}':b.model_dump() for b in Book().getBooks()}
-            return self.book_run()
+            res = self.book_run()
+            self.log_and_send(f'book_run: {res}')
+            return res
         
 
 # @descriptions('Retrieve MT5 last N bars data in MetaTrader 5 terminal.',

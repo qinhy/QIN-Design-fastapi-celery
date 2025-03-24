@@ -10,7 +10,7 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from Task.Basic import AppInterface, RabbitmqMongoApp, RedisApp, ServiceOrientedArchitecture
+from Task.Basic import AppInterface, RabbitmqMongoApp, RedisApp, ServiceOrientedArchitecture, TaskModel
 from Task.BasicAPIs import BasicCeleryTask
 from config import *
 
@@ -46,7 +46,8 @@ class CeleryTask(BasicCeleryTask):
             elif action in ['send', 'changeP', 'changeTS', 'account_info']:
                 res = res.ret.books[0].model_dump()
             else:
-                res = res.model_dump()
+                raise ValueError(f'no action of {action}')
+                # res = res.model_dump()
             return self.is_json_serializable(res)
 
         self.celery_book_service = celery_book_service
@@ -63,11 +64,11 @@ class CeleryTask(BasicCeleryTask):
         
         self.celery_rates_copy = celery_rates_copy
     
-    async def get_doc_page(self,):
+    def get_doc_page(self,):
         return RedirectResponse("/docs")
     
     ########################### basic service
-    async def api_book_service(self, acc: MT5Account, book: Book, action: str,
+    def api_book_service(self, acc: MT5Account, book: Book, action: str,
         eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")
     ):
         self.api_ok()
@@ -76,12 +77,12 @@ class CeleryTask(BasicCeleryTask):
         execution_time = now_t + datetime.timedelta(seconds=eta) if eta > 0 else None
 
         task = self.celery_book_service.apply_async(args=[acc.model_dump(),book.model_dump(),action], eta=execution_time)
-        
-        res = {'task_id': task.id}
-        if execution_time: res['scheduled_for'] = execution_time
-        return res
+
+        res = TaskModel(task_id=task.id)
+        if execution_time: res.scheduled_for_utc = execution_time
+        return res.model_dump(exclude_unset=True)
     
-    async def api_schedule_book_service(self, acc: MT5Account, book: Book, action: str,
+    def api_schedule_book_service(self, acc: MT5Account, book: Book, action: str,
         execution_time: str = Query(datetime.datetime.now(datetime.timezone.utc
           ).isoformat().split('.')[0], description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"),
         timezone: Literal["UTC", "Asia/Tokyo", "America/New_York", "Europe/London", "Europe/Paris",
@@ -96,14 +97,15 @@ class CeleryTask(BasicCeleryTask):
         # Schedule the task in UTC
         task = self.celery_book_service.apply_async(args=[acc.model_dump(),book.model_dump(),action], eta=execution_time)
         
-        return {
-            "task_id": task.id,
-            f"scheduled_for_{timezone}": local_dt.isoformat(),
-            "scheduled_for_utc": execution_time_utc.isoformat(),
-            "timezone": timezone
-        }
+        return TaskModel(
+                    task_id=task.id,
+                    scheduled_for_the_timezone=local_dt,
+                    scheduled_for_utc=execution_time_utc,
+                    timezone=timezone
+                ).model_dump(exclude_unset=True)
+
     
-    async def api_rates_copy(self, acc: MT5Account, symbol: str, timeframe: str, count: int, debug: bool = False):
+    def api_rates_copy(self, acc: MT5Account, symbol: str, timeframe: str, count: int, debug: bool = False):
         """
         Endpoint to copy rates for a given MT5 account, symbol, timeframe, and count.
         
@@ -117,20 +119,20 @@ class CeleryTask(BasicCeleryTask):
         task = self.celery_rates_copy.delay(acc.model_dump(), symbol, timeframe, count, debug)
         return {'task_id': task.id}
     
-    ########################### reuse basic service async and await
-    async def api_account_info(self, acc: MT5Account):
+    ########################### reuse basic service and await
+    def api_account_info(self, acc: MT5Account):
         """Endpoint to fetch account information."""
-        return await self.api_book_service(acc, Book(), action='account_info', eta=0)
+        return self.api_book_service(acc, Book(), action='account_info', eta=0)
     
-    async def api_get_books(self, acc: MT5Account):
+    def api_get_books(self, acc: MT5Account):
         """Endpoint to get books for a given MT5 account."""
-        return await self.api_book_service(acc, Book(), action='getBooks', eta=0)
+        return self.api_book_service(acc, Book(), action='getBooks', eta=0)
 
-    async def api_book_send(self, acc: MT5Account, book: Book):
+    def api_book_send(self, acc: MT5Account, book: Book):
         """Endpoint to send a book."""
-        return await self.api_book_service(acc, book, action='send', eta=0)
+        return self.api_book_service(acc, book, action='send', eta=0)
 
-    async def api_schedule_book_send(self, acc: MT5Account, 
+    def api_schedule_book_send(self, acc: MT5Account, 
     symbol:str='USDJPY',sl:float=147.0,tp:float=150.0,price_open:float=148.0,volume:float=0.01,
     execution_time: str = Query(datetime.datetime.now(datetime.timezone.utc
           ).isoformat().split('.')[0],
@@ -142,19 +144,19 @@ class CeleryTask(BasicCeleryTask):
                                     description="Choose a timezone from the list")
     ):
         book = Book(symbol=symbol,sl=sl,tp=tp,price_open=price_open,volume=volume).as_plan()
-        return await self.api_schedule_book_service(acc, book, 'send', execution_time,timezone)
+        return self.api_schedule_book_service(acc, book, 'send', execution_time,timezone)
 
-    async def api_book_close(self, acc: MT5Account, book: Book):
+    def api_book_close(self, acc: MT5Account, book: Book):
         """Endpoint to close a book."""
-        return await self.api_book_service(acc, book, action='close', eta=0)
+        return self.api_book_service(acc, book, action='close', eta=0)
     
-    async def api_book_change_price(self, acc: MT5Account, book: Book, p: float):
+    def api_book_change_price(self, acc: MT5Account, book: Book, p: float):
         """Endpoint to change the price of a book."""
-        return await self.api_book_service(acc, book, action='changeP', p=p, eta=0)
+        return self.api_book_service(acc, book, action='changeP', p=p, eta=0)
 
-    async def api_book_change_tp_sl(self, acc: MT5Account, book: Book, tp: float, sl: float):
+    def api_book_change_tp_sl(self, acc: MT5Account, book: Book, tp: float, sl: float):
         """Endpoint to change tp sl values of a book."""
-        return await self.api_book_service(acc, book, action='changeTS', tp=tp, sl=sl, eta=0)
+        return self.api_book_service(acc, book, action='changeTS', tp=tp, sl=sl, eta=0)
 
 ########################################################
 
