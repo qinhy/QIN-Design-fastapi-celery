@@ -1,1 +1,0 @@
-uvicorn tasks:CeleryTask.api --port %UVICORN_PORT%
