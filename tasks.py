@@ -76,6 +76,7 @@ class CeleryTask(BasicCeleryTask):
 
 ########################################################
 conf = AppConfig()
+print(conf.validate_backend().model_dump())
 api = FastAPI()
 
 api.add_middleware(

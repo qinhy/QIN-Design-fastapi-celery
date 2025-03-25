@@ -105,7 +105,7 @@ def get_consumer_timeout(config_path):
 #     UVICORN_PORT = int(os.getenv('UVICORN_PORT', 8000))  # Using an environment variable fallback
 #     FLOWER_PORT = int(os.getenv('UVICORN_PORT', 5555))  # Using an environment variable fallback
 #     # External service URLs with sensible defaults
-#     RABBITMQ_URL = os.getenv('RABBITMQ_URL', 'localhost:15672')
+#     RABBITMQ_URL = os.getenv('RABBITMQ_URL', 'NULL:15672')
 #     RABBITMQ_USER = os.getenv('RABBITMQ_USER', 'guest')
 #     RABBITMQ_PASSWORD = os.getenv('RABBITMQ_PASSWORD', 'guest')
 #     RABBITMQ_PASSWORD = os.getenv('RABBITMQ_PASSWORD', 'guest')
@@ -121,14 +121,14 @@ def get_consumer_timeout(config_path):
 #             print(f'[Important]: RABBITMQ_CONSUMER_TIMEOUT is {RABBITMQ_CONSUMER_TIMEOUT} and not the same in advanced.config, auto setting, need reboot.')
 #             set_consumer_timeout(config_path,RABBITMQ_CONSUMER_TIMEOUT)
 
-#     MONGO_URL = os.getenv('MONGO_URL', 'mongodb://localhost:27017')
+#     MONGO_URL = os.getenv('MONGO_URL', 'mongodb://NULL:27017')
 #     MONGO_DB = os.getenv('MONGO_DB', 'tasks')
 
 #     CELERY_META = os.getenv('CELERY_META', 'celery_taskmeta')
-#     CELERY_RABBITMQ_BROKER = os.getenv('CELERY_RABBITMQ_BROKER', 'amqp://localhost')
+#     CELERY_RABBITMQ_BROKER = os.getenv('CELERY_RABBITMQ_BROKER', 'amqp://NULL')
 
 #     # Redis URL configuration with fallback
-#     REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+#     REDIS_URL = os.getenv('REDIS_URL', 'redis://NULL:6379/0')
 
 #     # Handle external IP fetching gracefully with error handling
 #     try:
@@ -174,7 +174,7 @@ import requests
 # Nested Configs
 
 class RabbitMQConfig(BaseSettings):
-    url: str = Field(default='localhost:15672',  alias='RABBITMQ_URL')
+    url: str = Field(default='NULL:15672',  alias='RABBITMQ_URL')
     user: str = Field(default='guest',  alias='RABBITMQ_USER')
     password: str = Field(default='guest',  alias='RABBITMQ_PASSWORD')
     consumer_timeout: int = Field(default=1800000,  alias='RABBITMQ_CONSUMER_TIMEOUT')
@@ -183,7 +183,7 @@ class RabbitMQConfig(BaseSettings):
         extra = 'ignore'
 
 class MongoConfig(BaseSettings):
-    url: str = Field(default='mongodb://localhost:27017',  alias='MONGO_URL')
+    url: str = Field(default='mongodb://NULL:27017',  alias='MONGO_URL')
     db: str = Field(default='tasks',  alias='MONGO_DB')
     class Config:
         env_file = '.env'
@@ -191,7 +191,7 @@ class MongoConfig(BaseSettings):
 
 
 class RedisConfig(BaseSettings):
-    url: str = Field(default='redis://localhost:6379/0',  alias='REDIS_URL')
+    url: str = Field(default='redis://NULL:6379/0',  alias='REDIS_URL')
     class Config:
         env_file = '.env'
         extra = 'ignore'
@@ -199,7 +199,7 @@ class RedisConfig(BaseSettings):
 
 class CeleryConfig(BaseSettings):
     meta_table: str = Field(default='celery_taskmeta',  alias='CELERY_META')
-    broker: str = Field(default='amqp://localhost',  alias='CELERY_RABBITMQ_BROKER')
+    broker: str = Field(default='amqp://NULL',  alias='CELERY_RABBITMQ_BROKER')
     concurrency: int = Field(default=1,  alias='CELERY_CONCURRENCY')
     class Config:
         env_file = '.env'
@@ -246,5 +246,3 @@ class AppConfig(BaseSettings):
                 print("[Important] Updating advanced.config with new timeout.")
                 set_consumer_timeout(config_path, self.rabbitmq.consumer_timeout)
         return self
-
-print(AppConfig().validate_backend().model_dump())
