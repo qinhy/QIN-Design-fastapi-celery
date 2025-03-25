@@ -34,12 +34,8 @@ class CeleryTask(BasicCeleryTask):
             self.router.post(f"/{action_name.lower()}/schedule/")(
                 self._make_api_schedule_handler(action_name, action_class)
             )
-
     
     def get_doc_page(self,):
-        return RedirectResponse("/docs")
-    
-    def get_doc_page(self):
         return RedirectResponse("/docs")
 
     def _make_api_action_handler(self, action_name, action_class):
