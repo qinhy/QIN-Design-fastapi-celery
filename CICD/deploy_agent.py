@@ -71,7 +71,7 @@ def install_requirements():
 def restart_services():
     print("[SUPERVISOR] Restarting all services...")
     # time.sleep(2)
-    supervisor.supervisor.restartAll()
+    supervisor.supervisor.restartall()
     print("[SUPERVISOR] All services restarted.")
 
 
