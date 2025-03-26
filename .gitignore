@@ -159,3 +159,4 @@ cython_debug/
 #.idea/
 tmp/private_key.pem
 .DS_Store
+*.pid
