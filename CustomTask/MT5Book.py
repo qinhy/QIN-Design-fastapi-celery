@@ -155,25 +155,43 @@ class BookService(ServiceOrientedArchitecture):
 #             # # start_pos='Index of the first bar to retrieve.',
 #             # count='Number of bars to retrieve.'
 #             )
-class MT5CopyLastRatesService:
+
+#########################################
+# {
+#   "param": {
+#         "account": {
+#             "account_id": xxxxxx,
+#             "password": "xxxxxx",
+#             "account_server": "xxxxxxx"
+#         },
+#     "args": {
+#     "symbol": "USDJPY",
+#     "timeframe": "H1",
+#     "count": 10,
+#     "debug": false,
+#     "retry_times_on_error": 3
+#     }
+#   }
+# }
+class MT5CopyLastRatesService(ServiceOrientedArchitecture):
     class Model(ServiceOrientedArchitecture.Model):
         class Param(BaseModel):
-            account: MT5Account = None
+            account: MT5Account = MT5Account()
         
         class Args(BaseModel):
-            symbol: str = "null"
+            symbol: str = "NULL"
             timeframe: str = "H1"
             count: int = 10
             debug: bool = False
             retry_times_on_error: int = 3
 
         class Return(BaseModel):
-            symbol: str = "null"
+            symbol: str = "NULL"
             timeframe: str = "H1"
             count: int = 10
-            rates: list = None
+            rates: list = []
             digitsnum: int = 0
-            error: tuple = None
+            error: str = ''
             header: str='```{symbol} {count} Open, High, Low, Close (OHLC) data points for the {timeframe} timeframe\n{join_formatted_rates}\n```'
 
             def __str__(self):
@@ -207,29 +225,22 @@ class MT5CopyLastRatesService:
         param: Param = Param()
         args: Args = Args()
         ret: Return = Return()
-
-        @staticmethod
-        def build(acc:MT5Account):
-            if isinstance(acc, dict):
-                acc = MT5Account(**acc)
-            param = MT5CopyLastRatesService.Model.Param(account=acc)
-            return MT5CopyLastRatesService.Model(param=param)
-
-    class Action(MT5Action, ServiceOrientedArchitecture.Action):
+        
+    class Action(ServiceOrientedArchitecture.Action, MT5Action):
         _start_pos = 0
         _digitsnum = {
             'AUDJPY': 3, 'CADJPY': 3, 'CHFJPY': 3, 'CNHJPY': 3, 'EURJPY': 3,
             'GBPJPY': 3, 'USDJPY': 3, 'NZDJPY': 3, 'XAUJPY': 0, 'JPN225': 1, 'US500': 1
         }
 
-        def __init__(self, model=None):
-            # Remove None values from the model if it's a dictionary
-            if isinstance(model, dict):
-                model = {k: v for k, v in model.items() if v is not None}
-                model = MT5CopyLastRatesService.Model(**model)
-            self.model: MT5CopyLastRatesService.Model = model
+        def __init__(self, model,BasicApp:AppInterface,level=None):            
+            super().__init__(model,BasicApp,level)
+            self.model:MT5CopyLastRatesService.Model = self.model
+            print(self.model)
             account = self.model.param.account
-            super().__init__(account)
+            self.uuid = uuid.uuid4()
+            self._account: MT5Account = account
+            self.retry_times_on_error = 3
 
         def _update_args(self, symbol: str = None, timeframe: str = None, count: int = None, debug: bool = None):
             # Update model args only if provided (fall back to existing ones otherwise)
@@ -238,15 +249,18 @@ class MT5CopyLastRatesService:
             self.model.args.count = count if count is not None else self.model.args.count
             self.model.args.debug = debug if debug is not None else self.model.args.debug
 
-        def __call__(self, symbol: str, timeframe: str, count: int, debug: bool = False):
-            super().__call__()
+        def __call__(self, *args, **kwargs):# symbol: str, timeframe: str, count: int, debug: bool = False):
+            symbol = self.model.args.symbol
+            timeframe = self.model.args.timeframe
+            count = self.model.args.count
+            debug = self.model.args.debug
             self._update_args(symbol, timeframe, count, debug)
             # Perform the MT5 action
-            res: MT5CopyLastRatesService.Model = MT5Manager().get_singleton().do(self)
+            self.model: MT5CopyLastRatesService.Model = MT5Manager().get_singleton().do(self)
             self.model.ret.symbol = symbol
             self.model.ret.timeframe = timeframe
             self.model.ret.count = count
-            return res
+            return self.model
 
         def run(self, symbol: str = None, timeframe: str = None, count: int = None, debug: bool = None):
             self._update_args(symbol, timeframe, count, debug)
