@@ -1,1 +1,0 @@
-uvicorn tasks:api --port %UVICORN_PORT%
