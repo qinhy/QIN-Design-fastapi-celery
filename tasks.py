@@ -12,13 +12,14 @@ from Task.BasicAPIs import BasicCeleryTask
 import CustomTask
 from config import *
 
+TaskNames = [i for i in CustomTask.__dir__() if '_' not in i]
+TaskClass = [CustomTask.__dict__[i] for i in CustomTask.__dir__() if '_' not in i]
+TaskParentClass = [i.__bases__[0] if hasattr(i,'__bases__') else None for i in TaskClass]
+ValidTask = ['ServiceOrientedArchitecture' in str(i) for i in TaskParentClass]
+ACTION_REGISTRY={k:v for k,v,i in zip(TaskNames,TaskClass,ValidTask) if i}
 
 class CeleryTask(BasicCeleryTask):
-    def __init__(self, BasicApp, celery_app,
-                        ACTION_REGISTRY=dict(zip(
-                            [i for i in CustomTask.__dir__() if '_' not in i], 
-                            [CustomTask.__dict__[i] for i in CustomTask.__dir__() if '_' not in i]
-                            ))):
+    def __init__(self, BasicApp, celery_app, ACTION_REGISTRY=ACTION_REGISTRY):
         super().__init__(BasicApp, celery_app, ACTION_REGISTRY)
         self.router.get("/", response_class=HTMLResponse)(self.get_doc_page)
         # self.router.post("/fibonacci/")(self.api_fibonacci)
