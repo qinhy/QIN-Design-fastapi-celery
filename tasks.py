@@ -19,7 +19,7 @@ ValidTask = ['ServiceOrientedArchitecture' in str(i) for i in TaskParentClass]
 ACTION_REGISTRY={k:v for k,v,i in zip(TaskNames,TaskClass,ValidTask) if i}
 
 class CeleryTask(BasicCeleryTask):
-    def __init__(self, BasicApp, celery_app, ACTION_REGISTRY=ACTION_REGISTRY):
+    def __init__(self, BasicApp, celery_app, ACTION_REGISTRY:dict[str,any]=ACTION_REGISTRY):
         super().__init__(BasicApp, celery_app, ACTION_REGISTRY)
         self.router.get("/", response_class=HTMLResponse)(self.get_doc_page)
         # self.router.post("/fibonacci/")(self.api_fibonacci)

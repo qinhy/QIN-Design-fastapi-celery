@@ -1,6 +1,3 @@
-import sys
-
-
 import time
 import datetime
 import pytz
@@ -55,7 +52,9 @@ class BasicCeleryTask:
             model_instance = class_space.Model(**action_data)
             model_instance.task_id=t.request.id
             model_instance = class_space.Action(model_instance,BasicApp=BasicApp)()
-            return self.is_json_serializable(model_instance.model_dump())
+            model_dump = model_instance.model_dump_json()
+            return model_dump
+            # return self.is_json_serializable(model_instance.model_dump())
 
         @task_received.connect
         def on_task_received(*args, **kwags):
@@ -114,13 +113,14 @@ class BasicCeleryTask:
 
         return local_dt,execution_time_utc
     
-    @staticmethod
-    def is_json_serializable(value) -> bool:
-        res = isinstance(value, (int, float, bool, str,
-                                 list, dict, set, tuple)) or value is None
-        if not res:
-            raise ValueError("Result is not JSON serializable")
-        return value
+    # @staticmethod
+    # return is_json_serializable(valu_jsmodel_dump_jsone)
+    # def is_json_serializable(value):
+    #     res = isinstance(value, (int, float, bool, str,
+    #                              list, dict, set, tuple)) or value is None
+    #     if not res:
+    #         raise ValueError("Result is not JSON serializable")
+    #     return value
 
     def api_list_tasks(self,):
         self.api_ok()

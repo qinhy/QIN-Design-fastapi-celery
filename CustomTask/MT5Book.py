@@ -1,6 +1,7 @@
 from typing import Optional
+import uuid
 from CustomTask.MT5Manager import Book, MT5Account, MT5Action, MT5Manager
-from Task.Basic import ServiceOrientedArchitecture
+from Task.Basic import AppInterface, ServiceOrientedArchitecture
 try:
     import MetaTrader5 as mt5
 except Exception as e:
@@ -15,13 +16,44 @@ class BookServiceActionTypes:
     account_info:str ='account_info'
     getBooks:str = 'getBooks'
 
+######## test account_info
+# {
+#   "param": {
+#     "account": {
+#         "account_id": xxxxx,
+#         "password": "xxxxx",
+#         "account_server": "xxxx"
+#       },
+#     "action": "account_info"
+#   }
+# }
+
+######## test send
+# {
+#     "param": {
+#         "account": {
+#             "account_id": xxxxxx,
+#             "password": "xxxxxx",
+#             "account_server": "xxxxxxx"
+#         },
+#         "action": "send",
+#         "book": {
+#             "symbol": '',
+#             "sl": 0.0,
+#             "tp": 0.0,
+#             "price_open": -1.0,
+#             "volume": -1.0
+#         }
+#     }
+# }
+
 class BookService(ServiceOrientedArchitecture):
 
     class Model(ServiceOrientedArchitecture.Model):
             
         class Param(BaseModel):
-            account:MT5Account
-            book:Book
+            account:MT5Account = MT5Account()
+            book:Book = Book()
             action:str = BookServiceActionTypes.account_info
 
         class Args(BaseModel):
@@ -37,7 +69,7 @@ class BookService(ServiceOrientedArchitecture):
         class Logger(ServiceOrientedArchitecture.Model.Logger):
             pass
         
-        param:Param
+        param:Param = Param()
         args:Args = Args()
         ret:Return = Return()
         logger:Logger = Logger(name='BookService')
@@ -52,38 +84,35 @@ class BookService(ServiceOrientedArchitecture):
             param = BookService.Model.Param(account=acc,book=book)
             return BookService.Model(param=param)
         
-    class Action(MT5Action, ServiceOrientedArchitecture.Action):
+    class Action(ServiceOrientedArchitecture.Action, MT5Action):
+
         def __call__(self, *args, **kwargs):
             super().__call__(*args, **kwargs)
             action = self.model.param.action
             acc = self.model.param.account
             book = self.model.param.book
+            task_id = self.model.task_id
             self.model = BookService.Model.build(acc,book,action in ['send'])            
+            self.model.task_id = task_id
             self.change_run(action, kwargs)
-            res = MT5Manager().get_singleton().do(self)
-            if isinstance(res,Book):
-                res = [res]
-            self.model.ret.books = res
+            first_book,books,books_dict = MT5Manager().get_singleton().do(self)
+            self.model.ret.first_book = first_book
+            self.model.ret.books = books
+            self.model.ret.books_dict = books_dict
+            self.model.param.account.password = ''
             return self.model
-        
-        def __init__(self, model=None):
-            if isinstance(model, dict):
-                # Remove keys with None values from the dictionary
-                nones = [k for k, v in model.items() if v is None]
-                for i in nones:
-                    del model[i]
-                # Initialize the model as an instance of BookService.Model
-                model = BookService.Model(**model)
-            # Store the model instance
-            self.model: BookService.Model = model
-            account = self.model.param.account
 
-            super().__init__(account)
+        def __init__(self, model,BasicApp:AppInterface,level=None):            
+            super().__init__(model,BasicApp,level)
+            account = self.model.param.account
             self.book = self.model.param.book
+            self.uuid = uuid.uuid4()
+            self._account: MT5Account = account
+            self.retry_times_on_error = 3
         
-        def log_and_send(self,info:str):
-            self.logger.log(info)
-            self.send_data_to_task(info)
+        def log_and_send(self,msg:str):
+            self.logger.log(self.logger.level,msg)
+            self.send_data_to_task(msg)
 
         def change_run(self, func_name, kwargs):
             self.log_and_send(f'change run: {func_name}, {kwargs}')
@@ -93,23 +122,30 @@ class BookService(ServiceOrientedArchitecture):
 
         def run(self):
             # tbs = {f'{b.symbol}-{b.price_open}-{b.volume}':b.model_dump() for b in Book().getBooks()}
-            action = self.model.param.action
-            self.model:BookService.Model = self.book_run()            
-            if action == BookServiceActionTypes.getBooks:
-                self.model.ret.books_dict = {f'{b.symbol}-{b.price_open}-{b.volume}-{b.ticket}': b for b in self.model.ret.books}
-                self.model.ret.books = []
+            action = self.model.param.action            
+            first_book = None
+            books = []
+            books_dict = {}
+            if action == BookServiceActionTypes.getBooks:                
+                books:list[Book] = self.book_run()
+                books_dict = {f'{b.symbol}-{b.price_open}-{b.volume}-{b.ticket}': b for b in books}
+                books = []
             elif action in [BookServiceActionTypes.send,
                             BookServiceActionTypes.changeP,
                             BookServiceActionTypes.changeTS,
                             BookServiceActionTypes.account_info]:
-                self.model.ret.first_book = self.model.ret.books[0]
-                self.model.ret.books = []
+                books = [self.book_run()]
+                first_book = books[0]
+                books = []
             else:
-                self.model.ret.first_book = None
-                self.model.ret.books = []
-                self.model.ret.books_dict = {}
                 raise ValueError(f'no action of {action}')
-            return self.model
+            
+            return first_book,books,books_dict
+            # res = BookService.Model()
+            # res.ret.first_book = first_book
+            # res.ret.books = books
+            # res.ret.books_dict = books_dict
+            # return res
         
 
 # @descriptions('Retrieve MT5 last N bars data in MetaTrader 5 terminal.',
