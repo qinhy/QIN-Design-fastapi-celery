@@ -19,6 +19,8 @@ supervisor = ServerProxy(SUPERVISOR_URL)
 
 # === Version Management ===
 def get_kv_version():
+    if not r.exists(VERSION_KEY):
+        return r.set(VERSION_KEY,get_local_version())        
     return r.get(VERSION_KEY)
 
 
