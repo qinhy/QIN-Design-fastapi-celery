@@ -11,7 +11,7 @@ nohup python3 ../start_server.py flower > logs/flower.log 2>&1 &
 echo $! > pids/flower.pid
 
 echo "Starting Redis..."
-nohup redis-server > logs/redis.log 2>&1 &
+nohup redis-server --maxmemory 32mb --maxmemory-policy allkeys-lru --save "" --appendonly no --maxclients 50 > logs/redis.log 2>&1 &
 echo $! > pids/redis.pid
 
 echo "Starting Celery..."
