@@ -98,9 +98,9 @@ def restart_services():
 # === Full Deploy Flow ===
 def deploy(commit_hash):
     print(f"[DEPLOY] Deploying commit {commit_hash}")
-    clear_pycache('.')
     git_checkout(commit_hash)
     install_requirements()
+    clear_pycache('..')
     restart_services()
 
 # === Main Loop ===
