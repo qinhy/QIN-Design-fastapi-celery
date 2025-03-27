@@ -105,7 +105,7 @@ def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
     m.args.n = n
     return my_app.api_perform_action('Fibonacci', m.model_dump(),0)
 
-# my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/')
+my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/')
 
 api.include_router(my_app.router, prefix="", tags=["fibonacci"])
     
