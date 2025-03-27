@@ -9,7 +9,7 @@ import threading
 import json
 
 import pymongo
-from pydantic import BaseModel, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr
 from pymongo import MongoClient
 import pymongo.errors
 import redis
@@ -379,7 +379,8 @@ class ServiceOrientedArchitecture:
     BasicApp:AppInterface = None
 
     class Model(BaseModel):
-        task_id:str = 'AUTO_SET_BUT_NULL_NOW'
+        task_id:Optional[str] = Field('AUTO_SET_BUT_NULL_NOW', description="task uuid")
+        
         class Param(BaseModel):
             pass
         class Args(BaseModel):
@@ -471,7 +472,7 @@ class ServiceOrientedArchitecture:
                 
         param:Param = Param()
         args:Args = Args()
-        ret:Return = Return()
+        ret:Optional[Return] = Return()
         logger:Logger = Logger()
 
     class Action:

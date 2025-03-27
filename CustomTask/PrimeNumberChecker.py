@@ -26,7 +26,7 @@ class PrimeNumberChecker(ServiceOrientedArchitecture):
 
         param: Param = Param()
         args: Args
-        ret: Return = Return()
+        ret: Optional[Return] = Return()
         logger: Logger = Logger(name='PrimeNumberChecker')
 
     class Action(ServiceOrientedArchitecture.Action):
