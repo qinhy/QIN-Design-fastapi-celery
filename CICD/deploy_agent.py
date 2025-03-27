@@ -87,7 +87,7 @@ def clear_pycache(root_dir="src"):
 
 
 # === Service Restart ===
-def restart_services(services=['uvicorn','celery']):
+def restart_services(services=['celery','uvicorn']):
     print("[SUPERVISOR] Restarting all services...")
     # time.sleep(2)
     # supervisor.supervisor.restartall()
