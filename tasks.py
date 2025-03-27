@@ -51,24 +51,43 @@ class CeleryTask(BasicCeleryTask):
         allowed_methods[method](endpoint)(func)
 
     def _make_api_action_handler(self, action_name, action_class):
-        def handler(task_model: action_class.Model,
-                    eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")):
-            return self.api_perform_action(action_name, task_model.model_dump(), eta=eta)
+        examples = action_class.Model.examples() if hasattr(action_class.Model,'examples') else None
+        if examples:
+            def handler(task_model: action_class.Model=examples,
+                        eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")):
+                return self.api_perform_action(action_name, task_model.model_dump(), eta=eta)
+        else:
+            def handler(task_model: action_class.Model,
+                        eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")):
+                return self.api_perform_action(action_name, task_model.model_dump(), eta=eta)
         return handler
 
     def _make_api_schedule_handler(self, action_name, action_class):
-        def handler(
-            task_model: action_class.Model,
-            execution_time: str = Query(
-                datetime.datetime.now(datetime.timezone.utc).isoformat().split('.')[0],
-                description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"
-            ),
-            timezone: Literal["UTC", "Asia/Tokyo", "America/New_York", "Europe/London", "Europe/Paris",
-                              "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"] = Query(
-                "Asia/Tokyo", description="Choose a timezone from the list")
-        ):
-            return self.api_schedule_perform_action(action_name, task_model.model_dump(), execution_time, timezone)
+        examples = action_class.Model.examples() if hasattr(action_class.Model,'examples') else None
+        if examples:
+            def handler(task_model: action_class.Model=examples,
+                        execution_time: str = Query(
+                            datetime.datetime.now(datetime.timezone.utc).isoformat().split('.')[0],
+                            description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"
+                        ),
+                        timezone: Literal["UTC", "Asia/Tokyo", "America/New_York", "Europe/London", "Europe/Paris",
+                                        "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"] = Query(
+                            "Asia/Tokyo", description="Choose a timezone from the list")
+                    ):
+                        return self.api_schedule_perform_action(action_name, task_model.model_dump(), execution_time, timezone)
+        else:
+            def handler(task_model: action_class.Model,
+                        execution_time: str = Query(
+                            datetime.datetime.now(datetime.timezone.utc).isoformat().split('.')[0],
+                            description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"
+                        ),
+                        timezone: Literal["UTC", "Asia/Tokyo", "America/New_York", "Europe/London", "Europe/Paris",
+                                        "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"] = Query(
+                            "Asia/Tokyo", description="Choose a timezone from the list")
+                    ):
+                        return self.api_schedule_perform_action(action_name, task_model.model_dump(), execution_time, timezone)
         return handler
+        
 
 ########################################################
 conf = AppConfig()

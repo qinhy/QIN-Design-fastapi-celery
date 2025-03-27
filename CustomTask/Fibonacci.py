@@ -24,6 +24,17 @@ class Fibonacci(ServiceOrientedArchitecture):
         class Logger(ServiceOrientedArchitecture.Model.Logger):
             pass        
 
+        @staticmethod
+        def examples():
+            return {'basic':{
+                            "param": {
+                                "mode": "fast"
+                            },
+                            "args": {
+                                "n": 1
+                            }
+                            }
+                    }
         param:Param = Param()
         args:Args = Args()
         ret:Return = Return()
