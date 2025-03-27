@@ -1,5 +1,5 @@
 import threading
-from typing import Literal
+from typing import Literal, Optional
 from pydantic import BaseModel, Field
 from Task.Basic import ServiceOrientedArchitecture
 
@@ -37,7 +37,7 @@ class Fibonacci(ServiceOrientedArchitecture):
                     }
         param:Param = Param()
         args:Args = Args()
-        ret:Return = Return()
+        ret:Optional[Return] = Return()
         logger:Logger = Logger(name='Fibonacci')
 
     class Action(ServiceOrientedArchitecture.Action):
