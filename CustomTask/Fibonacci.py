@@ -25,7 +25,7 @@ class Fibonacci(ServiceOrientedArchitecture):
             pass        
 
         param:Param = Param()
-        args:Args
+        args:Args = Args()
         ret:Return = Return()
         logger:Logger = Logger(name='Fibonacci')
 

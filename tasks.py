@@ -19,7 +19,8 @@ ValidTask = ['ServiceOrientedArchitecture' in str(i) for i in TaskParentClass]
 ACTION_REGISTRY={k:v for k,v,i in zip(TaskNames,TaskClass,ValidTask) if i}
 
 class CeleryTask(BasicCeleryTask):
-    def __init__(self, BasicApp, celery_app, ACTION_REGISTRY:dict[str,any]=ACTION_REGISTRY):
+    def __init__(self, BasicApp, celery_app,
+                 ACTION_REGISTRY:dict[str,any]=ACTION_REGISTRY):
         super().__init__(BasicApp, celery_app, ACTION_REGISTRY)
         self.router.get("/", response_class=HTMLResponse)(self.get_doc_page)
         # self.router.post("/fibonacci/")(self.api_fibonacci)
@@ -27,15 +28,33 @@ class CeleryTask(BasicCeleryTask):
     
         # Auto-generate endpoints for each action
         for action_name, action_class in ACTION_REGISTRY.items():
-            # Direct execution endpoint
-            self.router.post(f"/{action_name.lower()}/")(
-                self._make_api_action_handler(action_name, action_class)
-            )
-            # Scheduled execution endpoint
-            self.router.post(f"/{action_name.lower()}/schedule/")(
-                self._make_api_schedule_handler(action_name, action_class)
-            )
+            self.add_web_api(
+                self._make_api_action_handler(action_name, action_class),
+                'post',f"/{action_name.lower()}/")
+            self.add_web_api(
+                self._make_api_schedule_handler(action_name, action_class),
+                'post',f"/{action_name.lower()}/schedule/")
     
+    def add_web_api(self, func, method: str = 'post', endpoint: str = '/'):
+        method = method.lower().strip()
+        allowed_methods = {
+            'get': self.router.get,
+            'post': self.router.post,
+            'put': self.router.put,
+            'delete': self.router.delete,
+            'patch': self.router.patch,
+            'options': self.router.options,
+            'head': self.router.head,
+        }
+
+        if method not in allowed_methods:
+            raise ValueError(
+                f"Method '{method}' is not allowed. "
+                f"Supported methods: {', '.join(allowed_methods)}"
+            )
+
+        allowed_methods[method](endpoint)(func)
+
     def get_doc_page(self,):
         return RedirectResponse("/docs")
 
@@ -101,5 +120,17 @@ else:
 ServiceOrientedArchitecture.BasicApp=BasicApp
 
 celery_app = BasicApp.get_celery_app()
-api.include_router(CeleryTask(BasicApp,celery_app).router, prefix="", tags=["fibonacci"])
+my_app = CeleryTask(BasicApp,celery_app)
+
+# add original api
+from CustomTask import Fibonacci
+def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
+    m = Fibonacci.Model()
+    m.param.mode = mode
+    m.args.n = n
+    return my_app.api_perform_action('Fibonacci', m.model_dump(),0)
+
+my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/')
+
+api.include_router(my_app.router, prefix="", tags=["fibonacci"])
     
