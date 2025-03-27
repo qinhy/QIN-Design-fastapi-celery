@@ -51,39 +51,32 @@ class CeleryTask(BasicCeleryTask):
 
     def _make_api_action_handler(self, action_name, action_class):
         examples = action_class.Model.examples() if hasattr(action_class.Model,'examples') else None
+        eta_example: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")
         if examples:
-            def handler(task_model: action_class.Model=Body(..., examples=examples),
-                        eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")):
+            def handler(task_model: action_class.Model=Body(..., examples=examples),eta=eta_example):
                 return self.api_perform_action(action_name, task_model.model_dump(), eta=eta)
         else:
-            def handler(task_model: action_class.Model,
-                        eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")):
+            def handler(task_model: action_class.Model,eta=eta_example):
                 return self.api_perform_action(action_name, task_model.model_dump(), eta=eta)
         return handler
 
     def _make_api_schedule_handler(self, action_name, action_class):
         examples = action_class.Model.examples() if hasattr(action_class.Model,'examples') else None
+        execution_time_example = Query(
+                            datetime.datetime.now(datetime.timezone.utc).isoformat().split('.')[0],
+                            description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS")
+        timezone_Literal = Literal["UTC", "Asia/Tokyo", "America/New_York", "Europe/London", "Europe/Paris",
+                                        "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"]
+        timezone_Literal_example = Query("Asia/Tokyo", description="Choose a timezone from the list")
         if examples:
             def handler(task_model: action_class.Model=Body(..., examples=examples),
-                        execution_time: str = Query(
-                            datetime.datetime.now(datetime.timezone.utc).isoformat().split('.')[0],
-                            description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"
-                        ),
-                        timezone: Literal["UTC", "Asia/Tokyo", "America/New_York", "Europe/London", "Europe/Paris",
-                                        "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"] = Query(
-                            "Asia/Tokyo", description="Choose a timezone from the list")
-                    ):
+                        execution_time: str = execution_time_example,
+                        timezone: timezone_Literal = timezone_Literal_example):
                         return self.api_schedule_perform_action(action_name, task_model.model_dump(), execution_time, timezone)
         else:
             def handler(task_model: action_class.Model,
-                        execution_time: str = Query(
-                            datetime.datetime.now(datetime.timezone.utc).isoformat().split('.')[0],
-                            description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"
-                        ),
-                        timezone: Literal["UTC", "Asia/Tokyo", "America/New_York", "Europe/London", "Europe/Paris",
-                                        "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"] = Query(
-                            "Asia/Tokyo", description="Choose a timezone from the list")
-                    ):
+                        execution_time: str = execution_time_example,
+                        timezone: timezone_Literal = timezone_Literal_example):
                         return self.api_schedule_perform_action(action_name, task_model.model_dump(), execution_time, timezone)
         return handler
         
@@ -125,5 +118,5 @@ def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
 
 my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/')
 
-api.include_router(my_app.router, prefix="", tags=["fibonacci"])
+api.include_router(my_app.router, prefix="", tags=["Tasks"])
     
