@@ -1,13 +1,11 @@
 import datetime
 from typing import Literal, Optional
 
-from fastapi.responses import HTMLResponse, RedirectResponse
-
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from Task.Basic import AppInterface, RabbitmqMongoApp, RedisApp, ServiceOrientedArchitecture
+from Task.Basic import AppInterface, RabbitmqMongoApp, RedisApp
 from Task.BasicAPIs import BasicCeleryTask
 import CustomTask
 from config import *
@@ -19,25 +17,38 @@ ValidTask = ['ServiceOrientedArchitecture' in str(i) for i in TaskParentClass]
 ACTION_REGISTRY={k:v for k,v,i in zip(TaskNames,TaskClass,ValidTask) if i}
 
 class CeleryTask(BasicCeleryTask):
-    def __init__(self, BasicApp, celery_app, ACTION_REGISTRY:dict[str,any]=ACTION_REGISTRY):
+    def __init__(self, BasicApp, celery_app,
+                 ACTION_REGISTRY:dict[str,any]=ACTION_REGISTRY):
         super().__init__(BasicApp, celery_app, ACTION_REGISTRY)
-        self.router.get("/", response_class=HTMLResponse)(self.get_doc_page)
-        # self.router.post("/fibonacci/")(self.api_fibonacci)
-        # self.router.post("/fibonacci/schedule/")(self.api_schedule_fibonacci)
-    
+
         # Auto-generate endpoints for each action
         for action_name, action_class in ACTION_REGISTRY.items():
-            # Direct execution endpoint
-            self.router.post(f"/{action_name.lower()}/")(
-                self._make_api_action_handler(action_name, action_class)
-            )
-            # Scheduled execution endpoint
-            self.router.post(f"/{action_name.lower()}/schedule/")(
-                self._make_api_schedule_handler(action_name, action_class)
-            )
+            self.add_web_api(
+                self._make_api_action_handler(action_name, action_class),
+                'post',f"/{action_name.lower()}/")
+            self.add_web_api(
+                self._make_api_schedule_handler(action_name, action_class),
+                'post',f"/{action_name.lower()}/schedule/")
     
-    def get_doc_page(self,):
-        return RedirectResponse("/docs")
+    def add_web_api(self, func, method: str = 'post', endpoint: str = '/'):
+        method = method.lower().strip()
+        allowed_methods = {
+            'get': self.router.get,
+            'post': self.router.post,
+            'put': self.router.put,
+            'delete': self.router.delete,
+            'patch': self.router.patch,
+            'options': self.router.options,
+            'head': self.router.head,
+        }
+
+        if method not in allowed_methods:
+            raise ValueError(
+                f"Method '{method}' is not allowed. "
+                f"Supported methods: {', '.join(allowed_methods)}"
+            )
+
+        allowed_methods[method](endpoint)(func)
 
     def _make_api_action_handler(self, action_name, action_class):
         def handler(task_model: action_class.Model,
@@ -58,22 +69,6 @@ class CeleryTask(BasicCeleryTask):
         ):
             return self.api_schedule_perform_action(action_name, task_model.model_dump(), execution_time, timezone)
         return handler
-    ########################### basic function
-    # def api_fibonacci(self, fib_task: Fibonacci.Model,                      
-    #     eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")
-    # ):
-    #     return self.api_perform_action('Fibonacci',
-    #                             fib_task.model_dump(),eta=eta)
-    
-    # def api_schedule_fibonacci(self,
-    #     fib_task: Fibonacci.Model,
-    #     execution_time: str = Query(datetime.datetime.now(datetime.timezone.utc).isoformat().split('.')[0], description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"),
-    #     timezone: Literal["UTC", "Asia/Tokyo", "America/New_York", "Europe/London", "Europe/Paris",
-    #                     "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"] = Query("Asia/Tokyo", 
-    #                     description="Choose a timezone from the list")
-    # ):
-    #     return self.api_schedule_perform_action('Fibonacci',
-    #             fib_task.model_dump(),execution_time,timezone)
 
 ########################################################
 conf = AppConfig()
@@ -98,8 +93,19 @@ elif conf.app_backend=='mongodbrabbitmq':
                                              conf.celery.broker)
 else:
     raise ValueError(f'no back end of {conf.app_backend}')
-ServiceOrientedArchitecture.BasicApp=BasicApp
 
 celery_app = BasicApp.get_celery_app()
-api.include_router(CeleryTask(BasicApp,celery_app).router, prefix="", tags=["fibonacci"])
+my_app = CeleryTask(BasicApp,celery_app)
+
+## add original api
+from CustomTask import Fibonacci
+def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
+    m = Fibonacci.Model()
+    m.param.mode = mode
+    m.args.n = n
+    return my_app.api_perform_action('Fibonacci', m.model_dump(),0)
+
+my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/')
+
+api.include_router(my_app.router, prefix="", tags=["fibonacci"])
     

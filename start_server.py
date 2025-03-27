@@ -34,7 +34,7 @@ def start_uvicorn():
         "tasks:api",  # Make sure this points to your FastAPI app
         host="0.0.0.0",
         port=conf.uvicorn_port,
-        reload=True
+        reload=False
     )
 
 

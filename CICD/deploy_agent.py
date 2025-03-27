@@ -1,9 +1,12 @@
+import shutil
 import time
 import subprocess
 import redis
 import os
 import sys
 from xmlrpc.client import ServerProxy
+
+import requests
 
 # === Config ===
 REDIS_HOST = "localhost"
@@ -66,12 +69,30 @@ def install_requirements():
         print("[PIP] Error installing dependencies:")
         print(result.stderr)
 
+# === Clear Python Cache ===
+def clear_pycache(root_dir="src"):
+    print(f"[CLEANUP] Removing __pycache__ from '{root_dir}' and subdirectories...")
+    removed = 0
+    for root, dirs, _ in os.walk(root_dir):
+        for dir_name in dirs:
+            if dir_name == "__pycache__":
+                path = os.path.join(root, dir_name)
+                shutil.rmtree(path)
+                print(f"[CLEANUP] Removed: {path}")
+                removed += 1
+    if removed == 0:
+        print("[CLEANUP] No __pycache__ directories found.")
+    else:
+        print(f"[CLEANUP] Removed {removed} __pycache__ directories.")
+
 
 # === Service Restart ===
-def restart_services():
+def restart_services(services=['celery','uvicorn']):
     print("[SUPERVISOR] Restarting all services...")
     # time.sleep(2)
-    supervisor.supervisor.restartall()
+    # supervisor.supervisor.restartall()
+    for i in services:
+        requests.get(f'http://localhost:9001/index.html?processname={i}&action=restart')    
     print("[SUPERVISOR] All services restarted.")
 
 
@@ -80,6 +101,7 @@ def deploy(commit_hash):
     print(f"[DEPLOY] Deploying commit {commit_hash}")
     git_checkout(commit_hash)
     install_requirements()
+    clear_pycache('..')
     restart_services()
 
 # === Main Loop ===
