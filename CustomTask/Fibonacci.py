@@ -26,14 +26,8 @@ class Fibonacci(ServiceOrientedArchitecture):
 
         @staticmethod
         def examples():
-            return [{
-                    "param": {
-                        "mode": "fast"
-                    },
-                    "args": {
-                        "n": 1
-                    }
-                    }]
+            return [{ "param": {"mode": "fast"},"args": {"n": 13}},]
+        
         param:Param = Param()
         args:Args = Args()
         ret:Optional[Return] = Return()

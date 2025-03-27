@@ -23,7 +23,15 @@ class PrimeNumberChecker(ServiceOrientedArchitecture):
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
             pass
-
+        
+        @staticmethod
+        def examples():
+            return [
+                {"param": {"mode": "smart"}, "args": {"number": 13}},
+                {"param": {"mode": "basic"}, "args": {"number": 10}},
+                {"param": {"mode": "smart"}, "args": {"number": 1}},
+            ]
+        
         param: Param = Param()
         args: Args = Param()
         ret: Optional[Return] = Return()

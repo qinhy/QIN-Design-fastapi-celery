@@ -24,6 +24,14 @@ class PalindromeChecker(ServiceOrientedArchitecture):
         class Logger(ServiceOrientedArchitecture.Model.Logger):
             pass
 
+        @staticmethod
+        def examples():
+            return [
+                {"param": {"mode": "smart"}, "args": {"text": "racecar"}},
+                {"param": {"mode": "basic"}, "args": {"text": "hello"}},
+                {"param": {"mode": "smart"}, "args": {"text": "A man a plan a canal Panama"}},
+            ]
+        
         param: Param = Param()
         args: Args
         ret: Optional[Return] = Return()
