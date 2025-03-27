@@ -16,7 +16,7 @@ class PrimeNumberChecker(ServiceOrientedArchitecture):
                 return self.mode == 'smart'
 
         class Args(BaseModel):
-            number: int = Field(..., description="The number to check for primality")
+            number: int = Field(13, description="The number to check for primality")
 
         class Return(BaseModel):
             is_prime: Optional[bool] = Field(None, description="Whether the number is prime")
@@ -25,7 +25,7 @@ class PrimeNumberChecker(ServiceOrientedArchitecture):
             pass
 
         param: Param = Param()
-        args: Args
+        args: Args = Param()
         ret: Optional[Return] = Return()
         logger: Logger = Logger(name='PrimeNumberChecker')
 
