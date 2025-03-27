@@ -5,6 +5,8 @@ import os
 import sys
 from xmlrpc.client import ServerProxy
 
+import requests
+
 # === Config ===
 REDIS_HOST = "localhost"
 REDIS_PORT = 6379
@@ -71,7 +73,8 @@ def install_requirements():
 def restart_services():
     print("[SUPERVISOR] Restarting all services...")
     # time.sleep(2)
-    supervisor.supervisor.restartall()
+    # supervisor.supervisor.restartall()
+    requests.get('http://localhost:9001/index.html?action=restartall')
     print("[SUPERVISOR] All services restarted.")
 
 
