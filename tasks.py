@@ -1,7 +1,7 @@
 import datetime
 from typing import Literal, Optional
 
-from fastapi import FastAPI, Query
+from fastapi import Body, FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -45,15 +45,14 @@ class CeleryTask(BasicCeleryTask):
         if method not in allowed_methods:
             raise ValueError(
                 f"Method '{method}' is not allowed. "
-                f"Supported methods: {', '.join(allowed_methods)}"
-            )
+                f"Supported methods: {', '.join(allowed_methods)}")
 
         allowed_methods[method](endpoint)(func)
 
     def _make_api_action_handler(self, action_name, action_class):
         examples = action_class.Model.examples() if hasattr(action_class.Model,'examples') else None
         if examples:
-            def handler(task_model: action_class.Model=examples,
+            def handler(task_model: action_class.Model=Body(..., examples=examples),
                         eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")):
                 return self.api_perform_action(action_name, task_model.model_dump(), eta=eta)
         else:
@@ -65,7 +64,7 @@ class CeleryTask(BasicCeleryTask):
     def _make_api_schedule_handler(self, action_name, action_class):
         examples = action_class.Model.examples() if hasattr(action_class.Model,'examples') else None
         if examples:
-            def handler(task_model: action_class.Model=examples,
+            def handler(task_model: action_class.Model=Body(..., examples=examples),
                         execution_time: str = Query(
                             datetime.datetime.now(datetime.timezone.utc).isoformat().split('.')[0],
                             description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"
