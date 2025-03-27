@@ -53,10 +53,10 @@ class CeleryTask(BasicCeleryTask):
         examples = action_class.Model.examples() if hasattr(action_class.Model,'examples') else None
         eta_example: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")
         if examples:
-            def handler(task_model: action_class.Model=Body(..., examples=examples),eta=eta_example):
+            def handler(task_model: action_class.Model=Body(..., examples=examples),eta: Optional[int]=eta_example):
                 return self.api_perform_action(action_name, task_model.model_dump(), eta=eta)
         else:
-            def handler(task_model: action_class.Model,eta=eta_example):
+            def handler(task_model: action_class.Model,eta: Optional[int]=eta_example):
                 return self.api_perform_action(action_name, task_model.model_dump(), eta=eta)
         return handler
 
