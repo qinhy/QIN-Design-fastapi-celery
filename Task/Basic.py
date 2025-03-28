@@ -430,6 +430,67 @@ class RedisApp(AppInterface, RedisPubSub):
                 result=result)
         self.redis_client().set(task_key, json.dumps(task_data.model_dump()))
 
+class FileSystemApp(AppInterface, FileSystemPubSub):
+    def __init__(self, base_dir="./pubsub", celery_meta="tasks", task_pubsub_name="FileSystemPubSub"):
+        super().__init__(base_dir, task_pubsub_name)
+        self.base_dir = base_dir
+        self.celery_meta = celery_meta
+        self._store = None
+        self.start_listener()
+
+    def store(self):
+        if self._store is None:
+            self._store = BasicStore().json_file_backend(self.base_dir)
+        return self._store
+
+    def get_celery_app(self):
+        return celery.Celery('tasks', broker=f'filesystem://{self.base_dir}', backend=f'file://{self.base_dir}')
+
+    def check_services(self) -> bool:
+        try:
+            test_file = os.path.join(self.base_dir, "health_check.txt")
+            with open(test_file, 'w') as f:
+                f.write("ok")
+            with open(test_file, 'r') as f:
+                content = f.read()
+            os.remove(test_file)
+            return content == "ok"
+        except Exception:
+            return False
+
+    def get_tasks_collection(self):
+        """Returns list of full paths to celery task metadata files."""
+        return [
+            os.path.join(self.base_dir, filename)
+            for filename in os.listdir(self.base_dir)
+            if filename.startswith("celery-task-meta-") and filename.endswith(".json")
+        ]
+
+    def get_tasks_list(self):
+        tasks = []
+        for filepath in self.get_tasks_collection():
+            try:
+                with open(filepath, 'r') as f:
+                    task = json.load(f)
+                tasks.append(TaskModel(**task))
+            except Exception as e:
+                print(f"Error reading task file {filepath}: {e}")
+        return tasks
+
+    def get_task_meta(self, task_id: str):
+        task_file = os.path.join(self.base_dir, f"celery-task-meta-{task_id}.json")
+        if os.path.exists(task_file):
+            with open(task_file, 'r') as f:
+                return json.load(f)
+        return None
+
+    def set_task_status(self, task_id, result='', status=celery.states.STARTED):
+        task_data = TaskModel(task_id=task_id, status=status, result=result)
+        task_file = os.path.join(self.base_dir, f"celery-task-meta-{task_id}.json")
+        with open(task_file, 'w') as f:
+            json.dump(task_data.model_dump(), f)
+
+
 class ServiceOrientedArchitecture:
     BasicApp:AppInterface = None
 
