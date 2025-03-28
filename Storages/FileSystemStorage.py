@@ -1,4 +1,5 @@
 # from https://github.com/qinhy/singleton-key-value-storage.git
+import fnmatch
 import uuid
 import json
 import uuid
@@ -48,7 +49,7 @@ class SingletonFileSystemStorage:
 
 class SingletonFileSystemStorageController(AbstractStorageController):
     def __init__(self, model: SingletonFileSystemStorage):
-        self.model = model
+        self.model:SingletonFileSystemStorage = model
 
     def _get_file_path(self, key: str) -> Path:
         # Sanitize key to avoid path traversal, e.g., "some/../path"
@@ -76,9 +77,8 @@ class SingletonFileSystemStorageController(AbstractStorageController):
             path.unlink()
 
     def keys(self, pattern: str = '*') -> list[str]:
-        # pattern is ignored in this simple version, could be expanded with fnmatch
-        return [f.stem for f in self.model.storage_dir.glob('*.json')]
-
+        all_keys = [f.stem for f in self.model.storage_dir.glob('*.json')]
+        return fnmatch.filter(all_keys, pattern)
 
 SingletonKeyValueStorage.backs['file']=lambda *args,**kwargs:SingletonFileSystemStorageController(SingletonFileSystemStorage(*args,**kwargs))
 
