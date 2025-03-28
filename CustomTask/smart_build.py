@@ -182,25 +182,90 @@ class MockNextModelE:
     def __init__(self):
         self.args = self.Args()
 
+class MockRetF(BaseModel):
+    user_status: str = Field("active", description="The current status of the user")
+    last_seen: str = Field("2025-03-28", description="Last seen timestamp")
+
+class MockNextModelF:
+    class Args(BaseModel):
+        status: str = Field("unknown", description="User status description")
+        last_seen_date: str = Field("", description="Date user was last seen")
+
+    def __init__(self):
+        self.args = self.Args()
+        
+class MockRetG(BaseModel):
+    is_admin: bool = Field(False, description="True if user is admin")
+
+class MockNextModelG:
+    class Args(BaseModel):
+        admin: bool = Field(False, description="Admin privileges")
+
+    def __init__(self):
+        self.args = self.Args()
+        
+class MockRetH(BaseModel):
+    items: list[str] = Field(default_factory=list, description="List of purchased items")
+
+class MockNextModelH:
+    class Args(BaseModel):
+        purchased_items: list[str] = Field(default_factory=list, description="Items that were bought")
+
+    def __init__(self):
+        self.args = self.Args()
+        
+class MockRetI(BaseModel):
+    score: float = Field(0.0, description="Final evaluation score")
+
+class MockNextModelI:
+    class Args(BaseModel):
+        final_score: float = Field(0.0, description="The score achieved at the end")
+
+    def __init__(self):
+        self.args = self.Args()
+        
+class MockRetJ(BaseModel):
+    metrics: Dict[str, float] = Field(default_factory=lambda: {"accuracy": 0.98, "loss": 0.1})
+
+class MockNextModelJ:
+    class Args(BaseModel):
+        accuracy: float = Field(0.0, description="Model accuracy")
+        loss: float = Field(0.0, description="Model loss")
+
+    def __init__(self):
+        self.args = self.Args()
+        
+from datetime import datetime
+
+class MockRetK(BaseModel):
+    timestamp: str = Field("2025-03-28T12:00:00Z", description="ISO datetime string")
+
+class MockNextModelK:
+    class Args(BaseModel):
+        event_time: datetime = Field(default_factory=datetime.utcnow, description="Time of the event")
+
+    def __init__(self):
+        self.args = self.Args()
+
 if __name__ == "__main__":
     # --------------------
     # ✅ Test Execution
     # --------------------
 
-    # Simulate previous step's output
-    prev_model_ret = MockRet(result=13)
-    ret_dict = prev_model_ret.model_dump()
+    # # Simulate previous step's output
+    # prev_model_ret = MockRet(result=13)
+    # ret_dict = prev_model_ret.model_dump()
 
-    # Suggest field map and build new model
-    suggested_map, confusion_df = auto_suggest_field_map(prev_model_ret, MockNextModel)
-    next_model = smart_build_by_ret(ret_dict, MockNextModel, suggested_map)
+    # # Suggest field map and build new model
+    # suggested_map, confusion_df = auto_suggest_field_map(prev_model_ret, MockNextModel)
+    # next_model = smart_build_by_ret(ret_dict, MockNextModel, suggested_map)
 
-    # Output results
-    print("🔧 Suggested Field Map:", suggested_map)
-    print("📊 Confusion Matrix:\n", confusion_df)
-    print("🧾 Previous .ret dict:", ret_dict)
-    print("📦 Built .args:", next_model.args)
-    print("✅ Final value for 'n':", next_model.args.n)
+    # # Output results
+    # print("🔧 Suggested Field Map:", suggested_map)
+    # print("📊 Confusion Matrix:\n", confusion_df)
+    # print("🧾 Previous .ret dict:", ret_dict)
+    # print("📦 Built .args:", next_model.args)
+    # print("✅ Final value for 'n':", next_model.args.n)
         
     # ---------------------
     # 🧪 Test Harness
@@ -213,6 +278,12 @@ if __name__ == "__main__":
         ("Test 4 - Nested Address", MockRetC(location=Address(city="Paris", zipcode=75000)), MockNextModelC),
         ("Test 5 - Type Mismatch", MockRetD(user_id=42), MockNextModelD),
         ("Test 6 - Unrelated Fields", MockRetE(success=True), MockNextModelE),
+        ("Test 7 - Optional Fields", MockRetF(), MockNextModelF),
+        ("Test 8 - Boolean Match", MockRetG(), MockNextModelG),
+        ("Test 9 - List Handling", MockRetH(items=["apple", "banana"]), MockNextModelH),
+        ("Test 10 - Slight Mismatch", MockRetI(score=0.92), MockNextModelI),
+        ("Test 11 - Dict Flatten", MockRetJ(), MockNextModelJ),
+        ("Test 12 - Datetime Parsing", MockRetK(), MockNextModelK),
     ]
 
     for label, ret_obj, model_cls in test_cases:
