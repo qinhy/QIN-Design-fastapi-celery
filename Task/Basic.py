@@ -1,7 +1,9 @@
 from contextlib import contextmanager
 from datetime import datetime
+import time
 import io
 import logging
+import os
 from typing import Optional
 from uuid import uuid4
 
@@ -184,6 +186,59 @@ class RedisPubSub(PubSubInterface):
         """Stop the Redis listener."""
         if self.pubsub:
             self.pubsub.close()
+        if self.listener_thread and self.listener_thread.is_alive():
+            self.listener_thread.join()
+
+class FileSystemPubSub(PubSubInterface):
+    def __init__(self, base_dir: str = "/tmp/pubsub", task_pubsub_name: str = "FileSystemPubSub"):
+        super().__init__()
+        self.base_dir = os.path.abspath(base_dir)
+        self.task_pubsub_name = task_pubsub_name
+        self.uuid = str(self._event_disp.model.uuid)
+        self.listener_thread = None
+        os.makedirs(self.base_dir, exist_ok=True)
+        self._stop_event = threading.Event()
+
+    def publish(self, topic: str, data: dict):
+        """Write a message to a file in the topic directory."""
+        topic_dir = os.path.join(self.base_dir, topic)
+        os.makedirs(topic_dir, exist_ok=True)
+        message_id = str(uuid4())
+        filepath = os.path.join(topic_dir, f"{message_id}.json")
+        with open(filepath, "w") as f:
+            json.dump({"topic": topic, "data": data}, f)
+
+    def start_listener(self):
+        """Start monitoring the base directory for new messages."""
+        self._stop_event.clear()
+        self.listener_thread = threading.Thread(target=self.listen_data_of_topic, daemon=True)
+        self.listener_thread.start()
+
+    def listen_data_of_topic(self):
+        """Monitor the file system for new messages."""
+        processed_files = set()
+        while not self._stop_event.is_set():
+            for topic in os.listdir(self.base_dir):
+                topic_dir = os.path.join(self.base_dir, topic)
+                if not os.path.isdir(topic_dir):
+                    continue
+                for filename in os.listdir(topic_dir):
+                    filepath = os.path.join(topic_dir, filename)
+                    if filepath in processed_files or not filename.endswith(".json"):
+                        continue
+                    try:
+                        with open(filepath, "r") as f:
+                            message:dict = json.load(f)
+                        self.call_subscribers(topic, message.get("data"))
+                        processed_files.add(filepath)
+                        os.remove(filepath)  # Remove after processing
+                    except Exception as e:
+                        print(f"Failed to read/parse {filepath}: {e}")
+            time.sleep(1)  # Poll interval
+
+    def stop_listener(self):
+        """Stop the listener thread."""
+        self._stop_event.set()
         if self.listener_thread and self.listener_thread.is_alive():
             self.listener_thread.join()
 
