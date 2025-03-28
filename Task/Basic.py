@@ -203,7 +203,7 @@ class FileSystemPubSub(PubSubInterface):
         """Write a message to a file in the topic directory."""
         topic_dir = os.path.join(self.pubsub_base_dir, topic)
         os.makedirs(topic_dir, exist_ok=True)
-        message_id = str(uuid4())
+        message_id = len(os.listdir(topic_dir))
         filepath = os.path.join(topic_dir, f"{message_id}.json")
         with open(filepath, "w") as f:
             json.dump({"topic": topic, "data": data}, f)
@@ -231,7 +231,7 @@ class FileSystemPubSub(PubSubInterface):
                             message:dict = json.load(f)
                         self.call_subscribers(topic, message.get("data"))
                         processed_files.add(filepath)
-                        os.remove(filepath)  # Remove after processing
+                        # os.remove(filepath)  # Remove after processing
                     except Exception as e:
                         print(f"Failed to read/parse {filepath}: {e}")
             time.sleep(1)  # Poll interval
@@ -483,12 +483,12 @@ class FileSystemApp(AppInterface, FileSystemPubSub):
 
     def get_tasks_list(self):
         tasks = []
-        for task_id in self.get_tasks_collection():
+        for task_full_id in self.get_tasks_collection():
             try:
-                task = TaskModel(**self.store().get(f"celery-task-meta-{task_id}"))
+                task = TaskModel(**self.store().get(task_full_id))
                 tasks.append(task)
             except Exception as e:
-                print(f"Error reading task {task_id}: {e}")
+                print(f"Error reading task {task_full_id}: {e}")
         return tasks
 
     def get_task_meta(self, task_id: str):
