@@ -23,7 +23,7 @@ class SingletonFileSystemStorage:
     _instance = None
     _meta = {}
 
-    def __new__(cls, storage_dir=None):
+    def __new__(cls, storage_dir=None, ext='.json'):
         if cls._instance is not None and cls._meta.get('storage_dir') == storage_dir:
             return cls._instance
 
@@ -41,11 +41,15 @@ class SingletonFileSystemStorage:
         cls._instance.storage_dir = storage_path
         cls._meta['storage_dir'] = str(storage_path)
 
+        cls._instance.ext = ext
+        cls._meta['ext'] = str(ext)
+
         return cls._instance
 
-    def __init__(self, storage_dir=None):
+    def __init__(self, storage_dir=None, ext='.json'):
         self.uuid: str = self.uuid
         self.storage_dir: Path = self.storage_dir
+        self.ext: str = self.ext
 
 class SingletonFileSystemStorageController(AbstractStorageController):
     def __init__(self, model: SingletonFileSystemStorage):
@@ -54,7 +58,7 @@ class SingletonFileSystemStorageController(AbstractStorageController):
     def _get_file_path(self, key: str) -> Path:
         # Sanitize key to avoid path traversal, e.g., "some/../path"
         safe_key = key.replace('/', '_').replace('\\', '_')
-        return self.model.storage_dir / f"{safe_key}.json"
+        return self.model.storage_dir / f"{safe_key}{self.model.ext}"
 
     def exists(self, key: str) -> bool:
         return self._get_file_path(key).exists()
@@ -77,7 +81,7 @@ class SingletonFileSystemStorageController(AbstractStorageController):
             path.unlink()
 
     def keys(self, pattern: str = '*') -> list[str]:
-        all_keys = [f.stem for f in self.model.storage_dir.glob('*.json')]
+        all_keys = [f.stem for f in self.model.storage_dir.glob(f'*{self.model.ext}')]
         return fnmatch.filter(all_keys, pattern)
 
 SingletonKeyValueStorage.backs['file']=lambda *args,**kwargs:SingletonFileSystemStorageController(SingletonFileSystemStorage(*args,**kwargs))

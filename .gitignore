@@ -160,3 +160,4 @@ cython_debug/
 tmp/private_key.pem
 .DS_Store
 *.pid
+/sh/control

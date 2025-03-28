@@ -197,6 +197,13 @@ class RedisConfig(BaseSettings):
         extra = 'ignore'
 
 
+class FileConfig(BaseSettings):
+    # FILE_DIR=/tmp/FileSystemApp
+    url: str = Field(default='/tmp/FileSystemApp',  alias='FILE_DIR')
+    class Config:
+        env_file = '.env'
+        extra = 'ignore'
+
 class CeleryConfig(BaseSettings):
     meta_table: str = Field(default='celery_taskmeta',  alias='CELERY_META')
     broker: str = Field(default='amqp://NULL',  alias='CELERY_RABBITMQ_BROKER')
@@ -218,6 +225,7 @@ class AppConfig(BaseSettings):
     rabbitmq: RabbitMQConfig = RabbitMQConfig()
     mongo: MongoConfig = MongoConfig()
     redis: RedisConfig = RedisConfig()
+    file: FileConfig = FileConfig()
     celery: CeleryConfig = CeleryConfig()
 
     class Config:

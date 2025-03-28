@@ -192,16 +192,16 @@ class RedisPubSub(PubSubInterface):
 class FileSystemPubSub(PubSubInterface):
     def __init__(self, base_dir: str = "/tmp/pubsub", task_pubsub_name: str = "FileSystemPubSub"):
         super().__init__()
-        self.base_dir = os.path.abspath(base_dir)
+        self.pubsub_base_dir = os.path.abspath(base_dir)
         self.task_pubsub_name = task_pubsub_name
         self.uuid = str(self._event_disp.model.uuid)
         self.listener_thread = None
-        os.makedirs(self.base_dir, exist_ok=True)
+        os.makedirs(self.pubsub_base_dir, exist_ok=True)
         self._stop_event = threading.Event()
 
     def publish(self, topic: str, data: dict):
         """Write a message to a file in the topic directory."""
-        topic_dir = os.path.join(self.base_dir, topic)
+        topic_dir = os.path.join(self.pubsub_base_dir, topic)
         os.makedirs(topic_dir, exist_ok=True)
         message_id = str(uuid4())
         filepath = os.path.join(topic_dir, f"{message_id}.json")
@@ -218,8 +218,8 @@ class FileSystemPubSub(PubSubInterface):
         """Monitor the file system for new messages."""
         processed_files = set()
         while not self._stop_event.is_set():
-            for topic in os.listdir(self.base_dir):
-                topic_dir = os.path.join(self.base_dir, topic)
+            for topic in os.listdir(self.pubsub_base_dir):
+                topic_dir = os.path.join(self.pubsub_base_dir, topic)
                 if not os.path.isdir(topic_dir):
                     continue
                 for filename in os.listdir(topic_dir):
@@ -364,8 +364,9 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
         )
 
 class RedisApp(AppInterface, RedisPubSub):
-    def __init__(self, redis_url):
+    def __init__(self, redis_url,celery_meta:str='celery-task-meta'):
         super().__init__(redis_url)
+        self.celery_meta=celery_meta
         self.redis_url = redis_url
         self._redis_client = None
         self._store = None
@@ -431,20 +432,38 @@ class RedisApp(AppInterface, RedisPubSub):
         self.redis_client().set(task_key, json.dumps(task_data.model_dump()))
 
 class FileSystemApp(AppInterface, FileSystemPubSub):
-    def __init__(self, base_dir="./pubsub", celery_meta="tasks", task_pubsub_name="FileSystemPubSub"):
-        super().__init__(base_dir, task_pubsub_name)
+    def __init__(self, base_dir="./FileSystemApp", celery_meta="tasks", task_pubsub_name="FileSystemPubSub"):
+        super().__init__(f'{base_dir}/pubsub', task_pubsub_name)
         self.base_dir = base_dir
         self.celery_meta = celery_meta
         self._store = None
         self.start_listener()
 
+        self.broker_in = self.broker_out =os.path.join(self.base_dir, 'celery/broker/')
+        self.broker_processed = os.path.join(self.base_dir, 'celery/broker/processed')
+        self.backend_dir = os.path.join(self.base_dir, 'celery/results')
+
+        # Create necessary directories
+        os.makedirs(self.broker_in, exist_ok=True)
+        os.makedirs(self.broker_out, exist_ok=True)
+        os.makedirs(self.broker_processed, exist_ok=True)
+        os.makedirs(self.backend_dir, exist_ok=True)
+        
     def store(self):
         if self._store is None:
-            self._store = BasicStore().json_file_backend(self.base_dir)
+            self._store = BasicStore().file_backend(self.backend_dir,ext='')
         return self._store
 
     def get_celery_app(self):
-        return celery.Celery('tasks', broker=f'filesystem://{self.base_dir}', backend=f'file://{self.base_dir}')
+        return celery.Celery('tasks',
+            broker='filesystem://',
+            backend=f'file://{self.backend_dir}',
+            broker_transport_options={
+                'data_folder_in': self.broker_in,
+                'data_folder_out': self.broker_out,
+                'data_folder_processed': self.broker_processed
+            }
+        )
 
     def check_services(self) -> bool:
         try:
@@ -460,36 +479,24 @@ class FileSystemApp(AppInterface, FileSystemPubSub):
 
     def get_tasks_collection(self):
         """Returns list of full paths to celery task metadata files."""
-        return [
-            os.path.join(self.base_dir, filename)
-            for filename in os.listdir(self.base_dir)
-            if filename.startswith("celery-task-meta-") and filename.endswith(".json")
-        ]
+        return self.store().keys("celery-task-meta-*")
 
     def get_tasks_list(self):
         tasks = []
-        for filepath in self.get_tasks_collection():
+        for task_id in self.get_tasks_collection():
             try:
-                with open(filepath, 'r') as f:
-                    task = json.load(f)
-                tasks.append(TaskModel(**task))
+                task = TaskModel(**self.store().get(f"celery-task-meta-{task_id}"))
+                tasks.append(task)
             except Exception as e:
-                print(f"Error reading task file {filepath}: {e}")
+                print(f"Error reading task {task_id}: {e}")
         return tasks
 
     def get_task_meta(self, task_id: str):
-        task_file = os.path.join(self.base_dir, f"celery-task-meta-{task_id}.json")
-        if os.path.exists(task_file):
-            with open(task_file, 'r') as f:
-                return json.load(f)
-        return None
+        return self.store().get(f"celery-task-meta-{task_id}")
 
     def set_task_status(self, task_id, result='', status=celery.states.STARTED):
         task_data = TaskModel(task_id=task_id, status=status, result=result)
-        task_file = os.path.join(self.base_dir, f"celery-task-meta-{task_id}.json")
-        with open(task_file, 'w') as f:
-            json.dump(task_data.model_dump(), f)
-
+        self.store().set(f"celery-task-meta-{task_id}",task_data.model_dump())
 
 class ServiceOrientedArchitecture:
     BasicApp:AppInterface = None

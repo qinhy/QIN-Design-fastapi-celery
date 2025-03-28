@@ -5,7 +5,7 @@ from fastapi import Body, FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from Task.Basic import AppInterface, RabbitmqMongoApp, RedisApp
+from Task.Basic import AppInterface, FileSystemApp, RabbitmqMongoApp, RedisApp
 from Task.BasicAPIs import BasicCeleryTask
 import CustomTask
 from config import *
@@ -98,6 +98,10 @@ api.add_middleware(SessionMiddleware,
 
 if conf.app_backend=='redis':
     BasicApp:AppInterface = RedisApp(conf.redis.url)
+    
+elif conf.app_backend=='file':
+    BasicApp:AppInterface = FileSystemApp(conf.file.url)
+    
 elif conf.app_backend=='mongodbrabbitmq':
     BasicApp:AppInterface = RabbitmqMongoApp(conf.rabbitmq.url,conf.rabbitmq.user,conf.rabbitmq.password,
                                              conf.mongo.url,conf.mongo.db,conf.celery.meta_table,
