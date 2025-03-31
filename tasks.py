@@ -5,6 +5,7 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
+from CustomTask.MT5Manager import Book, MT5Account
 from Task.Basic import AppInterface, RabbitmqMongoApp, RedisApp
 from Task.BasicAPIs import BasicCeleryTask
 import CustomTask
@@ -70,6 +71,113 @@ class CeleryTask(BasicCeleryTask):
             return self.api_schedule_perform_action(action_name, task_model.model_dump(), execution_time, timezone)
         return handler
 
+from CustomTask import BookService, MT5CopyLastRatesService
+class MT5CeleryTask(CeleryTask):
+    def __init__(self, BasicApp, celery_app, ACTION_REGISTRY = ACTION_REGISTRY):
+        super().__init__(BasicApp, celery_app, ACTION_REGISTRY)
+        
+        self.router.get( "/accounts/info")(self.api_account_info)
+        self.router.get( "/books/")(self.api_get_books)
+        self.router.post("/books/send")(self.api_book_send)
+        self.router.post("/books/send/schedule")(self.api_schedule_book_send)
+        self.router.post("/books/close")(self.api_book_close)
+        self.router.post("/books/change/price")(self.api_book_change_price)
+        self.router.post("/books/change/tpsl")(self.api_book_change_tp_sl)
+        self.router.get( "/rates/")(self.api_rates_copy)
+
+
+# {
+#   "param": {
+#     "account": {
+#         "account_id": xxxxx,
+#         "password": "xxxxx",
+#         "account_server": "xxxx"
+#       },
+#     "action": "account_info"
+#   }
+# }
+
+    def api_account_info(self, acc: MT5Account):
+        """Endpoint to fetch account information."""
+        m = BookService.Model()
+        m.param.account = acc
+        m.param.action= 'account_info'
+        return self.api_perform_action('BookService', m.model_dump(),0)
+    
+    def api_get_books(self, acc: MT5Account):
+        """Endpoint to get books for a given MT5 account."""
+        m = BookService.Model()
+        m.param.account = acc
+        m.param.action= 'getBooks'
+        return self.api_perform_action('BookService', m.model_dump(),0)
+
+    def api_book_send(self, acc: MT5Account, book: Book):
+        """Endpoint to send a book."""
+        m = BookService.Model()
+        m.param.account = acc
+        m.param.action= 'send'
+        m.param.book= book
+        return self.api_perform_action('BookService', m.model_dump(),0)
+
+    def api_schedule_book_send(self, acc: MT5Account, 
+    symbol:str='USDJPY',sl:float=147.0,tp:float=150.0,price_open:float=148.0,volume:float=0.01,
+    execution_time: str = Query(datetime.datetime.now(datetime.timezone.utc
+          ).isoformat().split('.')[0],
+           description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"),
+        timezone: Literal["UTC", "Asia/Tokyo", "America/New_York",
+                          "Europe/London", "Europe/Paris",
+                          "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"
+                          ] = Query("Asia/Tokyo", 
+                                    description="Choose a timezone from the list")
+    ):
+        m = BookService.Model()
+        m.param.account = acc
+        m.param.action= 'send'
+        m.param.book= Book(symbol=symbol,sl=sl,tp=tp,price_open=price_open,volume=volume).as_plan()
+        return self.api_schedule_perform_action('BookService', m.model_dump(), execution_time,timezone)
+
+    def api_book_close(self, acc: MT5Account, book: Book):
+        """Endpoint to close a book."""
+        m = BookService.Model()
+        m.param.account = acc
+        m.param.action= 'close'
+        m.param.book= book
+        return self.api_perform_action('BookService', m.model_dump(),0)
+    
+    def api_book_change_price(self, acc: MT5Account, book: Book, p: float):
+        """Endpoint to change the price of a book."""
+        m = BookService.Model()
+        m.param.account = acc
+        m.param.action= 'changeP'
+        m.param.book= book
+        m.param.book.price_open = p
+        m.args.p = p
+        return self.api_perform_action('BookService', m.model_dump(),0)
+
+    def api_book_change_tp_sl(self, acc: MT5Account, book: Book, tp: float, sl: float):
+        """Endpoint to change tp sl values of a book."""
+        m = BookService.Model()
+        m.param.account = acc
+        m.param.action= 'changeTS'
+        m.param.book= book
+        m.param.book.tp = tp
+        m.param.book.sl = sl
+        m.args.tp = tp
+        m.args.sl = sl
+        return self.api_perform_action('BookService', m.model_dump(),0)
+    
+    def api_rates_copy(self, acc: MT5Account, symbol: str, timeframe: str, count: int, debug: bool = False):
+        """
+        Endpoint to copy rates for a given MT5 account, symbol, timeframe, and count.
+        """
+        m = MT5CopyLastRatesService.Model()
+        m.param.account = acc
+        m.args.symbol = symbol
+        m.args.timeframe = timeframe
+        m.args.count = count
+        m.args.debug = debug
+        return self.api_perform_action('MT5CopyLastRatesService', m.model_dump(),0)
+    
 ########################################################
 conf = AppConfig()
 print(conf.validate_backend().model_dump())
@@ -95,7 +203,7 @@ else:
     raise ValueError(f'no back end of {conf.app_backend}')
 
 celery_app = BasicApp.get_celery_app()
-my_app = CeleryTask(BasicApp,celery_app)
+my_app = MT5CeleryTask(BasicApp,celery_app)
 
 ## add original api
 from CustomTask import Fibonacci
