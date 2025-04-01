@@ -503,7 +503,17 @@ class ServiceOrientedArchitecture:
 
     class Model(BaseModel):
         task_id:Optional[str] = Field('AUTO_SET_BUT_NULL_NOW', description="task uuid")
-        
+
+        class Version(BaseModel):
+            major: str = Field(default="1", description="Major version number")
+            minor: str = Field(default="0", description="Minor version number")
+            patch: str = Field(default="0", description="Patch version number")
+
+            def __repr__(self):
+                return self.__str__()
+            def __str__(self):
+                return f'_v{self.major}{self.minor}{self.patch}_'
+
         class Param(BaseModel):
             pass
         class Args(BaseModel):

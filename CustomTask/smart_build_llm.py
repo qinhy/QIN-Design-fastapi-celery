@@ -7,6 +7,17 @@ from pydantic import BaseModel, Field
 
 class ServiceOrientedArchitecture(BaseModel):
     class Model(BaseModel):
+
+        class Version(BaseModel):
+            major: str = Field(default="1", description="Major version number")
+            minor: str = Field(default="0", description="Minor version number")
+            patch: str = Field(default="0", description="Patch version number")
+
+            def __repr__(self):
+                return self.__str__()
+            def __str__(self):
+                return f'_v{self.major}{self.minor}{self.patch}_'
+
         class Param(BaseModel):
             pass
 
@@ -593,7 +604,7 @@ def build_conversion_prompt(
         "{to_schema}\n"
         "```\n\n"
         "```python\n"
-        "def {from_class_name}_ret_to_{to_class_name}_args_convertor(ret,args):\n"
+        "def {from_class_name}{from_class_version}_ret_to_{to_class_name}{from_class_version}_args_convertor(ret,args):\n"
         "    # this function will convert {from_class_name}.ret into {to_class_name}.args\n"
         "    # ...\n"
         "    return args\n"
@@ -602,15 +613,19 @@ def build_conversion_prompt(
 
     from_class_name = source_class.__name__
     to_class_name = target_class.__name__
+    from_class_version = source_class.Model.Version()
+    to_class_version = target_class.Model.Version()
 
     prompt = prompt_template.format(
         from_class_name=from_class_name,
         from_schema=source_class.Model.model_json_schema(),
         to_class_name=to_class_name,
-        to_schema=target_class.Model.model_json_schema()
+        to_schema=target_class.Model.model_json_schema(),
+        from_class_version = from_class_version,
+        to_class_version = to_class_version,
     )
 
-    return prompt, f"{from_class_name}_ret_to_{to_class_name}_args_convertor"
+    return prompt, f"{from_class_name}{from_class_version}_ret_to_{to_class_name}{from_class_version}_args_convertor"
 
 def get_func_from_code(code_string,function_name):    
     # Execute the extracted code in a new local namespace
