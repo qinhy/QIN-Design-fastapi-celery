@@ -585,7 +585,7 @@ def build_conversion_prompt(
         A tuple of (prompt_text, generated_function_name).
     """
     prompt_template = (
-        "Please complete following code and reply function of ret_to_args_convertor only :\n\n"
+        "Please complete the following code and only provide the implementation of the ret to args converter function :\n\n"
         "```{from_class_name}.Model pydanctic schema\n"
         "{from_schema}\n"
         "```\n\n"
