@@ -7,7 +7,18 @@ from pydantic import BaseModel, Field
 
 class ServiceOrientedArchitecture(BaseModel):
     class Model(BaseModel):
-        pass
+        class Param(BaseModel):
+            pass
+
+        class Args(BaseModel):
+            pass
+
+        class Return(BaseModel):
+            pass
+
+        param: Param = Param()
+        args: Args = Args()
+        ret: Optional[Return] = Return()
 
 class Fibonacci(ServiceOrientedArchitecture):
     """
@@ -673,6 +684,7 @@ def test_build(in_class = Fibonacci,out_class = PrimeNumberChecker):
 
     # Fetch code and function from GPT
     code_snippet, conversion_func = get_code_from_gpt(prompt_text, function_name)
+    print(code_snippet)
 
     # Prepare sample data
     in_model_instance = in_class.Model()
@@ -687,28 +699,107 @@ def test_build(in_class = Fibonacci,out_class = PrimeNumberChecker):
 
     # print("Updated PrimeNumberChecker Args:", updated_args)
 
+def _test_build_multi(in_class:ServiceOrientedArchitecture,
+                     out_class:ServiceOrientedArchitecture,
+                     in_ret_list=[], out_args_list=[]):
+    # Build prompt
+    prompt_text, function_name = build_conversion_prompt(in_class, out_class)
+
+    # Fetch code and function from GPT
+    code_snippet, conversion_func = get_code_from_gpt(prompt_text, function_name)
+    print(code_snippet)
+
+    # Generate default test data if none provided
+    in_model_instance:ServiceOrientedArchitecture.Model = in_class.Model()
+    in_ret_list = [in_model_instance.Return(**i).model_dump() for i in in_ret_list]
+
+    out_model_instance = out_class.Model()
+    out_args_list = [out_model_instance.Args(**i).model_dump() for i in out_args_list]
+    target_args_list = [dict(**i) for i in out_args_list]
+
+    results = []
+    # Iterate over all combinations of ret and args
+    for in_ret_data,out_args_data,target_args_data in zip(in_ret_list,out_args_list,target_args_list):
+        try:
+            updated_args:dict = conversion_func(in_ret_data, out_args_data)
+            for k,v in updated_args.items():
+                if v!=target_args_data[k]:
+                    raise ValueError(f'convert error of {in_ret_data} to {target_args_data}')
+            results.append(updated_args)
+        except Exception as e:
+            results.append({"error": str(e)})
+
+    return results
+
+def test_build_multi(in_ret_samples,target_args_samples,
+                     in_class:ServiceOrientedArchitecture,
+                     out_class:ServiceOrientedArchitecture,):
+    results = _test_build_multi(in_class, out_class, in_ret_samples, target_args_samples)
+    for idx, res in enumerate(results):
+        print(f"Test case {idx+1}: from {in_ret_samples[idx]} to {res}")
+
 
 if __name__ == "__main__":
-    # Test 1: Fibonacci -> PrimeNumberChecker
-    fib_to_prime_args = test_build(Fibonacci, PrimeNumberChecker)
-    print("Fibonacci -> PrimeNumberChecker:", fib_to_prime_args)
+    # # Test 1: Fibonacci -> PrimeNumberChecker
+    # fib_to_prime_args = test_build(Fibonacci, PrimeNumberChecker)
+    # print("Fibonacci -> PrimeNumberChecker:", fib_to_prime_args)
 
-    # Test 2: AddTwoNumbers -> MultiplyTwoNumbers
-    add_to_multiply_args = test_build(AddTwoNumbers, MultiplyTwoNumbers)
-    print("AddTwoNumbers -> MultiplyTwoNumbers:", add_to_multiply_args)
+    # # Test 2: AddTwoNumbers -> MultiplyTwoNumbers
+    # add_to_multiply_args = test_build(AddTwoNumbers, MultiplyTwoNumbers)
+    # print("AddTwoNumbers -> MultiplyTwoNumbers:", add_to_multiply_args)
 
-    # Test 3: Factorial -> SumOfSequence
-    factorial_to_sum_args = test_build(Factorial, SumOfSequence)
-    print("Factorial -> SumOfSequence:", factorial_to_sum_args)
+    # # Test 3: Factorial -> SumOfSequence
+    # factorial_to_sum_args = test_build(Factorial, SumOfSequence)
+    # print("Factorial -> SumOfSequence:", factorial_to_sum_args)
 
-    # Test 4: CircleAreaCalculator -> TriangleAreaCalculator
-    circle_to_triangle_args = test_build(CircleAreaCalculator, TriangleAreaCalculator)
-    print("CircleAreaCalculator -> TriangleAreaCalculator:", circle_to_triangle_args)
+    # # Test 4: CircleAreaCalculator -> TriangleAreaCalculator
+    # circle_to_triangle_args = test_build(CircleAreaCalculator, TriangleAreaCalculator)
+    # print("CircleAreaCalculator -> TriangleAreaCalculator:", circle_to_triangle_args)
 
-    # Test 5: DataSorter -> StatisticsCalculator
-    sorter_to_stats_args = test_build(DataSorter, StatisticsCalculator)
-    print("DataSorter -> StatisticsCalculator:", sorter_to_stats_args)
+    # # Test 5: DataSorter -> StatisticsCalculator
+    # sorter_to_stats_args = test_build(DataSorter, StatisticsCalculator)
+    # print("DataSorter -> StatisticsCalculator:", sorter_to_stats_args)
 
-    # Test 6: DatabaseInsert -> DatabaseQuery
-    db_insert_to_query_args = test_build(DatabaseInsert, DatabaseQuery)
-    print("DatabaseInsert -> DatabaseQuery:", db_insert_to_query_args)
+    # # Test 6: DatabaseInsert -> DatabaseQuery
+    # db_insert_to_query_args = test_build(DatabaseInsert, DatabaseQuery)
+    # print("DatabaseInsert -> DatabaseQuery:", db_insert_to_query_args)
+
+    # Example: test with manually defined ret and args lists
+    test_build_multi(
+        in_ret_samples = [
+            {"n": 5},   # Sample 1 for Fibonacci
+            {"n": 10},  # Sample 2
+        ],
+        target_args_samples = [
+            {"number": 5},  # Sample 1 for PrimeNumberChecker
+            {"number": 10},  # Sample 2
+        ]
+        ,in_class=Fibonacci, out_class=PrimeNumberChecker)
+
+    # Input: results from AddTwoNumbers
+    test_build_multi(
+        in_ret_samples = [
+            {"result": 8.0},   # Expect x=4, y=4
+            {"result": 15.0},  # Expect x=7, y=8 or some close combo
+            {"result": 1.0},   # Edge case: x=0, y=1
+        ],
+        # Target args to check conversion correctness
+        target_args_samples = [
+            {"x": 8, "y": 1},
+            {"x": 15, "y": 1},
+            {"x": 1, "y": 1},
+        ],in_class=AddTwoNumbers, out_class=MultiplyTwoNumbers)
+    
+    # Factorial ➝ SumOfSequence
+    test_build_multi(
+        in_ret_samples = [
+            {"result": 6},   # factorial(3) = 6
+            {"result": 24},  # factorial(4) = 24
+        ],
+        target_args_samples = [
+            {"start": 1, "end": 6},
+            {"start": 1, "end": 24},
+        ],
+        in_class=Factorial,
+        out_class=SumOfSequence
+    )
