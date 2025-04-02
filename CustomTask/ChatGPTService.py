@@ -69,26 +69,40 @@ class ChatGPTService(ServiceOrientedArchitecture):
             self.model: ChatGPTService.Model = self.model
             self.logger = self.model.logger
 
-        def __call__(self, *args, **kwargs):
+        def __call__(self, *args, **kwargs) -> Any:
             with self.listen_stop_flag() as stop_flag:
                 if stop_flag.is_set():
                     return self.to_stop()
 
                 try:
-                    api_key: str = self._get_api_key()
-                    headers: Dict[str, str] = self._build_headers(api_key)
-                    payload: Dict[str, Any] = self._build_payload()
+                    param = self.model.param
+                    args_obj = self.model.args
 
-                    self.log_and_send("Sending streaming request to OpenAI...")
+                    api_key: str = self._get_api_key(param.api_key)
+                    headers: Dict[str, str] = self._build_headers(api_key)
+                    payload: Dict[str, Any] = self._build_payload(
+                        model=param.model,
+                        system_prompt=param.system_prompt,
+                        user_prompt=args_obj.user_prompt,
+                        temperature=param.temperature,
+                        max_tokens=param.max_tokens,
+                        top_p=param.top_p,
+                        stream=param.stream
+                    )
+
+                    self.log_and_send("Sending request to OpenAI...")
                     response: requests.Response = self._send_request(headers, payload)
 
-                    full_response: str = ""
-                    for delta in self._stream_response_chunks(response, stop_flag):
-                        self.log_and_send(delta)
-                        full_response += delta
+                    if param.stream:
+                        full_response: str = ""
+                        for delta in self._stream_response_chunks(response, stop_flag):
+                            self.log_and_send(delta)
+                            full_response += delta
+                    else:
+                        full_response = self._handle_non_stream_response(response)
 
                     self.model.ret.response = full_response
-                    self.log_and_send("Streaming completed.")
+                    self.log_and_send("Response completed.")
 
                 except Exception as e:
                     self._handle_error(e)
@@ -96,8 +110,8 @@ class ChatGPTService(ServiceOrientedArchitecture):
             return self.model
 
 
-        def _get_api_key(self) -> str:
-            api_key: Optional[str] = self.model.param.api_key or os.environ.get('OPENAI_API_KEY')
+        def _get_api_key(self, param_key: Optional[str]) -> str:
+            api_key: Optional[str] = param_key or os.environ.get('OPENAI_API_KEY')
             if not api_key:
                 raise ValueError("OpenAI API key is missing. Provide via param.api_key or 'OPENAI_API_KEY' env var.")
             return api_key
@@ -110,19 +124,28 @@ class ChatGPTService(ServiceOrientedArchitecture):
             }
 
 
-        def _build_payload(self) -> Dict[str, Any]:
+        def _build_payload(
+            self,
+            model: str,
+            system_prompt: Optional[str],
+            user_prompt: str,
+            temperature: float,
+            max_tokens: int,
+            top_p: float,
+            stream: bool
+        ) -> Dict[str, Any]:
             messages: list[Dict[str, str]] = []
-            if self.model.param.system_prompt:
-                messages.append({"role": "system", "content": self.model.param.system_prompt})
-            messages.append({"role": "user", "content": self.model.args.user_prompt})
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": user_prompt})
 
             return {
-                "model": self.model.param.model,
+                "model": model,
                 "messages": messages,
-                "temperature": self.model.param.temperature,
-                "max_tokens": self.model.param.max_tokens,
-                "top_p": self.model.param.top_p,
-                "stream": self.model.param.stream
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "top_p": top_p,
+                "stream": stream
             }
 
 
@@ -137,9 +160,7 @@ class ChatGPTService(ServiceOrientedArchitecture):
             return response
 
 
-        def _stream_response_chunks(self,
-                                    response: requests.Response, 
-                                    stop_flag: threading.Event) -> Generator[str, None, None]:
+        def _stream_response_chunks(self, response: requests.Response, stop_flag: threading.Event) -> Generator[str, None, None]:
             for line in response.iter_lines():
                 if stop_flag.is_set():
                     return
@@ -150,13 +171,18 @@ class ChatGPTService(ServiceOrientedArchitecture):
                         break
                     try:
                         chunk: Dict[str, Any] = json.loads(decoded)
-                        deltad: dict = chunk['choices'][0]['delta']
-                        delta: str = deltad.get('content', '')
+                        delta: str = chunk['choices'][0]['delta'].get('content', '')
                         if delta:
                             yield delta
                     except json.JSONDecodeError:
                         self.log_and_send(f"Malformed chunk: {decoded}", ChatGPTService.Levels.WARNING)
 
+        def _handle_non_stream_response(self, response: requests.Response) -> str:
+            try:
+                data: Dict[str, Any] = response.json()
+                return data['choices'][0]['message']['content']
+            except (KeyError, ValueError, json.JSONDecodeError) as e:
+                raise RuntimeError(f"Failed to parse non-stream response: {str(e)}")
 
         def _decode_stream_line(self, line: bytes) -> str:
             decoded_line: str = line.decode("utf-8").strip()
