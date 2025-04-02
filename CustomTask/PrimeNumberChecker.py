@@ -16,17 +16,25 @@ class PrimeNumberChecker(ServiceOrientedArchitecture):
                 return self.mode == 'smart'
 
         class Args(BaseModel):
-            number: int = Field(..., description="The number to check for primality")
+            number: int = Field(13, description="The number to check for primality")
 
         class Return(BaseModel):
             is_prime: Optional[bool] = Field(None, description="Whether the number is prime")
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
             pass
-
+        
+        @staticmethod
+        def examples():
+            return [
+                {"param": {"mode": "smart"}, "args": {"number": 13}},
+                {"param": {"mode": "basic"}, "args": {"number": 10}},
+                {"param": {"mode": "smart"}, "args": {"number": 1}},
+            ]
+        
         param: Param = Param()
-        args: Args
-        ret: Return = Return()
+        args: Args = Param()
+        ret: Optional[Return] = Return()
         logger: Logger = Logger(name='PrimeNumberChecker')
 
     class Action(ServiceOrientedArchitecture.Action):

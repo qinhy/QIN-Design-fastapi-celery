@@ -19,14 +19,22 @@ class PalindromeChecker(ServiceOrientedArchitecture):
             text: str = Field(..., description="The string to check for palindrome")
 
         class Return(BaseModel):
-            is_palindrome: Optional[bool] = Field(None, description="Whether the string is a palindrome")
+            is_palindrome: bool = Field(False, description="Whether the string is a palindrome")
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
             pass
 
+        @staticmethod
+        def examples():
+            return [
+                {"param": {"mode": "smart"}, "args": {"text": "racecar"}},
+                {"param": {"mode": "basic"}, "args": {"text": "hello"}},
+                {"param": {"mode": "smart"}, "args": {"text": "A man a plan a canal Panama"}},
+            ]
+        
         param: Param = Param()
         args: Args
-        ret: Return = Return()
+        ret: Optional[Return] = Return()
         logger: Logger = Logger(name='PalindromeChecker')
 
     class Action(ServiceOrientedArchitecture.Action):

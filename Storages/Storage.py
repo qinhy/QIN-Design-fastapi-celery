@@ -262,6 +262,11 @@ class SingletonKeyValueStorage(AbstractStorageController):
         self.conn = self._switch_backend('s3',bucket_name,
                     aws_access_key_id,aws_secret_access_key,region_name,
                     s3_storage_prefix_path = s3_storage_prefix_path)
+        return self
+    
+    def file_backend(self,storage_dir='./SingletonKeyValueStorage', ext='.json'):
+        self.conn = self._switch_backend('file')(storage_dir=storage_dir,ext=ext)
+        return self
 
     def temp_python_backend(self):
         self.conn = self._switch_backend('temp_python')()

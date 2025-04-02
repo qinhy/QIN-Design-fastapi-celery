@@ -1,7 +1,9 @@
 from contextlib import contextmanager
 from datetime import datetime
+import time
 import io
 import logging
+import os
 from typing import Optional
 from uuid import uuid4
 
@@ -9,7 +11,7 @@ import threading
 import json
 
 import pymongo
-from pydantic import BaseModel, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr
 from pymongo import MongoClient
 import pymongo.errors
 import redis
@@ -187,6 +189,59 @@ class RedisPubSub(PubSubInterface):
         if self.listener_thread and self.listener_thread.is_alive():
             self.listener_thread.join()
 
+class FileSystemPubSub(PubSubInterface):
+    def __init__(self, base_dir: str = "/tmp/pubsub", task_pubsub_name: str = "FileSystemPubSub"):
+        super().__init__()
+        self.pubsub_base_dir = os.path.abspath(base_dir)
+        self.task_pubsub_name = task_pubsub_name
+        self.uuid = str(self._event_disp.model.uuid)
+        self.listener_thread = None
+        os.makedirs(self.pubsub_base_dir, exist_ok=True)
+        self._stop_event = threading.Event()
+
+    def publish(self, topic: str, data: dict):
+        """Write a message to a file in the topic directory."""
+        topic_dir = os.path.join(self.pubsub_base_dir, topic)
+        os.makedirs(topic_dir, exist_ok=True)
+        message_id = len(os.listdir(topic_dir))
+        filepath = os.path.join(topic_dir, f"{message_id}.json")
+        with open(filepath, "w") as f:
+            json.dump({"topic": topic, "data": data}, f)
+
+    def start_listener(self):
+        """Start monitoring the base directory for new messages."""
+        self._stop_event.clear()
+        self.listener_thread = threading.Thread(target=self.listen_data_of_topic, daemon=True)
+        self.listener_thread.start()
+
+    def listen_data_of_topic(self):
+        """Monitor the file system for new messages."""
+        processed_files = set()
+        while not self._stop_event.is_set():
+            for topic in os.listdir(self.pubsub_base_dir):
+                topic_dir = os.path.join(self.pubsub_base_dir, topic)
+                if not os.path.isdir(topic_dir):
+                    continue
+                for filename in os.listdir(topic_dir):
+                    filepath = os.path.join(topic_dir, filename)
+                    if filepath in processed_files or not filename.endswith(".json"):
+                        continue
+                    try:
+                        with open(filepath, "r") as f:
+                            message:dict = json.load(f)
+                        self.call_subscribers(topic, message.get("data"))
+                        processed_files.add(filepath)
+                        # os.remove(filepath)  # Remove after processing
+                    except Exception as e:
+                        print(f"Failed to read/parse {filepath}: {e}")
+            time.sleep(1)  # Poll interval
+
+    def stop_listener(self):
+        """Stop the listener thread."""
+        self._stop_event.set()
+        if self.listener_thread and self.listener_thread.is_alive():
+            self.listener_thread.join()
+
 class TaskModel(BaseModel):
     task_id: str
     status: Optional[str] = None
@@ -309,8 +364,9 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
         )
 
 class RedisApp(AppInterface, RedisPubSub):
-    def __init__(self, redis_url):
+    def __init__(self, redis_url,celery_meta:str='celery-task-meta'):
         super().__init__(redis_url)
+        self.celery_meta=celery_meta
         self.redis_url = redis_url
         self._redis_client = None
         self._store = None
@@ -375,11 +431,89 @@ class RedisApp(AppInterface, RedisPubSub):
                 result=result)
         self.redis_client().set(task_key, json.dumps(task_data.model_dump()))
 
+class FileSystemApp(AppInterface, FileSystemPubSub):
+    def __init__(self, base_dir="./FileSystemApp", celery_meta="tasks", task_pubsub_name="FileSystemPubSub"):
+        super().__init__(f'{base_dir}/pubsub', task_pubsub_name)
+        self.base_dir = base_dir
+        self.celery_meta = celery_meta
+        self._store = None
+        self.start_listener()
+
+        self.broker_in = self.broker_out =os.path.join(self.base_dir, 'celery/broker/')
+        self.broker_processed = os.path.join(self.base_dir, 'celery/broker/processed')
+        self.backend_dir = os.path.join(self.base_dir, 'celery/results')
+
+        # Create necessary directories
+        os.makedirs(self.broker_in, exist_ok=True)
+        os.makedirs(self.broker_out, exist_ok=True)
+        os.makedirs(self.broker_processed, exist_ok=True)
+        os.makedirs(self.backend_dir, exist_ok=True)
+        
+    def store(self):
+        if self._store is None:
+            self._store = BasicStore().file_backend(self.backend_dir,ext='')
+        return self._store
+
+    def get_celery_app(self):
+        return celery.Celery('tasks',
+            broker='filesystem://',
+            backend=f'file://{self.backend_dir}',
+            broker_transport_options={
+                'data_folder_in': self.broker_in,
+                'data_folder_out': self.broker_out,
+                'data_folder_processed': self.broker_processed
+            }
+        )
+
+    def check_services(self) -> bool:
+        try:
+            test_file = os.path.join(self.base_dir, "health_check.txt")
+            with open(test_file, 'w') as f:
+                f.write("ok")
+            with open(test_file, 'r') as f:
+                content = f.read()
+            os.remove(test_file)
+            return content == "ok"
+        except Exception:
+            return False
+
+    def get_tasks_collection(self):
+        """Returns list of full paths to celery task metadata files."""
+        return self.store().keys("celery-task-meta-*")
+
+    def get_tasks_list(self):
+        tasks = []
+        for task_full_id in self.get_tasks_collection():
+            try:
+                task = TaskModel(**self.store().get(task_full_id))
+                tasks.append(task)
+            except Exception as e:
+                print(f"Error reading task {task_full_id}: {e}")
+        return tasks
+
+    def get_task_meta(self, task_id: str):
+        return self.store().get(f"celery-task-meta-{task_id}")
+
+    def set_task_status(self, task_id, result='', status=celery.states.STARTED):
+        task_data = TaskModel(task_id=task_id, status=status, result=result)
+        self.store().set(f"celery-task-meta-{task_id}",task_data.model_dump())
+
 class ServiceOrientedArchitecture:
     BasicApp:AppInterface = None
 
     class Model(BaseModel):
-        task_id:str = 'AUTO_SET_BUT_NULL_NOW'
+        task_id:Optional[str] = Field('AUTO_SET_BUT_NULL_NOW', description="task uuid")
+
+        class Version(BaseModel):
+            major: str = Field(default="1", description="Major version number")
+            minor: str = Field(default="0", description="Minor version number")
+            patch: str = Field(default="0", description="Patch version number")
+
+            def __repr__(self):
+                return self.__str__()
+            def __str__(self):
+                return f'_v{self.major}{self.minor}{self.patch}_'
+
         class Param(BaseModel):
             pass
         class Args(BaseModel):
@@ -471,7 +605,7 @@ class ServiceOrientedArchitecture:
                 
         param:Param = Param()
         args:Args = Args()
-        ret:Return = Return()
+        ret:Optional[Return] = Return()
         logger:Logger = Logger()
 
     class Action:
