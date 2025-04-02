@@ -143,6 +143,8 @@ class CeleryTask(BasicCeleryTask):
 
     def refresh_pipeline(self):
         # get frome redis
+        server_pipelines = self.api_list_pipelines()
+        add_pipelines = {i for i in server_pipelines if i not in self.pipelines}
         # self.pipelines = self.api_list_pipelines()
         # add and delete
         # to update my_app local pipeline dicts
