@@ -22,7 +22,7 @@ class ChatGPTService(ServiceOrientedArchitecture):
             system_prompt: Optional[str] = Field(None, description="Optional system prompt")
 
         class Args(BaseModel):
-            user_prompt: str = Field(..., description="The user prompt to send to ChatGPT")
+            user_prompt: str = Field("Hi", description="The user prompt to send to ChatGPT")
 
         class Return(BaseModel):
             response: str = Field("", description="The full model response")

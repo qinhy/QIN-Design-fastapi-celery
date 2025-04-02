@@ -1,10 +1,13 @@
 import datetime
 from typing import Literal, Optional
 
-from fastapi import Body, FastAPI, Query
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
+from fastapi.routing import APIRoute
 from starlette.middleware.sessions import SessionMiddleware
 
+from Task.Basic import ServiceOrientedArchitecture
 from Task.Basic import AppInterface, FileSystemApp, RabbitmqMongoApp, RedisApp
 from Task.BasicAPIs import BasicCeleryTask
 import CustomTask
@@ -20,6 +23,8 @@ class CeleryTask(BasicCeleryTask):
     def __init__(self, BasicApp, celery_app,
                  ACTION_REGISTRY:dict[str,any]=ACTION_REGISTRY):
         super().__init__(BasicApp, celery_app, ACTION_REGISTRY)
+
+        self.router.post("/pipeline/add")(self.api_add_pipeline)
 
         # Auto-generate endpoints for each action
         for action_name, action_class in ACTION_REGISTRY.items():
@@ -80,6 +85,69 @@ class CeleryTask(BasicCeleryTask):
                         return self.api_schedule_perform_action(action_name, task_model.model_dump(), execution_time, timezone)
         return handler
         
+    def api_add_pipeline(self,name: str='FiboPrime', method: str = 'POST', pipeline: list[str] = ['Fibonacci','PrimeNumberChecker']):
+        self.api_ok()
+        path = f"/pipeline/{name}"
+        method = method.upper()
+
+        # Validate function names
+        invalid_funcs = [fn for fn in pipeline if fn not in self.ACTION_REGISTRY]
+        if invalid_funcs:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Service [{invalid_funcs}] are not supported."
+            )
+        
+        if len(pipeline)<2:
+            raise HTTPException(
+                status_code=400,
+                detail=f"pipeline should contains more than 2 services."
+            )
+             
+
+        # Save pipeline and register route name
+        self.pipelines = self.api_list_pipelines()
+        self.pipelines[name] = name
+        
+        def create_dynamic_handler(pipeline: list[str]):
+            first_in_class = ACTION_REGISTRY[pipeline[0]]
+            last_out_class = ACTION_REGISTRY[pipeline[1]]
+            """Create a dynamic route handler based on a pipeline of functions."""
+            async def dynamic_handler(in_model: first_in_class.Model)->dict:
+                result = []
+                for func_name in pipeline:
+                    result.append(ACTION_REGISTRY[func_name].Model.examples()[0])
+                return {"result": result}
+            return dynamic_handler
+        
+        # Create and add the dynamic route
+        dynamic_handler = create_dynamic_handler(pipeline)
+        self.router.add_api_route(
+            path=path,
+            endpoint=dynamic_handler,
+            methods=[method],
+            name=name,
+            summary=f"Dynamic pipeline {name}:{pipeline}"
+        )
+
+        # self.refresh_openapi(self.router)
+        self.BasicApp.store().set('pipelines',self.pipelines)
+        return {"status": "created", "path": path, "method": method, "pipeline": pipeline}
+    
+    def delete_pipeline(self, name: str):
+        self.api_ok()
+        self.pipelines = self.api_list_pipelines()
+        self.router.routes = [route for route in self.router.routes if route.name != name]
+        del self.pipelines[name]
+        self.BasicApp.store().set('pipelines',self.pipelines)
+
+    def refresh_pipeline(self):
+        # get frome redis
+        # self.pipelines = self.api_list_pipelines()
+        # add and delete
+        # to update my_app local pipeline dicts
+        # self.router.routes = [route for route in self.router.routes if route.name != name]
+        pass
 
 ########################################################
 conf = AppConfig()
@@ -95,6 +163,16 @@ api.add_middleware(
 )
 api.add_middleware(SessionMiddleware,
                     secret_key=conf.secret_key, max_age=conf.session_duration)
+    
+def refresh_openapi(app: FastAPI) -> None:
+    """Refresh the OpenAPI schema after dynamic route changes."""
+    app.openapi_schema = None
+    app.openapi = lambda: get_openapi(
+        title=app.title,
+        version=app.version,
+        routes=app.routes,
+    )
+    
 
 if conf.app_backend=='redis':
     BasicApp:AppInterface = RedisApp(conf.redis.url)
@@ -122,5 +200,25 @@ def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
 
 my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/')
 
+# new apis for pipeline
+@api.get("/pipeline/refresh", summary="refresh existing pipelines")
+def refresh_pipeline():
+    my_app.refresh_pipeline()
+    # Remove all routes that came from `my_app.router`
+    router_route_names = {route.name for route in my_app.router.routes}
+    api.router.routes = [
+        route for route in api.router.routes
+        if not (isinstance(route, APIRoute) and route.name in router_route_names)
+    ]
+    # re include
+    api.include_router(my_app.router, prefix="", tags=["Tasks"])
+    refresh_openapi(api)
+    return {"status": "refreshed"}
+
+@api.delete("/pipeline/delete", summary="Delete an existing pipeline")
+def delete_pipeline(name: str):
+    my_app.delete_pipeline(name)
+    refresh_openapi(api)
+    return {"status": "deleted", "pipeline": name}
+
 api.include_router(my_app.router, prefix="", tags=["Tasks"])
-    

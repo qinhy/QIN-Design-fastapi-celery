@@ -4,7 +4,7 @@ import pytz
 from typing import Literal, Optional
 
 from fastapi.responses import StreamingResponse
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
 
 from celery.app import task as Task
 from celery.signals import task_received
@@ -38,6 +38,9 @@ class BasicCeleryTask:
                                     self.api_perform_action)
         self.router.post("/action/{name}/schedule/")(
                                     self.api_schedule_perform_action)
+        
+        
+        self.router.get("/pipeline/list")(self.api_list_pipelines)
         
         # Register the Celery task
         @self.celery_app.task(bind=True)
@@ -113,15 +116,14 @@ class BasicCeleryTask:
 
         return local_dt,execution_time_utc
     
-    # @staticmethod
-    # return is_json_serializable(valu_jsmodel_dump_jsone)
-    # def is_json_serializable(value):
-    #     res = isinstance(value, (int, float, bool, str,
-    #                              list, dict, set, tuple)) or value is None
-    #     if not res:
-    #         raise ValueError("Result is not JSON serializable")
-    #     return value
-
+    def api_list_pipelines(self,):
+        self.api_ok()
+        pipelines = self.BasicApp.store().get('pipelines')
+        if pipelines is None:
+            self.BasicApp.store().set('pipelines',{})
+            pipelines = {}
+        return pipelines
+    
     def api_list_tasks(self,):
         self.api_ok()
         return self.BasicApp.get_tasks_list()
