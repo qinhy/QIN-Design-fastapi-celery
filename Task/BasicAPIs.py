@@ -1,5 +1,6 @@
 import time
 import datetime
+import celery
 import pytz
 from typing import Literal, Optional
 
@@ -258,10 +259,63 @@ class BasicCeleryTask:
         ).model_dump(exclude_none=True)
 
 
+    # def api_perform_pipeline(self,
+    #     names: list[str], 
+    #     data: dict,
+    #     eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")
+    # )->TaskModel:
+    #     """API endpoint to execute a generic action asynchronously with optional delay."""
+    #     self.api_ok()
+
+    #     actions = []
+    #     for name in names:
+    #         # Validate that the requested action exists
+    #         if name not in self.ACTION_REGISTRY:
+    #             return {"error": f"Action '{name}' is not available."}
+    #         actions.append(self.perform_action.s(args=[name, data]))
+        
+    #     # Calculate execution time (eta)
+    #     now_t = datetime.datetime.now(datetime.timezone.utc)
+    #     execution_time = now_t + datetime.timedelta(seconds=eta) if eta > 0 else None
+
+    #     # Schedule the task
+    #     action_chain = celery.chain(*actions)
+    #     task = action_chain.apply_async(eta=execution_time)
+    #     return TaskModel(task_id=task.id,
+    #                     scheduled_for_utc=execution_time
+    #                     ).model_dump(exclude_none=True)
 
 
+    # def api_schedule_perform_pipeline(self,
+    #     names: list[str], 
+    #     data: dict,
+    #     execution_time: str = Query(datetime.datetime.now(datetime.timezone.utc
+    #       ).isoformat().split('.')[0], description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"),
+    #     timezone: Literal["UTC", "Asia/Tokyo", "America/New_York", "Europe/London", "Europe/Paris",
+    #                     "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"] = Query("Asia/Tokyo", 
+    #                     description="Choose a timezone from the list")
+    # ):
+    #     """API to execute Fibonacci task at a specific date and time, with timezone support."""
+    #     # Convert to UTC for Celery
+    #     local_dt,execution_time = self.convert_to_utc(execution_time,timezone)
+        
+    #     actions = []
+    #     for name in names:
+    #         # Validate that the requested action exists
+    #         if name not in self.ACTION_REGISTRY:
+    #             return {"error": f"Action '{name}' is not available."}
+    #         actions.append(self.perform_action.s(args=[name, data]))
+        
+    #     # Schedule the task
+    #     action_chain = celery.chain(*actions)
+    #     task = action_chain.apply_async(args=[name, data], eta=execution_time)
 
-
+    #     return TaskModel(
+    #         task_id=task.id,
+    #         scheduled_for_the_timezone=local_dt,
+    #         scheduled_for_utc=execution_time,
+    #         timezone=timezone
+    #     ).model_dump(exclude_none=True)
 
 
 
