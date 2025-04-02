@@ -33,13 +33,13 @@ class CeleryTask(BasicCeleryTask):
     def add_web_api(self, func, method: str = 'post', endpoint: str = '/'):
         method = method.lower().strip()
         allowed_methods = {
-            'get': self.router.get,
-            'post': self.router.post,
-            'put': self.router.put,
+            'get':    self.router.get,
+            'post':   self.router.post,
+            'put':    self.router.put,
             'delete': self.router.delete,
-            'patch': self.router.patch,
-            'options': self.router.options,
-            'head': self.router.head,
+            'patch':  self.router.patch,
+            'options':self.router.options,
+            'head':   self.router.head,
         }
 
         if method not in allowed_methods:
