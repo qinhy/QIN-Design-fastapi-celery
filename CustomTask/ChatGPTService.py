@@ -235,9 +235,20 @@ class MyChatGPTService(ChatGPTService):
                 # ...
 
                 try:
-                    api_key: str = self._get_api_key()
+                    param = self.model.param
+                    args_obj = self.model.args
+
+                    api_key: str = self._get_api_key(param.api_key)
                     headers: Dict[str, str] = self._build_headers(api_key)
-                    payload: Dict[str, Any] = self._build_payload()
+                    payload: Dict[str, Any] = self._build_payload(
+                        model=param.model,
+                        system_prompt=param.system_prompt,
+                        user_prompt=args_obj.user_prompt,
+                        temperature=param.temperature,
+                        max_tokens=param.max_tokens,
+                        top_p=param.top_p,
+                        stream=param.stream
+                    )
 
                     self.log_and_send("Sending streaming request to OpenAI...")
                     response: requests.Response = self._send_request(headers, payload)
