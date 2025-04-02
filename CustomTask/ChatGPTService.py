@@ -180,3 +180,82 @@ class ChatGPTService(ServiceOrientedArchitecture):
                 level = self.logger.level
             self.logger.log(level, message)
             self.send_data_to_task({level: message})
+
+
+
+
+class MyChatGPTService(ChatGPTService):
+    class Levels(ChatGPTService.Model.Levels):
+        pass
+
+    class Model(ChatGPTService.Model):
+
+        class Param(ChatGPTService.Model.Param):
+            my_input:str = "any thing"
+
+        class Args(ChatGPTService.Model.Args):            
+            my_input:str = "any thing"
+
+        class Return(ChatGPTService.Model.Return):            
+            my_ret:str = "any thing"
+
+        class Logger(ChatGPTService.Model.Logger):
+            pass
+
+        @staticmethod
+        def examples():
+            return [
+                {
+                    "param": {
+                        "my_input": "any thing"
+                    },
+                    "args": {                        
+                        "my_input": "any thing"
+                    }
+                }
+            ]
+
+        param: Param = Param()
+        args: Args = Args()
+        ret: Optional[Return] = Return()
+        logger: Logger = Logger(name="ChatGPTService")
+
+    class Action(ChatGPTService.Action):
+        def __init__(self, model, BasicApp, level=None):
+            super().__init__(model, BasicApp, level)
+            self.model: MyChatGPTService.Model = self.model
+            self.logger = self.model.logger
+
+        def __call__(self, *args, **kwargs):
+            with self.listen_stop_flag() as stop_flag:
+                if stop_flag.is_set():
+                    return self.to_stop()
+
+                ## my preprocess
+                # ...
+
+                try:
+                    api_key: str = self._get_api_key()
+                    headers: Dict[str, str] = self._build_headers(api_key)
+                    payload: Dict[str, Any] = self._build_payload()
+
+                    self.log_and_send("Sending streaming request to OpenAI...")
+                    response: requests.Response = self._send_request(headers, payload)
+
+                    full_response: str = ""
+                    for delta in self._stream_response_chunks(response, stop_flag):
+                        self.log_and_send(delta)
+                        full_response += delta
+
+                    self.model.ret.response = full_response
+                    self.log_and_send("Streaming completed.")
+
+                except Exception as e:
+                    self._handle_error(e)
+
+                ## my postprocess
+                # ...
+            return self.model
+
+
+
