@@ -618,9 +618,9 @@ def build_conversion_prompt(
 
     prompt = prompt_template.format(
         from_class_name=from_class_name,
-        from_schema=source_class.Model.model_json_schema(),
+        from_schema=source_class.Model.Return.model_json_schema(),
         to_class_name=to_class_name,
-        to_schema=target_class.Model.model_json_schema(),
+        to_schema=target_class.Model.Args.model_json_schema(),
         from_class_version = from_class_version,
         to_class_version = to_class_version,
     )
