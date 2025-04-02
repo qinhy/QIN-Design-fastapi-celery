@@ -276,16 +276,19 @@ class MyChatGPTService(ChatGPTService):
                         stream=param.stream
                     )
 
-                    self.log_and_send("Sending streaming request to OpenAI...")
+                    self.log_and_send("Sending request to OpenAI...")
                     response: requests.Response = self._send_request(headers, payload)
 
-                    full_response: str = ""
-                    for delta in self._stream_response_chunks(response, stop_flag):
-                        self.log_and_send(delta)
-                        full_response += delta
+                    if param.stream:
+                        full_response: str = ""
+                        for delta in self._stream_response_chunks(response, stop_flag):
+                            self.log_and_send(delta)
+                            full_response += delta
+                    else:
+                        full_response = self._handle_non_stream_response(response)
 
                     self.model.ret.response = full_response
-                    self.log_and_send("Streaming completed.")
+                    self.log_and_send("Response completed.")
 
                 except Exception as e:
                     self._handle_error(e)
