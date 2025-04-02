@@ -90,16 +90,19 @@ class ChatGPTService(ServiceOrientedArchitecture):
                         stream=param.stream
                     )
 
-                    self.log_and_send("Sending streaming request to OpenAI...")
+                    self.log_and_send("Sending request to OpenAI...")
                     response: requests.Response = self._send_request(headers, payload)
 
-                    full_response: str = ""
-                    for delta in self._stream_response_chunks(response, stop_flag):
-                        self.log_and_send(delta)
-                        full_response += delta
+                    if param.stream:
+                        full_response: str = ""
+                        for delta in self._stream_response_chunks(response, stop_flag):
+                            self.log_and_send(delta)
+                            full_response += delta
+                    else:
+                        full_response = self._handle_non_stream_response(response)
 
                     self.model.ret.response = full_response
-                    self.log_and_send("Streaming completed.")
+                    self.log_and_send("Response completed.")
 
                 except Exception as e:
                     self._handle_error(e)
@@ -157,7 +160,7 @@ class ChatGPTService(ServiceOrientedArchitecture):
             return response
 
 
-        def _stream_response_chunks(self, response: requests.Response, stop_flag: Any) -> Generator[str, None, None]:
+        def _stream_response_chunks(self, response: requests.Response, stop_flag: threading.Event) -> Generator[str, None, None]:
             for line in response.iter_lines():
                 if stop_flag.is_set():
                     return
@@ -174,6 +177,12 @@ class ChatGPTService(ServiceOrientedArchitecture):
                     except json.JSONDecodeError:
                         self.log_and_send(f"Malformed chunk: {decoded}", ChatGPTService.Levels.WARNING)
 
+        def _handle_non_stream_response(self, response: requests.Response) -> str:
+            try:
+                data: Dict[str, Any] = response.json()
+                return data['choices'][0]['message']['content']
+            except (KeyError, ValueError, json.JSONDecodeError) as e:
+                raise RuntimeError(f"Failed to parse non-stream response: {str(e)}")
 
         def _decode_stream_line(self, line: bytes) -> str:
             decoded_line: str = line.decode("utf-8").strip()
