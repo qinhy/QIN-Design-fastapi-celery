@@ -1,7 +1,8 @@
 import os
 import json
+import threading
 import requests
-from typing import Optional
+from typing import Generator, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from Task.Basic import ServiceOrientedArchitecture
 
@@ -74,68 +75,100 @@ class ChatGPTService(ServiceOrientedArchitecture):
                     return self.to_stop()
 
                 try:
-                    api_key = self.model.param.api_key or os.environ.get('OPENAI_API_KEY')
-                    if not api_key:
-                        raise ValueError("OpenAI API key is missing. Provide via param.api_key or 'OPENAI_API_KEY' env var.")
-
-
-                    headers = {
-                        'Content-Type': 'application/json',
-                        'Authorization': f'Bearer {api_key}'
-                    }
-
-                    messages = []
-                    if self.model.param.system_prompt:
-                        messages.append({"role": "system", "content": self.model.param.system_prompt})
-                    messages.append({"role": "user", "content": self.model.args.user_prompt})
-
-                    payload = {
-                        "model": self.model.param.model,
-                        "messages": messages,
-                        "temperature": self.model.param.temperature,
-                        "max_tokens": self.model.param.max_tokens,
-                        "top_p": self.model.param.top_p,
-                        "stream": self.model.param.stream
-                    }
+                    api_key: str = self._get_api_key()
+                    headers: Dict[str, str] = self._build_headers(api_key)
+                    payload: Dict[str, Any] = self._build_payload()
 
                     self.log_and_send("Sending streaming request to OpenAI...")
+                    response: requests.Response = self._send_request(headers, payload)
 
-                    response = requests.post(
-                        url='https://api.openai.com/v1/chat/completions',
-                        headers=headers,
-                        data=json.dumps(payload),
-                        stream=True
-                    )
-
-                    response.raise_for_status()
-
-                    full_response = ""
-
-                    for line in response.iter_lines():
-                        if stop_flag.is_set():
-                            return self.to_stop()
-
-                        if line:
-                            decoded = line.decode("utf-8").lstrip("data: ").strip()
-                            if decoded == "[DONE]":
-                                break
-                            try:
-                                chunk = json.loads(decoded)
-                                delta = chunk['choices'][0]['delta'].get('content', '')
-                                if delta:
-                                    full_response += delta
-                                    self.log_and_send(delta)
-                            except json.JSONDecodeError:
-                                self.log_and_send(f"Malformed chunk: {decoded}", ChatGPTService.Levels.WARNING)
+                    full_response: str = ""
+                    for delta in self._stream_response_chunks(response, stop_flag):
+                        self.log_and_send(delta)
+                        full_response += delta
 
                     self.model.ret.response = full_response
                     self.log_and_send("Streaming completed.")
 
                 except Exception as e:
-                    self.log_and_send(f"Error occurred: {str(e)}", ChatGPTService.Levels.ERROR)
-                    self.model.ret.response = f"Error: {str(e)}"
+                    self._handle_error(e)
 
             return self.model
+
+
+        def _get_api_key(self) -> str:
+            api_key: Optional[str] = self.model.param.api_key or os.environ.get('OPENAI_API_KEY')
+            if not api_key:
+                raise ValueError("OpenAI API key is missing. Provide via param.api_key or 'OPENAI_API_KEY' env var.")
+            return api_key
+
+
+        def _build_headers(self, api_key: str) -> Dict[str, str]:
+            return {
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {api_key}'
+            }
+
+
+        def _build_payload(self) -> Dict[str, Any]:
+            messages: list[Dict[str, str]] = []
+            if self.model.param.system_prompt:
+                messages.append({"role": "system", "content": self.model.param.system_prompt})
+            messages.append({"role": "user", "content": self.model.args.user_prompt})
+
+            return {
+                "model": self.model.param.model,
+                "messages": messages,
+                "temperature": self.model.param.temperature,
+                "max_tokens": self.model.param.max_tokens,
+                "top_p": self.model.param.top_p,
+                "stream": self.model.param.stream
+            }
+
+
+        def _send_request(self, headers: Dict[str, str], payload: Dict[str, Any]) -> requests.Response:
+            response = requests.post(
+                url='https://api.openai.com/v1/chat/completions',
+                headers=headers,
+                data=json.dumps(payload),
+                stream=True
+            )
+            response.raise_for_status()
+            return response
+
+
+        def _stream_response_chunks(self,
+                                    response: requests.Response, 
+                                    stop_flag: threading.Event) -> Generator[str, None, None]:
+            for line in response.iter_lines():
+                if stop_flag.is_set():
+                    return
+
+                if line:
+                    decoded: str = self._decode_stream_line(line)
+                    if decoded == "[DONE]":
+                        break
+                    try:
+                        chunk: Dict[str, Any] = json.loads(decoded)
+                        deltad: dict = chunk['choices'][0]['delta']
+                        delta: str = deltad.get('content', '')
+                        if delta:
+                            yield delta
+                    except json.JSONDecodeError:
+                        self.log_and_send(f"Malformed chunk: {decoded}", ChatGPTService.Levels.WARNING)
+
+
+        def _decode_stream_line(self, line: bytes) -> str:
+            decoded_line: str = line.decode("utf-8").strip()
+            if decoded_line.startswith("data:"):
+                return decoded_line[len("data:"):].strip()
+            return decoded_line
+
+
+        def _handle_error(self, e: Exception) -> None:
+            error_message: str = f"Error occurred: {str(e)}"
+            self.log_and_send(error_message, ChatGPTService.Levels.ERROR)
+            self.model.ret.response = f"Error: {str(e)}"
 
         def to_stop(self):
             self.log_and_send("Stop flag detected. Streaming halted.", ChatGPTService.Levels.WARNING)
