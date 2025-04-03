@@ -1,4 +1,5 @@
 # Standard library imports
+import json
 import time
 import datetime
 from typing import Literal, Optional
@@ -16,9 +17,10 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.routing import APIRoute
 
 # Application imports
-from Task.Basic import AppInterface, ServiceOrientedArchitecture, TaskModel
+from Task.Basic import AppInterface, ServiceOrientedArchitecture, SmartBuilder, TaskModel
 
 class BasicCeleryTask:
+
     def __init__(self,
                  BasicApp:AppInterface,
                  celery_app,
@@ -47,30 +49,57 @@ class BasicCeleryTask:
                                     self.api_perform_action_list)
         self.router.post("/action/{name}")(
                                     self.api_perform_action)
-        self.router.post("/action/{name}/schedule/")(
-                                    self.api_schedule_perform_action)        
+        
+        # self.router.post("/action/{name}/schedule/")(
+        #                             self.api_schedule_perform_action)        
         
         self.router.get("/pipeline/list")(self.api_list_pipelines)
         # self.router.post("/pipeline/add")(self.api_add_pipeline)
         self.router.get("/pipeline/refresh")(self.api_refresh_pipeline)
-        self.router.delete("/pipeline/delete")(self.api_delete_pipeline)        
+        self.router.delete("/pipeline/delete")(self.api_delete_pipeline)    
+        
+        self.smart_builder = SmartBuilder()    
         
         # Register the Celery task
         @self.celery_app.task(bind=True)
-        def perform_action(t: Task, name: str, data: dict,
+        def perform_action(t: Task, data: dict, name: str='NULL',
                            previous_name:str=None, BasicApp=BasicApp) -> int:
             """Generic Celery task to execute any registered action."""
             action_name, action_data = name, data
+            if type(action_data) == str:
+                action_data = json.loads(action_data)
+
             if action_name not in self.ACTION_REGISTRY:
                 raise ValueError(f"Action '{action_name}' is not registered.")
 
             # Initialize the action model and action handler
             class_space = self.ACTION_REGISTRY[action_name]
-            previous_class_space= self.ACTION_REGISTRY.get(previous_name,None)
+            previous_class_space = self.ACTION_REGISTRY.get(previous_name, None)
+            
             if previous_class_space is not None:
+                # Create model instances
                 previous_model_instance = previous_class_space.Model(**action_data)
-                model_instance = previous_model_instance.to(class_space)
+                tmp_action_res = class_space.Model(**class_space.Model.examples()[0])
+                
+                # Get function name for conversion
+                function_name = self.smart_builder.get_function_name(previous_class_space, class_space)
+                code_snippet = self.get_code_snippet(function_name)
+                
+                if code_snippet is None:
+                    # Generate new conversion code
+                    model_instance, code_snippet, conversion_func = self.smart_builder.convert(
+                        previous_class_space, previous_model_instance,
+                        class_space, tmp_action_res
+                    )
+                    self.save_code_snippet(code_snippet, function_name)
+                else:
+                    # Use existing conversion code
+                    model_instance, conversion_func = self.smart_builder.convert_by_function_code(
+                        code_snippet, function_name,
+                        previous_model_instance, tmp_action_res
+                    )
             else:
+                # No previous class, create model directly
                 model_instance = class_space.Model(**action_data)
 
             model_instance.task_id=t.request.id
@@ -94,89 +123,52 @@ class BasicCeleryTask:
         for action_name, action_class in ACTION_REGISTRY.items():
             self.add_web_api(
                 self._make_api_action_handler(action_name, action_class),
-                'post',f"/{action_name.lower()}/")
-            self.add_web_api(
-                self._make_api_schedule_handler(action_name, action_class),
-                'post',f"/{action_name.lower()}/schedule/")
+                'post',f"/{action_name.lower()}/")            
     
     
-    ########################### essential function            
-
+    ########################### essential function
+    
+    def save_code_snippet(self, code_snippet: str, function_name: str):
+        code_snippets = self.BasicApp.store().get('code_snippets')
+        if code_snippets is None:
+            code_snippets = {}
+        code_snippets[function_name] = code_snippet
+        self.BasicApp.store().set('code_snippets', code_snippets)
+    
+    def get_code_snippet(self, function_name: str):
+        code_snippets = self.BasicApp.store().get('code_snippets')
+        if code_snippets is None:
+            return None
+        return code_snippets.get(function_name, None)
+    
     def _make_api_action_handler(self, action_name, action_class):
         examples = action_class.Model.examples() if hasattr(action_class.Model,'examples') else None
-        eta_example: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")
-        if examples:
-            def handler(task_model: action_class.Model=Body(..., examples=examples),eta: Optional[int]=eta_example):
-                return self.api_perform_action(action_name, task_model.model_dump(), eta=eta)
-        else:
-            def handler(task_model: action_class.Model,eta: Optional[int]=eta_example):
-                return self.api_perform_action(action_name, task_model.model_dump(), eta=eta)
-        return handler
-
-    def _make_api_schedule_handler(self, action_name, action_class):
-        examples = action_class.Model.examples() if hasattr(action_class.Model,'examples') else None
-        execution_time_example = Query(
-                            datetime.datetime.now(datetime.timezone.utc).isoformat().split('.')[0],
-                            description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS")
-        timezone_Literal = Literal["UTC", "Asia/Tokyo", "America/New_York", "Europe/London", "Europe/Paris",
-                                        "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"]
-        timezone_Literal_example = Query("Asia/Tokyo", description="Choose a timezone from the list")
-        if examples:
-            def handler(task_model: action_class.Model=Body(..., examples=examples),
-                        execution_time: str = execution_time_example,
-                        timezone: timezone_Literal = timezone_Literal_example):
-                        return self.api_schedule_perform_action(action_name, task_model.model_dump(), execution_time, timezone)
-        else:
-            def handler(task_model: action_class.Model,
-                        execution_time: str = execution_time_example,
-                        timezone: timezone_Literal = timezone_Literal_example):
-                        return self.api_schedule_perform_action(action_name, task_model.model_dump(), execution_time, timezone)
+        
+        def handler(
+            task_model: action_class.Model = Body(..., examples=examples),                    
+            execution_time: str = Query(
+                'NOW',
+                description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS (2025-04-03T06:00:30), NOW: no use"
+            ),
+            timezone: Literal[
+                "UTC", "Asia/Tokyo", "America/New_York", "Europe/London",
+                "Europe/Paris", "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"
+            ] = Query(
+                "Asia/Tokyo",
+                description="Choose a timezone from the list, if execution_time is not NOW"
+            )
+        ):
+                            
+            return self.api_perform_action(action_name, task_model.model_dump(),
+                                            execution_time=execution_time,
+                                            timezone=timezone)
         return handler
     
     def api_ok(self):
         if not self.BasicApp.check_services():
             raise HTTPException(status_code=503, detail={
                                 'error': 'service not healthy'})
-
-    @staticmethod
-    def convert_to_utc(execution_time: str, timezone: str):
-        """
-        Converts a given local datetime string to UTC.
-
-        Args:
-            execution_time (str): The datetime string in 'YYYY-MM-DDTHH:MM:SS' format.
-            timezone (str): The timezone name (e.g., 'Asia/Tokyo').
-
-        Returns:
-            datetime.datetime: The UTC datetime for Celery.
-
-        Raises:
-            HTTPException: If the timezone is invalid, the datetime format is incorrect,
-                        or if the execution time is in the past.
-        """
-        now_utc = datetime.datetime.now(datetime.timezone.utc)
-
-        # Validate timezone
-        if timezone not in pytz.all_timezones:
-            raise HTTPException(status_code=400, detail="Invalid timezone. Use a valid timezone name.")
-
-        # Parse the input datetime
-        try:
-            local_dt = datetime.datetime.strptime(execution_time, "%Y-%m-%dT%H:%M:%S")
-            local_tz = pytz.timezone(timezone)
-            local_dt = local_tz.localize(local_dt)  # Convert to timezone-aware datetime
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid datetime format. Use YYYY-MM-DDTHH:MM:SS")
-
-        # Convert to UTC for Celery
-        execution_time_utc = local_dt.astimezone(pytz.utc)
-
-        # Ensure execution time is in the future
-        if execution_time_utc <= now_utc:
-            raise HTTPException(status_code=400, detail="Execution time must be in the future.")
-
-        return local_dt,execution_time_utc
-    
+        
     def _reload_routes(self, root_fast_app:FastAPI):            
         router_route_names = {route.name for route in self.router.routes}
         root_fast_app.router.routes = [
@@ -324,6 +316,7 @@ class BasicCeleryTask:
         return StreamingResponse(
             stream_task_messages(task_id,request,self.BasicApp),
             media_type="text/event-stream")
+    
     def api_get_workers(self,):
         # current_user: UserModels.User = Depends(AuthService.get_current_root_user)):
         self.api_ok()
@@ -362,114 +355,56 @@ class BasicCeleryTask:
                 })
             available_actions.append({k:model_schema})
         return {"available_actions": available_actions}
-
+    
     def api_perform_action(self,
         name: str, 
-        data: dict,
-        eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")
-    )->TaskModel:
+        data: dict,                        
+        execution_time: str = Query(
+            'NOW',
+            description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS (2025-04-03T06:00:30), NOW: no use"
+        ),
+        timezone: Literal[
+            "UTC", "Asia/Tokyo", "America/New_York", "Europe/London",
+            "Europe/Paris", "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"
+        ] = Query(
+            "Asia/Tokyo",
+            description="Choose a timezone from the list, if execution_time is not NOW"
+        )
+    ):
+        
         """API endpoint to execute a generic action asynchronously with optional delay."""
         self.api_ok()
 
         # Validate that the requested action exists
         if name not in self.ACTION_REGISTRY:
-            return {"error": f"Action '{name}' is not available."}
+            return {"error": f"Action '{name}' is not available."}      
+        
+        utc_execution_time = None
+        local_time = None
 
-        # Calculate execution time (eta)
-        now_t = datetime.datetime.now(datetime.timezone.utc)
-        execution_time = now_t + datetime.timedelta(seconds=eta) if eta > 0 else None
-
+        try:
+            if execution_time.upper() == "NOW":
+                utc_execution_time = datetime.datetime.now(datetime.timezone.utc)
+            elif execution_time.isdigit():
+                delay_seconds = int(execution_time)
+                utc_execution_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=delay_seconds)
+            else:
+                # Parse the datetime string
+                local_time = datetime.datetime.strptime(execution_time, "%Y-%m-%dT%H:%M:%S")
+                # Localize it to the given timezone
+                tz = pytz.timezone(timezone)
+                local_time = tz.localize(local_time)
+                # Convert to UTC
+                utc_execution_time = local_time.astimezone(pytz.UTC)
+        except Exception as e:
+            raise ValueError(f"Invalid execution_time format: {execution_time}. Error: {str(e)}")
         # Schedule the task
-        task = self.perform_action.apply_async(args=[name, data], eta=execution_time)
-        return TaskModel(task_id=task.id,
-                        scheduled_for_utc=execution_time
-                        ).model_dump(exclude_none=True)
-    
-    def api_schedule_perform_action(self,
-        name: str, 
-        data: dict,
-        execution_time: str = Query(datetime.datetime.now(datetime.timezone.utc
-          ).isoformat().split('.')[0], description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"),
-        timezone: Literal["UTC", "Asia/Tokyo", "America/New_York", "Europe/London", "Europe/Paris",
-                        "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"] = Query("Asia/Tokyo", 
-                        description="Choose a timezone from the list")
-    ):
-        """API to execute Fibonacci task at a specific date and time, with timezone support."""
-        # Convert to UTC for Celery
-        local_dt,execution_time = self.convert_to_utc(execution_time,timezone)
-        
-        # Schedule the task
-        task = self.perform_action.apply_async(args=[name, data], eta=execution_time)
+        task = self.perform_action.apply_async(args=[data, name], eta=utc_execution_time)
 
-        return TaskModel(
-            task_id=task.id,
-            scheduled_for_the_timezone=local_dt,
-            scheduled_for_utc=execution_time,
-            timezone=timezone
-        ).model_dump(exclude_none=True)
-
-
-    # def api_perform_pipeline(self,
-    #     names: list[str], 
-    #     data: dict,
-    #     eta: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")
-    # )->TaskModel:
-    #     """API endpoint to execute a generic action asynchronously with optional delay."""
-    #     self.api_ok()
-
-    #     actions = []
-    #     for name in names:
-    #         # Validate that the requested action exists
-    #         if name not in self.ACTION_REGISTRY:
-    #             return {"error": f"Action '{name}' is not available."}
-    #         actions.append(self.perform_action.s(args=[name, data]))
-        
-    #     # Calculate execution time (eta)
-    #     now_t = datetime.datetime.now(datetime.timezone.utc)
-    #     execution_time = now_t + datetime.timedelta(seconds=eta) if eta > 0 else None
-
-    #     # Schedule the task
-    #     action_chain = celery.chain(*actions)
-    #     task = action_chain.apply_async(eta=execution_time)
-    #     return TaskModel(task_id=task.id,
-    #                     scheduled_for_utc=execution_time
-    #                     ).model_dump(exclude_none=True)
-
-
-    # def api_schedule_perform_pipeline(self,
-    #     names: list[str], 
-    #     data: dict,
-    #     execution_time: str = Query(datetime.datetime.now(datetime.timezone.utc
-    #       ).isoformat().split('.')[0], description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"),
-    #     timezone: Literal["UTC", "Asia/Tokyo", "America/New_York", "Europe/London", "Europe/Paris",
-    #                     "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"] = Query("Asia/Tokyo", 
-    #                     description="Choose a timezone from the list")
-    # ):
-    #     """API to execute Fibonacci task at a specific date and time, with timezone support."""
-    #     # Convert to UTC for Celery
-    #     local_dt,execution_time = self.convert_to_utc(execution_time,timezone)
-        
-    #     actions = []
-    #     for name in names:
-    #         # Validate that the requested action exists
-    #         if name not in self.ACTION_REGISTRY:
-    #             return {"error": f"Action '{name}' is not available."}
-    #         actions.append(self.perform_action.s(args=[name, data]))
-        
-    #     # Schedule the task
-    #     action_chain = celery.chain(*actions)
-    #     task = action_chain.apply_async(args=[name, data], eta=execution_time)
-
-    #     return TaskModel(
-    #         task_id=task.id,
-    #         scheduled_for_the_timezone=local_dt,
-    #         scheduled_for_utc=execution_time,
-    #         timezone=timezone
-    #     ).model_dump(exclude_none=True)
-
-
-
-
-
+        return TaskModel(task_id=task.task_id,
+                        scheduled_for_the_timezone=local_time,
+                        timezone=timezone if local_time is not None else None,
+                        scheduled_for_utc=utc_execution_time,
+                    ).model_dump(exclude_none=True)
 
     

@@ -5,6 +5,7 @@ from typing import Literal, Optional
 # FastAPI imports
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+import pytz
 from starlette.middleware.sessions import SessionMiddleware
 
 # Application imports
@@ -33,61 +34,80 @@ class CeleryTask(BasicCeleryTask):
 
         self.router.post("/pipeline/add")(self.api_add_pipeline)
         
-    def create_pipeline_handler(self,pipeline: list[str],                    
-                                eta: Optional[int]=0):        
+    def create_api_pipeline_handler(self,pipeline: list[str]):        
         ACTION_REGISTRY:dict[str,ServiceOrientedArchitecture]=self.ACTION_REGISTRY
 
         first_in_class = ACTION_REGISTRY[pipeline[0]]
         last_out_class = ACTION_REGISTRY[pipeline[-1]]
         in_examples = first_in_class.Model.examples() if hasattr(first_in_class.Model,'examples') else None
         
-        async def pipeline_handler(
+        def api_pipeline_handler(
                 in_model: first_in_class.Model=Body(..., examples=in_examples),
-                eta: Optional[int]=eta
+                execution_time: str = Query(
+                    'NOW',
+                    description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS (2025-04-03T06:00:30), NOW: no use"
+                ),
+                timezone: Literal[
+                    "UTC", "Asia/Tokyo", "America/New_York", "Europe/London",
+                    "Europe/Paris", "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"
+                ] = Query(
+                    "Asia/Tokyo",
+                    description="Choose a timezone from the list, if execution_time is not NOW"
+                )
         )->last_out_class.Model:
             
+            self.api_ok()
+            
+            # Parse execution time
+            utc_execution_time = None
+            local_time = None
+
+            try:
+                if execution_time.upper() == "NOW":
+                    utc_execution_time = datetime.datetime.now(datetime.timezone.utc)
+                elif execution_time.isdigit():
+                    delay_seconds = int(execution_time)
+                    utc_execution_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=delay_seconds)
+                else:
+                    # Parse the datetime string
+                    local_time = datetime.datetime.strptime(execution_time, "%Y-%m-%dT%H:%M:%S")
+                    # Localize it to the given timezone
+                    tz = pytz.timezone(timezone)
+                    local_time = tz.localize(local_time)
+                    # Convert to UTC
+                    utc_execution_time = local_time.astimezone(pytz.UTC)
+            except Exception as e:
+                raise ValueError(f"Invalid execution_time format: {execution_time}. Error: {str(e)}")
+            
+            # Get model data
             current_data = in_model.model_dump()
             
-            # Create a chain of tasks
-            task_chain = None
-            for i, func_name in enumerate(pipeline):
-                if i == 0:
-                    # Start the chain with the first task, signature will not execute immediately
-                    task_chain = self.perform_action.signature(func_name, current_data)
-                else:
-                    # Add subsequent tasks to the chain
-                    # Each task will receive the result of the previous task
-                    task_chain = task_chain.chain(
-                        self.perform_action.signature(name=func_name))
-                            
-            # Calculate execution time (eta)
-            now_t = datetime.datetime.now(datetime.timezone.utc)
-            execution_time = now_t + datetime.timedelta(seconds=eta) if eta > 0 else None
-
-            # chain_result is a task object with task_id and other attributes
-            chain_result = task_chain.apply_async(eta=execution_time)
-
-            # You can access task_id with chain_result.task_id
-            task_id = chain_result.task_id
+            # Build task chain
+            task_chain = self.perform_action.signature(args=[current_data, pipeline[0]])
+            previous_name = pipeline[0]
+            for func_name in pipeline[1:]:
+                task_chain = task_chain | self.perform_action.signature(
+                            kwargs={'name':func_name, 'previous_name':previous_name})
+                previous_name = func_name
+                
+            # Execute the chain
+            chain_result = task_chain.apply_async(eta=utc_execution_time)
             
-            return TaskModel(task_id=task_id,
-                            scheduled_for_utc=execution_time
-                            ).model_dump(exclude_none=True)
-        
-            # # This will wait for the entire chain to complete
-            # final_result = chain_result.get()                
-            # # For compatibility with the existing return format
-            # result.append(final_result)
+            # Return task information
+            return TaskModel(task_id=chain_result.task_id,
+                            scheduled_for_the_timezone=local_time,
+                            timezone=timezone if local_time is not None else None,
+                            scheduled_for_utc=utc_execution_time,
+                        ).model_dump(exclude_none=True)
 
-            # result.append(ACTION_REGISTRY[func_name].Model.examples()[0])
-            # return {"result": result}
         
-        return pipeline_handler
+        return api_pipeline_handler        
     
     def api_add_pipeline(self,name: str='FiboPrime', method: str = 'POST',
-                         pipeline: list[str] = ['Fibonacci','PrimeNumberChecker'],
-                         eta: Optional[int]=0):
+        pipeline: list[str] = ['Fibonacci','PrimeNumberChecker'],
+        ):        
         self.api_ok()
+
         path = f"/pipeline/{name}"
         method = method.upper()
 
@@ -110,17 +130,17 @@ class CeleryTask(BasicCeleryTask):
         self.pipelines[name] = pipeline
 
         # Create and add the dynamic route
-        pipeline_handler = self.create_pipeline_handler(pipeline,eta)
+        api_pipeline_handler = self.create_api_pipeline_handler(pipeline)
         self.router.add_api_route(
             path=path,
-            endpoint=pipeline_handler,
+            endpoint=api_pipeline_handler,
             methods=[method],
             name=name,
             summary=f"Dynamic pipeline {name}:{pipeline}"
         )
 
-        # self.refresh_openapi(self.router)
         self.BasicApp.store().set('pipelines',self.pipelines)
+        self.api_refresh_pipeline()
         return {"status": "created", "path": path, "method": method, "pipeline": pipeline}
 
 
