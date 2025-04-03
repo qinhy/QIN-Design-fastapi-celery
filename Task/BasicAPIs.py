@@ -31,8 +31,8 @@ class BasicCeleryTask:
         self.celery_app = celery_app
         self.ACTION_REGISTRY:dict[str, ServiceOrientedArchitecture] = ACTION_REGISTRY
         self.pipelines = {}
-
         self.root_fast_app = root_fast_app
+        self.load_code_snippet()
 
         self.router = APIRouter()
         self.router.get("/tasks/")(
@@ -134,6 +134,28 @@ class BasicCeleryTask:
             code_snippets = {}
         code_snippets[function_name] = code_snippet
         self.BasicApp.store().set('code_snippets', code_snippets)
+        with open(f'code_snippets.json', 'w') as f:
+            json.dump(code_snippets, f)
+            
+    def load_code_snippet(self):
+        try:
+            code_snippets = self.BasicApp.store().get('code_snippets')
+        except Exception as e:
+            code_snippets = {}
+        if code_snippets is None:
+            code_snippets = {}
+        try:
+            with open(f'code_snippets.json', 'r') as f:
+                code_snippets = json.load(f)
+        except Exception as e:
+            print(e)
+
+        code_snippets.update(code_snippets)
+
+        try:
+            self.BasicApp.store().set('code_snippets', code_snippets)
+        except Exception as e:
+            print(e)
     
     def get_code_snippet(self, function_name: str):
         code_snippets = self.BasicApp.store().get('code_snippets')
