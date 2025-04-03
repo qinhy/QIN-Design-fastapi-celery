@@ -1,27 +1,36 @@
+# Standard library imports
 import time
 import datetime
-import celery
-import pytz
 from typing import Literal, Optional
 
-from fastapi.responses import StreamingResponse
-from fastapi import APIRouter, Body, FastAPI, HTTPException, Query, Request
-
+# Third-party imports
+import celery
+import pytz
 from celery.app import task as Task
 from celery.signals import task_received
 
+# FastAPI imports
+from fastapi import APIRouter, Body, FastAPI, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
+from fastapi.openapi.utils import get_openapi
+from fastapi.routing import APIRoute
+
+# Application imports
 from Task.Basic import AppInterface, ServiceOrientedArchitecture, TaskModel
 
 class BasicCeleryTask:
     def __init__(self,
                  BasicApp:AppInterface,
                  celery_app,
+                 root_fast_app:FastAPI,
                  ACTION_REGISTRY = {}):
         
         self.BasicApp = BasicApp
         self.celery_app = celery_app
         self.ACTION_REGISTRY:dict[str, ServiceOrientedArchitecture] = ACTION_REGISTRY
         self.pipelines = {}
+
+        self.root_fast_app = root_fast_app
 
         self.router = APIRouter()
         self.router.get("/tasks/")(
@@ -39,15 +48,17 @@ class BasicCeleryTask:
         self.router.post("/action/{name}")(
                                     self.api_perform_action)
         self.router.post("/action/{name}/schedule/")(
-                                    self.api_schedule_perform_action)
-        
+                                    self.api_schedule_perform_action)        
         
         self.router.get("/pipeline/list")(self.api_list_pipelines)
-        self.router.post("/pipeline/add")(self.api_add_pipeline)
+        # self.router.post("/pipeline/add")(self.api_add_pipeline)
+        self.router.get("/pipeline/refresh")(self.api_refresh_pipeline)
+        self.router.delete("/pipeline/delete")(self.api_delete_pipeline)        
         
         # Register the Celery task
         @self.celery_app.task(bind=True)
-        def perform_action(t: Task, name: str, data: dict) -> int:
+        def perform_action(t: Task, name: str, data: dict,
+                           previous_name:str=None, BasicApp=BasicApp) -> int:
             """Generic Celery task to execute any registered action."""
             action_name, action_data = name, data
             if action_name not in self.ACTION_REGISTRY:
@@ -55,7 +66,13 @@ class BasicCeleryTask:
 
             # Initialize the action model and action handler
             class_space = self.ACTION_REGISTRY[action_name]
-            model_instance = class_space.Model(**action_data)
+            previous_class_space= self.ACTION_REGISTRY.get(previous_name,None)
+            if previous_class_space is not None:
+                previous_model_instance = previous_class_space.Model(**action_data)
+                model_instance = previous_model_instance.to(class_space)
+            else:
+                model_instance = class_space.Model(**action_data)
+
             model_instance.task_id=t.request.id
             model_instance = class_space.Action(model_instance,BasicApp=BasicApp)()
             model_dump = model_instance.model_dump_json()
@@ -73,8 +90,49 @@ class BasicCeleryTask:
         self.perform_action = perform_action
         self.on_task_received = on_task_received
 
+        # Auto-generate endpoints for each action
+        for action_name, action_class in ACTION_REGISTRY.items():
+            self.add_web_api(
+                self._make_api_action_handler(action_name, action_class),
+                'post',f"/{action_name.lower()}/")
+            self.add_web_api(
+                self._make_api_schedule_handler(action_name, action_class),
+                'post',f"/{action_name.lower()}/schedule/")
     
-    ########################### essential function        
+    
+    ########################### essential function            
+
+    def _make_api_action_handler(self, action_name, action_class):
+        examples = action_class.Model.examples() if hasattr(action_class.Model,'examples') else None
+        eta_example: Optional[int] = Query(0, description="Time delay in seconds before execution (default: 0)")
+        if examples:
+            def handler(task_model: action_class.Model=Body(..., examples=examples),eta: Optional[int]=eta_example):
+                return self.api_perform_action(action_name, task_model.model_dump(), eta=eta)
+        else:
+            def handler(task_model: action_class.Model,eta: Optional[int]=eta_example):
+                return self.api_perform_action(action_name, task_model.model_dump(), eta=eta)
+        return handler
+
+    def _make_api_schedule_handler(self, action_name, action_class):
+        examples = action_class.Model.examples() if hasattr(action_class.Model,'examples') else None
+        execution_time_example = Query(
+                            datetime.datetime.now(datetime.timezone.utc).isoformat().split('.')[0],
+                            description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS")
+        timezone_Literal = Literal["UTC", "Asia/Tokyo", "America/New_York", "Europe/London", "Europe/Paris",
+                                        "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"]
+        timezone_Literal_example = Query("Asia/Tokyo", description="Choose a timezone from the list")
+        if examples:
+            def handler(task_model: action_class.Model=Body(..., examples=examples),
+                        execution_time: str = execution_time_example,
+                        timezone: timezone_Literal = timezone_Literal_example):
+                        return self.api_schedule_perform_action(action_name, task_model.model_dump(), execution_time, timezone)
+        else:
+            def handler(task_model: action_class.Model,
+                        execution_time: str = execution_time_example,
+                        timezone: timezone_Literal = timezone_Literal_example):
+                        return self.api_schedule_perform_action(action_name, task_model.model_dump(), execution_time, timezone)
+        return handler
+    
     def api_ok(self):
         if not self.BasicApp.check_services():
             raise HTTPException(status_code=503, detail={
@@ -119,6 +177,58 @@ class BasicCeleryTask:
 
         return local_dt,execution_time_utc
     
+    def _reload_routes(self, root_fast_app:FastAPI):            
+        router_route_names = {route.name for route in self.router.routes}
+        root_fast_app.router.routes = [
+            route for route in root_fast_app.router.routes
+            if not (isinstance(route, APIRoute) and route.name in router_route_names)
+        ]
+
+        # refresh docs
+        root_fast_app.openapi_schema = None
+        root_fast_app.openapi = lambda: get_openapi(
+            title=root_fast_app.title,
+            version=root_fast_app.version,
+            routes=root_fast_app.routes,
+        )
+        
+
+    def reload_routes(self):
+        self._reload_routes(self.root_fast_app)
+        self.root_fast_app.include_router(self.router, prefix="", tags=["Tasks"])
+        
+    def api_refresh_pipeline(self):
+        """Refresh existing pipelines"""
+        self.refresh_pipeline()
+        self.reload_routes()
+        return {"status": "refreshed"}
+    
+    def api_delete_pipeline(self, name: str):
+        """Delete an existing pipeline"""
+        self.delete_pipeline(name)    
+        self.reload_routes()
+        return {"status": "deleted", "pipeline": name}
+        
+    def add_web_api(self, func, method: str = 'post', endpoint: str = '/'):
+        method = method.lower().strip()
+        allowed_methods = {
+            'get':    self.router.get,
+            'post':   self.router.post,
+            'put':    self.router.put,
+            'delete': self.router.delete,
+            'patch':  self.router.patch,
+            'options':self.router.options,
+            'head':   self.router.head,
+        }
+
+        if method not in allowed_methods:
+            raise ValueError(
+                f"Method '{method}' is not allowed. "
+                f"Supported methods: {', '.join(allowed_methods)}")
+
+        allowed_methods[method](endpoint)(func)
+        return self
+    
     def api_list_pipelines(self,):
         self.api_ok()
         pipelines = self.BasicApp.store().get('pipelines')
@@ -127,61 +237,6 @@ class BasicCeleryTask:
             pipelines = {}
         return pipelines
     
-    def api_add_pipeline(self,name: str='FiboPrime', method: str = 'POST',
-                         pipeline: list[str] = ['Fibonacci','PrimeNumberChecker']):
-        self.api_ok()
-        path = f"/pipeline/{name}"
-        method = method.upper()
-
-        # Validate function names
-        invalid_funcs = [fn for fn in pipeline if fn not in self.ACTION_REGISTRY]
-        if invalid_funcs:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Service [{invalid_funcs}] are not supported."
-            )
-        
-        if len(pipeline)<2:
-            raise HTTPException(
-                status_code=400,
-                detail=f"pipeline should contains more than 2 services."
-            )
-        
-        # Save pipeline and register route name
-        self.pipelines = self.api_list_pipelines()
-        self.pipelines[name] = pipeline
-        
-        def create_dynamic_handler(pipeline: list[str], ACTION_REGISTRY:dict[str,ServiceOrientedArchitecture]=self.ACTION_REGISTRY):
-            first_in_class = ACTION_REGISTRY[pipeline[0]]
-            last_out_class = ACTION_REGISTRY[pipeline[1]]
-            in_examples = first_in_class.Model.examples() if hasattr(first_in_class.Model,'examples') else None
-            """Create a dynamic route handler based on a pipeline of functions."""
-            async def dynamic_handler(
-                    in_model: first_in_class.Model=Body(..., examples=in_examples)
-            )->last_out_class.Model:
-                
-                result = []
-                for func_name in pipeline:
-                    # task = self.perform_action.apply_async(args=[name, data], eta=execution_time)
-                    result.append(ACTION_REGISTRY[func_name].Model.examples()[0])
-                return {"result": result}
-            
-            return dynamic_handler
-        
-        # Create and add the dynamic route
-        dynamic_handler = create_dynamic_handler(pipeline)
-        self.router.add_api_route(
-            path=path,
-            endpoint=dynamic_handler,
-            methods=[method],
-            name=name,
-            summary=f"Dynamic pipeline {name}:{pipeline}"
-        )
-
-        # self.refresh_openapi(self.router)
-        self.BasicApp.store().set('pipelines',self.pipelines)
-        return {"status": "created", "path": path, "method": method, "pipeline": pipeline}
-
     def delete_pipeline(self, name: str):
         self.api_ok()
 
