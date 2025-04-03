@@ -5,7 +5,7 @@ import pytz
 from typing import Literal, Optional
 
 from fastapi.responses import StreamingResponse
-from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
+from fastapi import APIRouter, Body, FastAPI, HTTPException, Query, Request
 
 from celery.app import task as Task
 from celery.signals import task_received
@@ -21,6 +21,7 @@ class BasicCeleryTask:
         self.BasicApp = BasicApp
         self.celery_app = celery_app
         self.ACTION_REGISTRY:dict[str, ServiceOrientedArchitecture] = ACTION_REGISTRY
+        self.pipelines = {}
 
         self.router = APIRouter()
         self.router.get("/tasks/")(
@@ -42,6 +43,7 @@ class BasicCeleryTask:
         
         
         self.router.get("/pipeline/list")(self.api_list_pipelines)
+        self.router.post("/pipeline/add")(self.api_add_pipeline)
         
         # Register the Celery task
         @self.celery_app.task(bind=True)
@@ -125,6 +127,99 @@ class BasicCeleryTask:
             pipelines = {}
         return pipelines
     
+    def api_add_pipeline(self,name: str='FiboPrime', method: str = 'POST',
+                         pipeline: list[str] = ['Fibonacci','PrimeNumberChecker']):
+        self.api_ok()
+        path = f"/pipeline/{name}"
+        method = method.upper()
+
+        # Validate function names
+        invalid_funcs = [fn for fn in pipeline if fn not in self.ACTION_REGISTRY]
+        if invalid_funcs:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Service [{invalid_funcs}] are not supported."
+            )
+        
+        if len(pipeline)<2:
+            raise HTTPException(
+                status_code=400,
+                detail=f"pipeline should contains more than 2 services."
+            )
+        
+        # Save pipeline and register route name
+        self.pipelines = self.api_list_pipelines()
+        self.pipelines[name] = pipeline
+        
+        def create_dynamic_handler(pipeline: list[str], ACTION_REGISTRY:dict[str,ServiceOrientedArchitecture]=self.ACTION_REGISTRY):
+            first_in_class = ACTION_REGISTRY[pipeline[0]]
+            last_out_class = ACTION_REGISTRY[pipeline[1]]
+            in_examples = first_in_class.Model.examples() if hasattr(first_in_class.Model,'examples') else None
+            """Create a dynamic route handler based on a pipeline of functions."""
+            async def dynamic_handler(
+                    in_model: first_in_class.Model=Body(..., examples=in_examples)
+            )->last_out_class.Model:
+                
+                result = []
+                for func_name in pipeline:
+                    # task = self.perform_action.apply_async(args=[name, data], eta=execution_time)
+                    result.append(ACTION_REGISTRY[func_name].Model.examples()[0])
+                return {"result": result}
+            
+            return dynamic_handler
+        
+        # Create and add the dynamic route
+        dynamic_handler = create_dynamic_handler(pipeline)
+        self.router.add_api_route(
+            path=path,
+            endpoint=dynamic_handler,
+            methods=[method],
+            name=name,
+            summary=f"Dynamic pipeline {name}:{pipeline}"
+        )
+
+        # self.refresh_openapi(self.router)
+        self.BasicApp.store().set('pipelines',self.pipelines)
+        return {"status": "created", "path": path, "method": method, "pipeline": pipeline}
+
+    def delete_pipeline(self, name: str):
+        self.api_ok()
+
+        # Remove the route from the router
+        self.router.routes = [route for route in self.router.routes if route.name != name]
+        
+        # Remove from pipelines dictionary
+        if name in self.pipelines:
+            del self.pipelines[name]
+            
+        # Update the stored pipelines
+        self.BasicApp.store().set('pipelines', self.pipelines)
+        
+        return {"status": "deleted", "pipeline": name}
+
+    def refresh_pipeline(self):
+        # get from redis
+        server_pipelines = self.api_list_pipelines()        
+        # add and delete
+        add_pipelines = {i for i in server_pipelines if i not in self.pipelines}
+        delete_pipelines = {i for i in self.pipelines if i not in server_pipelines}
+
+        print(add_pipelines,delete_pipelines)
+        
+        # Delete pipelines that are no longer in server
+        for name in delete_pipelines:
+            self.delete_pipeline(name)
+        
+        # Add new pipelines from server
+        for name in add_pipelines:
+            pipeline_info = server_pipelines[name]
+            self.api_add_pipeline(
+                name=name,
+                pipeline=pipeline_info,
+            )
+        # Update local pipelines dictionary
+        self.pipelines = server_pipelines
+
     def api_list_tasks(self,):
         self.api_ok()
         return self.BasicApp.get_tasks_list()

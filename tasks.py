@@ -24,8 +24,6 @@ class CeleryTask(BasicCeleryTask):
                  ACTION_REGISTRY:dict[str,any]=ACTION_REGISTRY):
         super().__init__(BasicApp, celery_app, ACTION_REGISTRY)
 
-        self.router.post("/pipeline/add")(self.api_add_pipeline)
-
         # Auto-generate endpoints for each action
         for action_name, action_class in ACTION_REGISTRY.items():
             self.add_web_api(
@@ -85,71 +83,7 @@ class CeleryTask(BasicCeleryTask):
                         return self.api_schedule_perform_action(action_name, task_model.model_dump(), execution_time, timezone)
         return handler
         
-    def api_add_pipeline(self,name: str='FiboPrime', method: str = 'POST', pipeline: list[str] = ['Fibonacci','PrimeNumberChecker']):
-        self.api_ok()
-        path = f"/pipeline/{name}"
-        method = method.upper()
-
-        # Validate function names
-        invalid_funcs = [fn for fn in pipeline if fn not in self.ACTION_REGISTRY]
-        if invalid_funcs:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Service [{invalid_funcs}] are not supported."
-            )
-        
-        if len(pipeline)<2:
-            raise HTTPException(
-                status_code=400,
-                detail=f"pipeline should contains more than 2 services."
-            )
-             
-
-        # Save pipeline and register route name
-        self.pipelines = self.api_list_pipelines()
-        self.pipelines[name] = name
-        
-        def create_dynamic_handler(pipeline: list[str]):
-            first_in_class = ACTION_REGISTRY[pipeline[0]]
-            last_out_class = ACTION_REGISTRY[pipeline[1]]
-            """Create a dynamic route handler based on a pipeline of functions."""
-            async def dynamic_handler(in_model: first_in_class.Model)->dict:
-                result = []
-                for func_name in pipeline:
-                    result.append(ACTION_REGISTRY[func_name].Model.examples()[0])
-                return {"result": result}
-            return dynamic_handler
-        
-        # Create and add the dynamic route
-        dynamic_handler = create_dynamic_handler(pipeline)
-        self.router.add_api_route(
-            path=path,
-            endpoint=dynamic_handler,
-            methods=[method],
-            name=name,
-            summary=f"Dynamic pipeline {name}:{pipeline}"
-        )
-
-        # self.refresh_openapi(self.router)
-        self.BasicApp.store().set('pipelines',self.pipelines)
-        return {"status": "created", "path": path, "method": method, "pipeline": pipeline}
     
-    def delete_pipeline(self, name: str):
-        self.api_ok()
-        self.pipelines = self.api_list_pipelines()
-        self.router.routes = [route for route in self.router.routes if route.name != name]
-        del self.pipelines[name]
-        self.BasicApp.store().set('pipelines',self.pipelines)
-
-    def refresh_pipeline(self):
-        # get frome redis
-        server_pipelines = self.api_list_pipelines()
-        add_pipelines = {i for i in server_pipelines if i not in self.pipelines}
-        # self.pipelines = self.api_list_pipelines()
-        # add and delete
-        # to update my_app local pipeline dicts
-        # self.router.routes = [route for route in self.router.routes if route.name != name]
-        pass
 
 ########################################################
 conf = AppConfig()
