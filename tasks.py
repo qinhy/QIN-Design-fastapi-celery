@@ -105,9 +105,15 @@ class CeleryTask(BasicCeleryTask):
     
     def api_add_pipeline(self,name: str='FiboPrime', method: str = 'POST',
         pipeline: list[str] = ['Fibonacci','PrimeNumberChecker'],
-        ):        
+        ):
         self.api_ok()
-
+        # FiCoChatPr
+        # [
+        # "Fibonacci",
+        # "CollatzSequence",
+        # "ChatGPTService",
+        # "PrimeNumberChecker"
+        # ]
         path = f"/pipeline/{name}"
         method = method.upper()
 

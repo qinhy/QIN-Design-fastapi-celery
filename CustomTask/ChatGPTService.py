@@ -39,7 +39,7 @@ class ChatGPTService(ServiceOrientedArchitecture):
             return [
                 {
                     "param": {
-                        "api_key": "OpenAI_API_key or in env",
+                        "api_key": None,#"OpenAI_API_key or in env",
                         "model": "gpt-4o-mini",
                         "system_prompt": "You are a helpful assistant.",
                     },
@@ -49,7 +49,7 @@ class ChatGPTService(ServiceOrientedArchitecture):
                 },
                 {
                     "param": {
-                        "api_key": "OpenAI_API_key or in env",
+                        "api_key": None,#"OpenAI_API_key or in env",
                         "model": "gpt-4o-mini",
                         "system_prompt": "You are a helpful assistant.",
                         "temperature": 0.5,

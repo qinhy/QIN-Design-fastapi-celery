@@ -55,7 +55,30 @@ class BasicCeleryTask:
         self.router.get("/pipeline/refresh")(self.api_refresh_pipeline)
         self.router.delete("/pipeline/delete")(self.api_delete_pipeline)    
         
-        self.smart_converter = SmartModelConverter()    
+        def convert_between_models(
+            pre_class_type:type[ServiceOrientedArchitecture],
+            class_type:type[ServiceOrientedArchitecture],
+            action_data:dict,
+            smart_converter:SmartModelConverter=SmartModelConverter()
+        ):
+            # Create model instances
+            previous_model_instance = pre_class_type.Model(**action_data)
+            model_instance = class_type.Model.examples().pop(0)
+            model_instance = class_type.Model(**model_instance)
+            
+            # Get function name for conversion
+            function_name = smart_converter.get_function_name(pre_class_type, class_type)
+            code_snippet = self.get_code_snippet(function_name)
+            
+            if code_snippet is None:
+                code_snippet,_ = smart_converter.build(pre_class_type, class_type)
+                self.save_code_snippet(code_snippet, function_name)          
+
+            conversion_func = smart_converter.get_func_from_code(code_snippet, function_name)
+
+            model_instance,_ = smart_converter.convert_by_function(
+                conversion_func, previous_model_instance, model_instance)
+            return model_instance
         
         # Register the Celery task
         @self.celery_app.task(bind=True)
@@ -73,24 +96,9 @@ class BasicCeleryTask:
             class_type:type[ServiceOrientedArchitecture] = self.ACTION_REGISTRY[action_name]
             
             if previous_name:
-                pre_class_type:type[ServiceOrientedArchitecture] = self.ACTION_REGISTRY.get(previous_name, None)
-                # Create model instances
-                previous_model_instance = pre_class_type.Model(**action_data)
-                model_instance = class_type.Model.examples().pop()
-                model_instance = class_type.Model(**model_instance)
-                
-                # Get function name for conversion
-                function_name = self.smart_converter.get_function_name(pre_class_type, class_type)
-                code_snippet = self.get_code_snippet(function_name)
-                
-                if code_snippet is None:
-                    code_snippet,_ = self.smart_converter.build(pre_class_type, class_type)
-                    self.save_code_snippet(code_snippet, function_name)          
-
-                conversion_func = self.smart_converter.get_func_from_code(code_snippet, function_name)
-
-                model_instance,_ = self.smart_converter.convert_by_function(
-                    conversion_func, previous_model_instance, model_instance)
+                model_instance = convert_between_models(
+                    self.ACTION_REGISTRY[previous_name],
+                    class_type,action_data)
             else:
                 # No previous class, create model directly
                 model_instance = class_type.Model(**action_data)
@@ -99,7 +107,6 @@ class BasicCeleryTask:
             model_instance = class_type.Action(model_instance,BasicApp=BasicApp)()
             model_dump = model_instance.model_dump_json()
             return model_dump
-            # return self.is_json_serializable(model_instance.model_dump())
 
         @task_received.connect
         def on_task_received(*args, **kwags):
