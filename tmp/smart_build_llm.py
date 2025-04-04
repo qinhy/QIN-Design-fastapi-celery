@@ -5,6 +5,8 @@ import requests
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
+from CustomTask import SmartBuilder
+
 class ServiceOrientedArchitecture(BaseModel):
     class Model(BaseModel):
 
@@ -575,153 +577,45 @@ def ret_to_args_convertor(ret: dict, args: dict) -> dict:
     # args['number'] = ret.get('n', 0)
     return args
 
-def build_conversion_prompt(
-    source_class: ServiceOrientedArchitecture, 
-    target_class: ServiceOrientedArchitecture
-) -> tuple[str, str]:
-    """
-    Dynamically build a prompt that requests GPT to write a function
-    converting `source_class`'s return to `target_class`'s args.
-
-    Parameters
-    ----------
-    source_class : ServiceOrientedArchitecture
-        The class with a .Model.ret schema to convert from.
-    target_class : ServiceOrientedArchitecture
-        The class with a .Model.args schema to convert to.
-
-    Returns
-    -------
-    tuple[str, str]
-        A tuple of (prompt_text, generated_function_name).
-    """
-    prompt_template = (
-        "Please complete the following code and only provide the implementation of the ret to args converter function :\n\n"
-        "```{from_class_name}.Model pydanctic schema\n"
-        "{from_schema}\n"
-        "```\n\n"
-        "```{to_class_name}.Model pydanctic schema\n"
-        "{to_schema}\n"
-        "```\n\n"
-        "```python\n"
-        "def {from_class_name}{from_class_version}_ret_to_{to_class_name}{from_class_version}_args_convertor(ret,args):\n"
-        "    # this function will convert {from_class_name}.ret into {to_class_name}.args\n"
-        "    # ...\n"
-        "    return args\n"
-        "```"
-    )
-
-    from_class_name = source_class.__name__
-    to_class_name = target_class.__name__
-    from_class_version = source_class.Model.Version()
-    to_class_version = target_class.Model.Version()
-
-    prompt = prompt_template.format(
-        from_class_name=from_class_name,
-        from_schema=source_class.Model.model_json_schema(),
-        to_class_name=to_class_name,
-        to_schema=target_class.Model.model_json_schema(),
-        from_class_version = from_class_version,
-        to_class_version = to_class_version,
-    )
-
-    return prompt, f"{from_class_name}{from_class_version}_ret_to_{to_class_name}{from_class_version}_args_convertor"
-
-def get_func_from_code(code_string,function_name):    
-    # Execute the extracted code in a new local namespace
-    local_namespace = {}
-    exec(code_string, globals(), local_namespace)
-
-    # Return the requested function from that namespace
-    func = local_namespace.get(function_name)
-    if not func:
-        raise ValueError(f"Function '{function_name}' not found in the code.")
-
-    return func
-
-def get_code_from_gpt(prompt: str, function_name: str):
-    """
-    Given a prompt and a function name, this function calls the GPT API and
-    extracts the code block containing the function. The code is then
-    executed locally, and the specified function is returned as a callable.
-
-    Parameters
-    ----------
-    prompt : str
-        The prompt to send to GPT.
-    function_name : str
-        The name of the function to extract from GPT’s response.
-
-    Returns
-    -------
-    tuple[str, callable]
-        A tuple containing the extracted code string and the function object.
-
-    Raises
-    ------
-    ValueError
-        If no API key found, if the GPT response is invalid, or if the function
-        is not found in the response.
-    """
-    api_key = os.environ.get('OPENAI_API_KEY')
-    if not api_key:
-        raise ValueError("API key not found in environment variable 'OPENAI_API_KEY'")
-
-    url = 'https://api.openai.com/v1/chat/completions'
-    headers = {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {api_key}'
-    }
-    data = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {"role": "user", "content": prompt}
-        ]
-    }
-
-    # Call the GPT API
-    response = requests.post(url, headers=headers, data=json.dumps(data))
-    response.raise_for_status()
-    message = response.json()['choices'][0]['message']['content']
-
-    # Attempt to extract the code block
-    code_blocks = re.findall(r"```(?:python)?\n(.*?)```", message, re.DOTALL)
-    if not code_blocks:
-        raise ValueError('No code block found in GPT response.')
-    code_string = code_blocks[0]
-
-    return code_string, get_func_from_code(code_string,function_name)
 
 def test_build(in_class = Fibonacci,out_class = PrimeNumberChecker):
-
+    # Create an instance of SmartBuildLLM
+    builder = SmartBuilder()
+    
     # Build prompt
-    prompt_text, function_name = build_conversion_prompt(in_class, out_class)
+    # prompt_text, function_name = builder.build_conversion_prompt(in_class, out_class)
 
-    # Fetch code and function from GPT
-    code_snippet, conversion_func = get_code_from_gpt(prompt_text, function_name)
-    print(code_snippet)
+    # # Fetch code and function from GPT
+    # code_snippet, conversion_func = builder.get_code_from_gpt(prompt_text, function_name)
+    # print(code_snippet)
 
     # Prepare sample data
     in_model_instance = in_class.Model()
     out_model_instance = out_class.Model()
 
-    in_ret_data = in_model_instance.ret.model_dump()
-    out_args_data = out_model_instance.args.model_dump()
+    # in_ret_data = in_model_instance.ret.model_dump()
+    # out_args_data = out_model_instance.args.model_dump()
 
-    # Execute the GPT-provided conversion function
-    updated_args = conversion_func(in_ret_data, out_args_data)
-    return updated_args
+    # # Execute the GPT-provided conversion function
+    # updated_args = conversion_func(in_ret_data, out_args_data)
+    # return updated_args
+    out_model_instance, code_snippet, conversion_func = builder.convert(in_class, in_model_instance,
+                                         out_class, out_model_instance)
+    return out_model_instance.args.model_dump()
 
     # print("Updated PrimeNumberChecker Args:", updated_args)
 
 def _test_build_multi(in_class:ServiceOrientedArchitecture,
                      out_class:ServiceOrientedArchitecture,
                      in_ret_list=[], out_args_list=[]):
+
+    builder = SmartBuilder()
+    
     # Build prompt
-    prompt_text, function_name = build_conversion_prompt(in_class, out_class)
+    prompt_text, function_name = builder.build_conversion_prompt(in_class, out_class)
 
     # Fetch code and function from GPT
-    code_snippet, conversion_func = get_code_from_gpt(prompt_text, function_name)
+    code_snippet, conversion_func = builder.get_code_from_gpt(prompt_text, function_name)
     print(code_snippet)
 
     # Generate default test data if none provided
@@ -756,8 +650,8 @@ def test_build_multi(in_ret_samples,target_args_samples,
 
 if __name__ == "__main__":
     # # Test 1: Fibonacci -> PrimeNumberChecker
-    # fib_to_prime_args = test_build(Fibonacci, PrimeNumberChecker)
-    # print("Fibonacci -> PrimeNumberChecker:", fib_to_prime_args)
+    fib_to_prime_args = test_build(Fibonacci, PrimeNumberChecker)
+    print("Fibonacci -> PrimeNumberChecker:", fib_to_prime_args)
 
     # # Test 2: AddTwoNumbers -> MultiplyTwoNumbers
     # add_to_multiply_args = test_build(AddTwoNumbers, MultiplyTwoNumbers)
@@ -780,41 +674,41 @@ if __name__ == "__main__":
     # print("DatabaseInsert -> DatabaseQuery:", db_insert_to_query_args)
 
     # Example: test with manually defined ret and args lists
-    test_build_multi(
-        in_ret_samples = [
-            {"n": 5},   # Sample 1 for Fibonacci
-            {"n": 10},  # Sample 2
-        ],
-        target_args_samples = [
-            {"number": 5},  # Sample 1 for PrimeNumberChecker
-            {"number": 10},  # Sample 2
-        ]
-        ,in_class=Fibonacci, out_class=PrimeNumberChecker)
+    # test_build_multi(
+    #     in_ret_samples = [
+    #         {"n": 5},   # Sample 1 for Fibonacci
+    #         {"n": 10},  # Sample 2
+    #     ],
+    #     target_args_samples = [
+    #         {"number": 5},  # Sample 1 for PrimeNumberChecker
+    #         {"number": 10},  # Sample 2
+    #     ]
+    #     ,in_class=Fibonacci, out_class=PrimeNumberChecker)
 
-    # Input: results from AddTwoNumbers
-    test_build_multi(
-        in_ret_samples = [
-            {"result": 8.0},   # Expect x=4, y=4
-            {"result": 15.0},  # Expect x=7, y=8 or some close combo
-            {"result": 1.0},   # Edge case: x=0, y=1
-        ],
-        # Target args to check conversion correctness
-        target_args_samples = [
-            {"x": 8, "y": 1},
-            {"x": 15, "y": 1},
-            {"x": 1, "y": 1},
-        ],in_class=AddTwoNumbers, out_class=MultiplyTwoNumbers)
+    # # Input: results from AddTwoNumbers
+    # test_build_multi(
+    #     in_ret_samples = [
+    #         {"result": 8.0},   # Expect x=4, y=4
+    #         {"result": 15.0},  # Expect x=7, y=8 or some close combo
+    #         {"result": 1.0},   # Edge case: x=0, y=1
+    #     ],
+    #     # Target args to check conversion correctness
+    #     target_args_samples = [
+    #         {"x": 8, "y": 1},
+    #         {"x": 15, "y": 1},
+    #         {"x": 1, "y": 1},
+    #     ],in_class=AddTwoNumbers, out_class=MultiplyTwoNumbers)
     
-    # Factorial ➝ SumOfSequence
-    test_build_multi(
-        in_ret_samples = [
-            {"result": 6},   # factorial(3) = 6
-            {"result": 24},  # factorial(4) = 24
-        ],
-        target_args_samples = [
-            {"start": 1, "end": 6},
-            {"start": 1, "end": 24},
-        ],
-        in_class=Factorial,
-        out_class=SumOfSequence
-    )
+    # # Factorial ➝ SumOfSequence
+    # test_build_multi(
+    #     in_ret_samples = [
+    #         {"result": 6},   # factorial(3) = 6
+    #         {"result": 24},  # factorial(4) = 24
+    #     ],
+    #     target_args_samples = [
+    #         {"start": 1, "end": 6},
+    #         {"start": 1, "end": 24},
+    #     ],
+    #     in_class=Factorial,
+    #     out_class=SumOfSequence
+    # )
