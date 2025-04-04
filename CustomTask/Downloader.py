@@ -109,7 +109,7 @@ class Downloader(ServiceOrientedArchitecture):
             
             if redis_url:
                 # redis_key = os.path.basename(urlparse(url).path)
-                redis_key = redis_key.replace("http://","").replace("https://","").replace("/",":")
+                redis_key = redis_key.replace("http://","web:").replace("https://","web:").replace("/",":")
                 self.store_file_to_redis(redis_url, redis_key, dest_path)
 
                 if os.path.exists(dest_path):
