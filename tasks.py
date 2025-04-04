@@ -5,11 +5,18 @@ from typing import Literal, Optional
 # FastAPI imports
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-import pytz
 from starlette.middleware.sessions import SessionMiddleware
+import pytz
 
+# Custom imports
 from CustomTask.MT5Manager import Book, MT5Account
-from Task.Basic import AppInterface, FileSystemApp, RabbitmqMongoApp, RedisApp
+from Task.Basic import (
+    AppInterface,
+    FileSystemApp,
+    RabbitmqMongoApp,
+    RedisApp,
+    ServiceOrientedArchitecture
+)
 from Task.BasicAPIs import BasicCeleryTask
 import CustomTask
 from config import *
