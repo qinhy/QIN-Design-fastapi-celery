@@ -499,7 +499,7 @@ class FileSystemApp(AppInterface, FileSystemPubSub):
         task_data = TaskModel(task_id=task_id, status=status, result=result)
         self.store().set(f"celery-task-meta-{task_id}",task_data.model_dump())
 
-class SmartBuilder(BaseModel):
+class SmartModelConverter(BaseModel):
     """
     A class for building and managing conversion functions between different
     ServiceOrientedArchitecture classes using LLM.
@@ -694,7 +694,7 @@ class SmartBuilder(BaseModel):
             model
         )
 
-        return conversion_func
+        return code_snippet, conversion_func
         
     def convert(self, in_class, in_model_instance,
                 out_class, out_model_instance,
@@ -719,6 +719,18 @@ class SmartBuilder(BaseModel):
 
         conversion_func = self.get_func_from_code(function_code, function_name)
         # Execute the GPT-provided conversion function
+        updated_args = conversion_func(in_ret_data, out_args_data)
+
+        out_model_instance.args = out_model_instance.Args(**updated_args)
+        return out_model_instance, conversion_func
+    
+    def convert_by_function(self, conversion_func, in_model_instance, out_model_instance):
+        """
+        Convert a model instance using a function code.
+        """
+        in_ret_data = in_model_instance.ret.model_dump()
+        out_args_data = out_model_instance.args.model_dump() 
+        
         updated_args = conversion_func(in_ret_data, out_args_data)
 
         out_model_instance.args = out_model_instance.Args(**updated_args)
@@ -834,6 +846,9 @@ class ServiceOrientedArchitecture:
         args:Args = Args()
         ret:Optional[Return] = Return()
         logger:Logger = Logger()
+
+        @classmethod
+        def examples(cls): return []
 
     class Action:
         def __init__(self, model,BasicApp:AppInterface,level=None):

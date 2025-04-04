@@ -4,7 +4,11 @@ import threading
 import requests
 from typing import Generator, Optional, Dict, Any
 from pydantic import BaseModel, Field
-from Task.Basic import ServiceOrientedArchitecture
+
+try:
+    from Task.Basic import ServiceOrientedArchitecture
+except:
+    from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
 
 class ChatGPTService(ServiceOrientedArchitecture):
     class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):
@@ -206,3 +210,33 @@ class ChatGPTService(ServiceOrientedArchitecture):
                 level = self.logger.level
             self.logger.log(level, message)
             self.send_data_to_task({level: message})
+
+
+def test_chatgpt_service():
+    """Simple test function for ChatGPTService"""
+    # Create a service instance
+    model = ChatGPTService.Model()
+    
+    # Configure parameters
+    model.param.model = "gpt-4o-mini"  # Use a smaller model for testing
+    model.param.max_tokens = 50  # Limit response size
+    model.param.stream = False  # Disable streaming for simpler testing
+    
+    # Set the user prompt
+    model.args.user_prompt = "Hi what is your name?"
+    
+    # Run the service
+    try:
+        result = ChatGPTService.Action(model,None)()
+        print("\nTest Result:")
+        print(f"Prompt: {model.args.user_prompt}")
+        print(f"Response: {result.ret.response}")
+        print("Test completed successfully!")
+        return True
+    except Exception as e:
+        print(f"Test failed with error: {str(e)}")
+        return False
+
+if __name__ == "__main__":
+    # Run the test when the script is executed directly
+    test_chatgpt_service()

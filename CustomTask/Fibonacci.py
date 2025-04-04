@@ -1,7 +1,10 @@
 import threading
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
-from Task.Basic import ServiceOrientedArchitecture
+try:
+    from Task.Basic import ServiceOrientedArchitecture
+except:
+    from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
 
 class Fibonacci(ServiceOrientedArchitecture):
     class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):

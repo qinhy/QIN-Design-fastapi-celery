@@ -1,0 +1,1 @@
+..\bin\redis\redis-server.exe --maxmemory 32mb --maxmemory-policy allkeys-lru --save "" --appendonly no --maxclients 50

@@ -17,7 +17,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.routing import APIRoute
 
 # Application imports
-from Task.Basic import AppInterface, ServiceOrientedArchitecture, SmartBuilder, TaskModel
+from Task.Basic import AppInterface, ServiceOrientedArchitecture, SmartModelConverter, TaskModel
 
 class BasicCeleryTask:
 
@@ -50,15 +50,12 @@ class BasicCeleryTask:
         self.router.post("/action/{name}")(
                                     self.api_perform_action)
         
-        # self.router.post("/action/{name}/schedule/")(
-        #                             self.api_schedule_perform_action)        
-        
         self.router.get("/pipeline/list")(self.api_list_pipelines)
         # self.router.post("/pipeline/add")(self.api_add_pipeline)
         self.router.get("/pipeline/refresh")(self.api_refresh_pipeline)
         self.router.delete("/pipeline/delete")(self.api_delete_pipeline)    
         
-        self.smart_builder = SmartBuilder()    
+        self.smart_converter = SmartModelConverter()    
         
         # Register the Celery task
         @self.celery_app.task(bind=True)
@@ -73,37 +70,33 @@ class BasicCeleryTask:
                 raise ValueError(f"Action '{action_name}' is not registered.")
 
             # Initialize the action model and action handler
-            class_space = self.ACTION_REGISTRY[action_name]
-            previous_class_space = self.ACTION_REGISTRY.get(previous_name, None)
+            class_type:type[ServiceOrientedArchitecture] = self.ACTION_REGISTRY[action_name]
             
-            if previous_class_space is not None:
+            if previous_name:
+                pre_class_type:type[ServiceOrientedArchitecture] = self.ACTION_REGISTRY.get(previous_name, None)
                 # Create model instances
-                previous_model_instance = previous_class_space.Model(**action_data)
-                tmp_action_res = class_space.Model(**class_space.Model.examples()[0])
+                previous_model_instance = pre_class_type.Model(**action_data)
+                model_instance = class_type.Model.examples().pop()
+                model_instance = class_type.Model(**model_instance)
                 
                 # Get function name for conversion
-                function_name = self.smart_builder.get_function_name(previous_class_space, class_space)
+                function_name = self.smart_converter.get_function_name(pre_class_type, class_type)
                 code_snippet = self.get_code_snippet(function_name)
                 
                 if code_snippet is None:
-                    # Generate new conversion code
-                    model_instance, code_snippet, conversion_func = self.smart_builder.convert(
-                        previous_class_space, previous_model_instance,
-                        class_space, tmp_action_res
-                    )
-                    self.save_code_snippet(code_snippet, function_name)
-                else:
-                    # Use existing conversion code
-                    model_instance, conversion_func = self.smart_builder.convert_by_function_code(
-                        code_snippet, function_name,
-                        previous_model_instance, tmp_action_res
-                    )
+                    code_snippet,_ = self.smart_converter.build(pre_class_type, class_type)
+                    self.save_code_snippet(code_snippet, function_name)          
+
+                conversion_func = self.smart_converter.get_func_from_code(code_snippet, function_name)
+
+                model_instance,_ = self.smart_converter.convert_by_function(
+                    conversion_func, previous_model_instance, model_instance)
             else:
                 # No previous class, create model directly
-                model_instance = class_space.Model(**action_data)
+                model_instance = class_type.Model(**action_data)
 
             model_instance.task_id=t.request.id
-            model_instance = class_space.Action(model_instance,BasicApp=BasicApp)()
+            model_instance = class_type.Action(model_instance,BasicApp=BasicApp)()
             model_dump = model_instance.model_dump_json()
             return model_dump
             # return self.is_json_serializable(model_instance.model_dump())
