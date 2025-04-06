@@ -215,7 +215,7 @@ class ChatGPTService(ServiceOrientedArchitecture):
 
 
 class MyChatGPTService(ChatGPTService):
-    class Levels(ChatGPTService.Model.Levels):
+    class Levels(ChatGPTService.Levels):
         pass
 
     class Model(ChatGPTService.Model):

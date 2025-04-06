@@ -146,8 +146,8 @@ class CeleryTask(BasicCeleryTask):
 
 from CustomTask import BookService, MT5CopyLastRatesService
 class MT5CeleryTask(CeleryTask):
-    def __init__(self, BasicApp, celery_app, ACTION_REGISTRY = ACTION_REGISTRY):
-        super().__init__(BasicApp, celery_app, ACTION_REGISTRY)
+    def __init__(self, BasicApp, celery_app, root_fast_app:FastAPI, ACTION_REGISTRY = ACTION_REGISTRY):
+        super().__init__(BasicApp, celery_app, root_fast_app, ACTION_REGISTRY)
         
         self.router.get( "/accounts/info")(self.api_account_info)
         self.router.get( "/books/")(self.api_get_books)
@@ -175,14 +175,14 @@ class MT5CeleryTask(CeleryTask):
         m = BookService.Model()
         m.param.account = acc
         m.param.action= 'account_info'
-        return self.api_perform_action('BookService', m.model_dump(),0)
+        return self.api_perform_action('BookService', m.model_dump(),'NOW')
     
     def api_get_books(self, acc: MT5Account):
         """Endpoint to get books for a given MT5 account."""
         m = BookService.Model()
         m.param.account = acc
         m.param.action= 'getBooks'
-        return self.api_perform_action('BookService', m.model_dump(),0)
+        return self.api_perform_action('BookService', m.model_dump(),'NOW')
 
     def api_book_send(self, acc: MT5Account, book: Book):
         """Endpoint to send a book."""
@@ -190,7 +190,7 @@ class MT5CeleryTask(CeleryTask):
         m.param.account = acc
         m.param.action= 'send'
         m.param.book= book
-        return self.api_perform_action('BookService', m.model_dump(),0)
+        return self.api_perform_action('BookService', m.model_dump(),'NOW')
 
     def api_schedule_book_send(self, acc: MT5Account, 
     symbol:str='USDJPY',sl:float=147.0,tp:float=150.0,price_open:float=148.0,volume:float=0.01,
@@ -215,7 +215,7 @@ class MT5CeleryTask(CeleryTask):
         m.param.account = acc
         m.param.action= 'close'
         m.param.book= book
-        return self.api_perform_action('BookService', m.model_dump(),0)
+        return self.api_perform_action('BookService', m.model_dump(),'NOW')
     
     def api_book_change_price(self, acc: MT5Account, book: Book, p: float):
         """Endpoint to change the price of a book."""
@@ -225,7 +225,7 @@ class MT5CeleryTask(CeleryTask):
         m.param.book= book
         m.param.book.price_open = p
         m.args.p = p
-        return self.api_perform_action('BookService', m.model_dump(),0)
+        return self.api_perform_action('BookService', m.model_dump(),'NOW')
 
     def api_book_change_tp_sl(self, acc: MT5Account, book: Book, tp: float, sl: float):
         """Endpoint to change tp sl values of a book."""
@@ -237,7 +237,7 @@ class MT5CeleryTask(CeleryTask):
         m.param.book.sl = sl
         m.args.tp = tp
         m.args.sl = sl
-        return self.api_perform_action('BookService', m.model_dump(),0)
+        return self.api_perform_action('BookService', m.model_dump(),'NOW')
     
     def api_rates_copy(self, acc: MT5Account, symbol: str, timeframe: str, count: int, debug: bool = False):
         """
@@ -249,7 +249,7 @@ class MT5CeleryTask(CeleryTask):
         m.args.timeframe = timeframe
         m.args.count = count
         m.args.debug = debug
-        return self.api_perform_action('MT5CopyLastRatesService', m.model_dump(),0)
+        return self.api_perform_action('MT5CopyLastRatesService', m.model_dump(),'NOW')
     
 ########################################################
 conf = AppConfig()
@@ -281,7 +281,7 @@ else:
     raise ValueError(f'no back end of {conf.app_backend}')
 
 celery_app = BasicApp.get_celery_app()
-my_app = MT5CeleryTask(BasicApp,celery_app)
+my_app = MT5CeleryTask(BasicApp,celery_app,api)
 
 ## add original api
 from CustomTask import Fibonacci
@@ -289,6 +289,6 @@ def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
     m = Fibonacci.Model()
     m.param.mode = mode
     m.args.n = n
-    return my_app.api_perform_action('Fibonacci', m.model_dump(),0)
+    return my_app.api_perform_action('Fibonacci', m.model_dump(),'NOW')
 
 my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()

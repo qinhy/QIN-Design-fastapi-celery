@@ -163,15 +163,16 @@ class BookService(ServiceOrientedArchitecture):
 #             "account_id": xxxxxx,
 #             "password": "xxxxxx",
 #             "account_server": "xxxxxxx"
-#         },
-#     "args": {
-#     "symbol": "USDJPY",
-#     "timeframe": "H1",
-#     "count": 10,
-#     "debug": false,
-#     "retry_times_on_error": 3
+#       }
+#   },
+  
+#   "args": {
+#         "symbol": "USDJPY",
+#         "timeframe": "H4",
+#         "count": 30,
+#         "debug": false,
+#         "retry_times_on_error": 3
 #     }
-#   }
 # }
 class MT5CopyLastRatesService(ServiceOrientedArchitecture):
     class Model(ServiceOrientedArchitecture.Model):
