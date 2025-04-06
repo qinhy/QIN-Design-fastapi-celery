@@ -80,28 +80,76 @@ class BasicCeleryTask:
                 conversion_func, previous_model_instance, model_instance)
             return model_instance
         
+        # Apply prior model configuration if provided
+        def _apply_prior_model_data(model_instance, prior_model_data):
+            if prior_model_data is not None:
+                prior_model = model_instance.Model(**prior_model_data)
+                # Update all model components from prior model
+                model_instance.param = model_instance.param.model_copy(update=prior_model.param.model_dump())
+                model_instance.args = model_instance.args.model_copy(update=prior_model.args.model_dump())
+                model_instance.ret = model_instance.ret.model_copy(update=prior_model.ret.model_dump())
+            return model_instance
+        
+        def _map_fields_between_models(action_data, previous_to_current_map,class_type):
+            # Map specific fields from previous return to current args
+            previous_ret_data = action_data['ret']
+            current_args_data = {}
+            for k, v in previous_to_current_map.items():
+                current_args_data[k] = previous_ret_data[v]
+            
+            # Create model with example data and update args
+            model_instance = class_type.Model(**class_type.Model.examples().pop(0))
+            model_instance.args = model_instance.args.model_copy(update=current_args_data)
+            return model_instance
+        
         # Register the Celery task
         @self.celery_app.task(bind=True)
-        def perform_action(t: Task, data: dict, name: str='NULL',
-                           previous_name:str=None, BasicApp=BasicApp) -> int:
+        def perform_action(
+            t: Task, 
+            data: dict, 
+            name: str = 'NULL',
+            prior_model_data: dict = None,
+            previous_name: str = None,
+            previous_to_current_map: dict = None,
+            BasicApp = BasicApp
+        ) -> int:
             """Generic Celery task to execute any registered action."""
+            # Prepare action data
             action_name, action_data = name, data
-            if type(action_data) == str:
+            if isinstance(action_data, str):
                 action_data = json.loads(action_data)
 
+            # Validate action exists
             if action_name not in self.ACTION_REGISTRY:
                 raise ValueError(f"Action '{action_name}' is not registered.")
 
-            # Initialize the action model and action handler
-            class_type:type[ServiceOrientedArchitecture] = self.ACTION_REGISTRY[action_name]
+            # Get the action class
+            class_type: type[ServiceOrientedArchitecture] = self.ACTION_REGISTRY[action_name]
             
-            if previous_name:
+            # Handle model creation based on pipeline context
+            model_instance = None
+            
+            # Case 1: No previous action in pipeline
+            if not previous_name:
+                # Create model directly from input data
+                model_instance = class_type.Model(**action_data)
+                
+            # Case 2: Previous action with mapping provided
+            elif previous_name and previous_to_current_map:
+                model_instance = _map_fields_between_models(
+                    action_data, previous_to_current_map, class_type)
+                
+            # Case 3: Previous action without mapping
+            elif previous_name and not previous_to_current_map:
+                # Use smart conversion between models
                 model_instance = convert_between_models(
                     self.ACTION_REGISTRY[previous_name],
-                    class_type,action_data)
-            else:
-                # No previous class, create model directly
-                model_instance = class_type.Model(**action_data)
+                    class_type,
+                    action_data
+                )
+
+            # Apply prior model configuration if provided
+            model_instance = _apply_prior_model_data(model_instance, prior_model_data)
 
             model_instance.task_id=t.request.id
             model_instance = class_type.Action(model_instance,BasicApp=BasicApp)()
@@ -421,7 +469,10 @@ class BasicCeleryTask:
         except Exception as e:
             raise ValueError(f"Invalid execution_time format: {execution_time}. Error: {str(e)}")
         # Schedule the task
-        task = self.perform_action.apply_async(args=[data, name], eta=utc_execution_time)
+        task = self.perform_action.apply_async(
+            # args=[data, name, prior_model_data, previous_name,previous_to_current_map],
+            args=[data, name, None, None, None],
+            eta=utc_execution_time)
 
         return TaskModel(task_id=task.task_id,
                         scheduled_for_the_timezone=local_time,
