@@ -52,18 +52,23 @@ class ServiceOrientedArchitecture:
 
             _log_buffer: io.StringIO = PrivateAttr()
             _logger: logging.Logger = PrivateAttr()
-
-            def init(self,name:str=None,
-                     action_obj:'ServiceOrientedArchitecture.Action'=None):
+            
+            def init(self, name: str = None,
+                    action_obj: 'ServiceOrientedArchitecture.Action' = None):
                 if name is None:
                     name = self.name
+                self.name = name
+
                 # Create a StringIO buffer for in-memory logging
                 self._log_buffer = io.StringIO()
 
-                # Configure logging
+                # Get or create logger
                 self._logger = logging.getLogger(name)
-                self._logger.setLevel(
-                    getattr(logging, self.level.upper(), logging.INFO))
+                self._logger.setLevel(getattr(logging, self.level.upper(), logging.INFO))
+
+                # 💥 Remove existing handlers to prevent double logging
+                if self._logger.hasHandlers():
+                    self._logger.handlers.clear()
 
                 # Formatter for log messages
                 formatter = logging.Formatter(
@@ -78,7 +83,9 @@ class ServiceOrientedArchitecture:
                 console_handler = logging.StreamHandler()
                 console_handler.setFormatter(formatter)
                 self._logger.addHandler(console_handler)
+
                 return self
+
 
             def log(self, level: str, message: str):
                 """Logs a message at the specified level."""

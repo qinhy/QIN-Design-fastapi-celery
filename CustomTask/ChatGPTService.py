@@ -4,11 +4,67 @@ import threading
 import requests
 from typing import Generator, Optional, Dict, Any
 from pydantic import BaseModel, Field
+from typing import List, Dict, Optional, Union
+import base64
+import mimetypes
+from pathlib import Path
 
 try:
     from Task.Basic import ServiceOrientedArchitecture
 except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+
+
+class PromptBuilder:
+    def __init__(self, system_prompt: Optional[str] = None):
+        self.messages: List[Dict[str, Union[str, Dict]]] = []
+        if system_prompt:
+            self.add_system(system_prompt)
+
+    def add_system(self, content: str):
+        self.messages.append({"role": "system", "content": content})
+        return self
+
+    def add_user(self, content: str):
+        self.messages.append({"role": "user", "content": content})
+        return self
+
+    def add_assistant(self, content: str):
+        self.messages.append({"role": "assistant", "content": content})
+        return self
+
+    def add_image(self, image_path: Union[str, Path], role: str = "user", detail: str = "auto"):
+        """
+        Adds an image input for multimodal models like GPT-4o. `detail` can be "auto", "low", or "high".
+        """
+        mime_type, _ = mimetypes.guess_type(str(image_path))
+        if not mime_type or not mime_type.startswith("image/"):
+            raise ValueError(f"Invalid image type for: {image_path}")
+
+        with open(image_path, "rb") as img_file:
+            b64_image = base64.b64encode(img_file.read()).decode("utf-8")
+
+        self.messages.append({
+            "role": role,
+            "content": [
+                {"type": "image_url", "image_url": {
+                    "url": f"data:{mime_type};base64,{b64_image}",
+                    "detail": detail
+                }}
+            ]
+        })
+        return self
+
+    def add_file_note(self, note: str, role: str = "user"):
+        """
+        Add a note referring to an uploaded file (for non-image files)
+        """
+        self.messages.append({"role": role, "content": note})
+        return self
+
+    def build(self) -> List[Dict[str, Union[str, Dict]]]:
+        return self.messages
+
 
 class ChatGPTService(ServiceOrientedArchitecture):
     class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):
@@ -22,11 +78,12 @@ class ChatGPTService(ServiceOrientedArchitecture):
             temperature: float = Field(0.7, ge=0, le=2.0, description="Sampling temperature")
             max_tokens: int = Field(1024, ge=1, description="Maximum tokens to generate")
             top_p: float = Field(1.0, ge=0.0, le=1.0, description="Nucleus sampling parameter")
-            stream: bool = Field(True, description="Whether to use streaming mode")
+            stream: bool = Field(False, description="Whether to use streaming mode")
             system_prompt: Optional[str] = Field(None, description="Optional system prompt")
 
         class Args(BaseModel):
             user_prompt: str = Field("Hi", description="The user prompt to send to ChatGPT")
+            messages: List[Dict[str, Union[str, Dict]]] = Field([], description="The messages to send to ChatGPT")
 
         class Return(BaseModel):
             response: str = Field("", description="The full model response")
@@ -142,9 +199,18 @@ class ChatGPTService(ServiceOrientedArchitecture):
             top_p: float,
             stream: bool
         ) -> Dict[str, Any]:
-            messages: list[Dict[str, str]] = []
-            if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
+            if self.model.args.messages:
+                messages = self.model.args.messages
+            else:
+                messages = []
+
+            # check if messages has system prompt
+            has_system_prompt = any(msg.get("role") == "system" for msg in messages)
+            
+            # Only add system prompt if it doesn't already exist in messages
+            if system_prompt and not has_system_prompt:
+                messages.insert(0, {"role": "system", "content": system_prompt})
+
             messages.append({"role": "user", "content": user_prompt})
 
             return {
@@ -213,7 +279,7 @@ class ChatGPTService(ServiceOrientedArchitecture):
             if level is None:
                 level = self.logger.level
             self.logger.log(level, message)
-            self.send_data_to_task({level: message})
+            # self.send_data_to_task({level: message})
 
 
 def test_chatgpt_service():
@@ -223,6 +289,7 @@ def test_chatgpt_service():
     
     # Configure parameters
     model.param.model = "gpt-4o-mini"  # Use a smaller model for testing
+    model.param.api_key = os.environ.get('OPENAI_API_KEY')
     model.param.max_tokens = 50  # Limit response size
     model.param.stream = False  # Disable streaming for simpler testing
     
@@ -235,12 +302,50 @@ def test_chatgpt_service():
         print("\nTest Result:")
         print(f"Prompt: {model.args.user_prompt}")
         print(f"Response: {result.ret.response}")
-        print("Test completed successfully!")
+        print("Test end!")
         return True
     except Exception as e:
         print(f"Test failed with error: {str(e)}")
         return False
 
+def test_chatgpt_service_with_image():
+    """Test function using PromptBuilder with image input"""
+    from pathlib import Path
+
+    image_path = Path("./tmp/Lenna_(test_image).png")
+    if not image_path.exists():
+        print(f"Test image not found at {image_path}")
+        return False
+
+    # Build prompt with image
+    prompt = PromptBuilder(system_prompt="You are a visual assistant.")
+    prompt.add_user("What is in this image?")
+    prompt.add_image(image_path)
+
+    # Create service model
+    model = ChatGPTService.Model()
+    model.param.model = "gpt-4o"  # Make sure to use a vision-capable model
+    model.param.api_key = os.environ.get('OPENAI_API_KEY')
+    model.param.stream = False
+    model.param.max_tokens = 100
+
+    # Set messages from PromptBuilder
+    model.args.messages = prompt.build()
+    model.args.user_prompt = ""  # No additional prompt needed
+
+    # Run the service
+    try:
+        result = ChatGPTService.Action(model, None)()
+        print("\nTest with Image Result:")
+        print(f"Response: {result.ret.response}")
+        print("Image test end!")
+        return True
+    except Exception as e:
+        print(f"Image test failed with error: {str(e)}")
+        return False
+
+
 if __name__ == "__main__":
     # Run the test when the script is executed directly
     test_chatgpt_service()
+    test_chatgpt_service_with_image()
