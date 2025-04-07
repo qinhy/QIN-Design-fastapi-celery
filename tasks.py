@@ -207,7 +207,7 @@ class MT5CeleryTask(CeleryTask):
         m.param.account = acc
         m.param.action= 'send'
         m.param.book= Book(symbol=symbol,sl=sl,tp=tp,price_open=price_open,volume=volume).as_plan()
-        return self.api_schedule_perform_action('BookService', m.model_dump(), execution_time,timezone)
+        return self.api_perform_action('BookService', m.model_dump(), execution_time,timezone)
 
     def api_book_close(self, acc: MT5Account, book: Book):
         """Endpoint to close a book."""
