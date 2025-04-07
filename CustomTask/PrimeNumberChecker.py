@@ -27,6 +27,8 @@ class PrimeNumberChecker(ServiceOrientedArchitecture):
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
             pass
+        class Version(ServiceOrientedArchitecture.Model.Version):
+            pass
         
         @staticmethod
         def examples():
@@ -36,10 +38,11 @@ class PrimeNumberChecker(ServiceOrientedArchitecture):
                 {"param": {"mode": "smart"}, "args": {"number": 1}},
             ]
         
+        version:Version = Version()
         param: Param = Param()
         args: Args = Param()
         ret: Optional[Return] = Return()
-        logger: Logger = Logger(name='PrimeNumberChecker')
+        logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
         def __init__(self, model, BasicApp, level=None):

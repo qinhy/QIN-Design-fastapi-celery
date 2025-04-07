@@ -26,6 +26,8 @@ class PalindromeChecker(ServiceOrientedArchitecture):
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
             pass
+        class Version(ServiceOrientedArchitecture.Model.Version):
+            pass
 
         @staticmethod
         def examples():
@@ -35,10 +37,11 @@ class PalindromeChecker(ServiceOrientedArchitecture):
                 {"param": {"mode": "smart"}, "args": {"text": "A man a plan a canal Panama"}},
             ]
         
+        version:Version = Version()
         param: Param = Param()
         args: Args
         ret: Optional[Return] = Return()
-        logger: Logger = Logger(name='PalindromeChecker')
+        logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
         def __init__(self, model, BasicApp, level=None):

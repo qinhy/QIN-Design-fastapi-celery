@@ -13,9 +13,19 @@ class ServiceOrientedArchitecture:
         task_id:Optional[str] = Field('AUTO_SET_BUT_NULL_NOW', description="task uuid")
 
         class Version(BaseModel):
+            class_name: str = Field(default='NULL', description="class name")
             major: str = Field(default="1", description="Major version number")
             minor: str = Field(default="0", description="Minor version number")
             patch: str = Field(default="0", description="Patch version number")
+
+            @classmethod
+            def get_class_name(cls):
+                return cls.__qualname__.split('.')[0]
+
+            def __init__(self,*args,**kwargs):
+                super().__init__(*args,**kwargs)
+                if self.class_name == 'NULL':
+                    self.class_name = self.get_class_name()
 
             def __repr__(self):
                 return self.__str__()
@@ -111,10 +121,11 @@ class ServiceOrientedArchitecture:
                     self._logger.removeHandler(handler)
 
                 
+        version:Version = Version()
         param:Param = Param()
         args:Args = Args()
         ret:Optional[Return] = Return()
-        logger:Logger = Logger()
+        logger: Logger = Logger()
 
         @classmethod
         def examples(cls): return []
@@ -131,7 +142,7 @@ class ServiceOrientedArchitecture:
             if level is None:level=ServiceOrientedArchitecture.Model.Logger.Levels.INFO
             self.logger.level = level
             self.logger.init(
-                name=f"{outer_class_name.__class__.__name__}:{self.model.task_id}",action_obj=self)
+                name=f"{model.version.class_name}:{self.model.task_id}",action_obj=self)
             self.listen_data_of_task_uuids = []
 
         def send_data_to_task(self, msg_dict={}):
@@ -182,3 +193,7 @@ class ServiceOrientedArchitecture:
         def __call__(self, *args, **kwargs):
             return self.model
         
+
+if __name__ == '__main__':
+    print(ServiceOrientedArchitecture.Model().version.class_name)
+

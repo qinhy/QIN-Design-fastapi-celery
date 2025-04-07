@@ -28,7 +28,10 @@ class Downloader(ServiceOrientedArchitecture):
             success: bool = Field(False, description="Whether the download and Redis upload succeeded")
             message: str = Field("", description="Status or error message")            
 
+        
         class Logger(ServiceOrientedArchitecture.Model.Logger):
+            pass
+        class Version(ServiceOrientedArchitecture.Model.Version):
             pass
 
         @staticmethod
@@ -44,10 +47,11 @@ class Downloader(ServiceOrientedArchitecture):
                 }
             }]
 
+        version:Version = Version()
         param: Param = Param()
         args: Args = Args()
         ret: Optional[Return] = Return()
-        logger: Logger = Logger(name="Downloader")
+        logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
         def __init__(self, model, BasicApp=None, level=None):

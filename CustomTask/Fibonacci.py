@@ -26,15 +26,18 @@ class Fibonacci(ServiceOrientedArchitecture):
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
             pass        
+        class Version(ServiceOrientedArchitecture.Model.Version):
+            pass
 
         @staticmethod
         def examples():
             return [{ "param": {"mode": "fast"},"args": {"n": 13}},]
         
+        version:Version = Version()
         param:Param = Param()
         args:Args = Args()
         ret:Optional[Return] = Return()
-        logger:Logger = Logger(name='Fibonacci')
+        logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
         def __init__(self, model, BasicApp, level=None):

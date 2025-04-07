@@ -1,11 +1,9 @@
 # Standard library imports
 import json
+import re
 import time
 import datetime
-from typing import Literal, Optional
-
-# Third-party imports
-import celery
+from typing import Literal
 import pytz
 from celery.app import task as Task
 from celery.signals import task_received
@@ -18,8 +16,139 @@ from fastapi.routing import APIRoute
 
 # Application imports
 from Task.Basic import AppInterface, ServiceOrientedArchitecture, SmartModelConverter, TaskModel
+from fastapi import Query
+
+# Common execution time parameter for API endpoints
+EXECUTION_TIME_PARAM = Query(
+    'NOW',
+    description=(
+        "Execution time in one of the following formats:\n"
+        "- 'NOW' → immediate execution\n"
+        "- '60' → delay of 60 seconds from now\n"
+        "- '2025-04-03T06:00:30' → execute at this absolute datetime\n"
+        "- 'NOW@every 10 s', '2025-04-03T06:00:30@every 1 d' → recurring schedule"
+    )
+)
+
+# Valid timezones for scheduling
+VALID_TIMEZONES = Literal[
+    "UTC", "Asia/Tokyo", "America/New_York", "Europe/London",
+    "Europe/Paris", "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"
+]
+
+# Common timezone parameter for API endpoints
+TIMEZONE_PARAM = Query(
+    "Asia/Tokyo",
+    description="Timezone for scheduled execution time"
+)
 
 class BasicCeleryTask:
+    
+    ########################### essential val
+    EXECUTION_TIME_PARAM = EXECUTION_TIME_PARAM
+    VALID_TIMEZONES = VALID_TIMEZONES
+    TIMEZONE_PARAM = TIMEZONE_PARAM
+
+    ########################### essential function    
+    @staticmethod
+    def wait_until(execution_time_str, timezone_str='Asia/Tokyo', offset_seconds=-1):
+        # Split the datetime and the interval part (e.g., '2025-04-07T15:08:58@every 10 s')
+        datetime_str, _ = execution_time_str.split('@')
+        
+        # Parse the next scheduled time
+        tz = pytz.timezone(timezone_str)
+        scheduled_time = datetime.fromisoformat(datetime_str)
+        scheduled_time = tz.localize(scheduled_time)
+
+        # Add the offset
+        target_time = scheduled_time + datetime.timedelta(seconds=offset_seconds)
+
+        # Wait until target time
+        now = datetime.now(tz)
+        sleep_seconds = (target_time - now).total_seconds()
+        if sleep_seconds > 0:
+            print(f"Waiting for {sleep_seconds:.2f} seconds...")
+            time.sleep(sleep_seconds)
+        else:
+            print("Target time is in the past. Skipping wait.")
+
+    @staticmethod
+    def parse_execution_time(execution_time_str, timezone_str):
+        """
+        Parses the execution_time_str and returns:
+        - utc_execution_time (datetime in UTC)
+        - local_time (datetime in specified timezone)
+        - next_execution_time_str (formatted in specified timezone)
+
+        Recurrence must be at least every 10 seconds.
+        Supports formats:
+        - 'NOW'
+        - '60' (delay in seconds)
+        - 'YYYY-MM-DDTHH:MM:SS'
+        - 'NOW@every 1 d', '2025-04-07T12:00:00@every 10 s', etc.
+        """
+        print('parse_execution_time : get',execution_time_str, timezone_str)
+
+        utc_now = datetime.datetime.now(datetime.timezone.utc)
+        tz = pytz.timezone(timezone_str)
+        local_now = utc_now.astimezone(tz)
+
+        utc_execution_time = None
+        local_time = None
+        next_execution_time_str = execution_time_str  # default
+
+        try:
+            # Match recurrence pattern: "<base>@every <num> <unit>"
+            recur_match = re.match(r"^(.+?)@every\s+(\d+)\s*([smhd])$", execution_time_str.strip(), re.IGNORECASE)
+            if recur_match:
+                base_time_str, num_str, unit = recur_match.groups()
+                unit = unit.lower()
+                interval_seconds = {
+                    's': int(num_str),
+                    'm': int(num_str) * 60,
+                    'h': int(num_str) * 3600,
+                    'd': int(num_str) * 86400,
+                }[unit]
+
+                if interval_seconds < 10:
+                    raise ValueError("Recurrence interval must be at least every 10 seconds.")
+
+                # Resolve base time
+                if base_time_str.upper() == "NOW":
+                    base_local_time = local_now
+                else:
+                    base_local_time = datetime.datetime.strptime(base_time_str, "%Y-%m-%dT%H:%M:%S")
+                    base_local_time = tz.localize(base_local_time)
+
+                local_time = base_local_time + datetime.timedelta(seconds=interval_seconds)
+                utc_execution_time = local_time.astimezone(pytz.UTC)
+
+                formatted_base = (local_time + datetime.timedelta(seconds=interval_seconds)).strftime("%Y-%m-%dT%H:%M:%S")
+                next_execution_time_str = f"{formatted_base}@every {num_str} {unit}"
+            # Handle "NOW"
+            elif execution_time_str.upper() == "NOW":
+                utc_execution_time = utc_now
+                local_time = local_now
+                next_execution_time_str = None
+            # Handle delay in seconds
+            elif execution_time_str.isdigit():
+                delay_seconds = int(execution_time_str)
+                utc_execution_time = utc_now + datetime.timedelta(seconds=delay_seconds)
+                local_time = utc_execution_time.astimezone(tz)
+                next_execution_time_str = None
+            else:
+                # Handle absolute datetime
+                local_time = datetime.datetime.strptime(execution_time_str, "%Y-%m-%dT%H:%M:%S")
+                local_time = tz.localize(local_time)
+                utc_execution_time = local_time.astimezone(pytz.UTC)
+                next_execution_time_str = None
+
+            print('parse_execution_time : return ',utc_execution_time,'|', local_time,'|',(next_execution_time_str,timezone_str))    
+            return utc_execution_time, local_time, (next_execution_time_str,timezone_str)
+
+        except Exception as e:
+            raise ValueError(f"Invalid execution_time format: {execution_time_str}. Error: {str(e)}")
+
 
     def __init__(self,
                  BasicApp:AppInterface,
@@ -55,51 +184,107 @@ class BasicCeleryTask:
         self.router.get("/pipeline/refresh")(self.api_refresh_pipeline)
         self.router.delete("/pipeline/delete")(self.api_delete_pipeline)    
         
-        self.smart_converter = SmartModelConverter()    
+        def _convert_between_models(
+            pre_class_type:type[ServiceOrientedArchitecture],
+            class_type:type[ServiceOrientedArchitecture],
+            action_data:dict,
+            smart_converter:SmartModelConverter=SmartModelConverter()
+        ):
+            # Create model instances
+            previous_model_instance = pre_class_type.Model(**action_data)
+            model_instance = class_type.Model.examples().pop(0)
+            model_instance = class_type.Model(**model_instance)
+            
+            # Get function name for conversion
+            function_name = smart_converter.get_function_name(pre_class_type, class_type)
+            code_snippet = self.get_code_snippet(function_name)
+            
+            if code_snippet is None:
+                code_snippet,_ = smart_converter.build(pre_class_type, class_type)
+                self.save_code_snippet(code_snippet, function_name)          
+
+            conversion_func = smart_converter.get_func_from_code(code_snippet, function_name)
+
+            model_instance,_ = smart_converter.convert_by_function(
+                conversion_func, previous_model_instance, model_instance)
+            return model_instance
+        
+        def _map_fields_between_models(action_data, previous_to_current_map):
+            # Map specific fields from previous return to current args
+            previous_ret_data = action_data['ret']
+            current_args_data = {}
+            for k, v in previous_to_current_map.items():
+                current_args_data[k] = previous_ret_data[v]
+            
+            return current_args_data
         
         # Register the Celery task
         @self.celery_app.task(bind=True)
-        def perform_action(t: Task, data: dict, name: str='NULL',
-                           previous_name:str=None, BasicApp=BasicApp) -> int:
+        def perform_action(
+            t: Task, 
+            data: dict, 
+            name: str = 'NULL',
+            prior_model_data: dict = None,
+            previous_name: str = None,
+            previous_to_current_map: dict = None,
+            BasicApp = BasicApp
+        ) -> int:
             """Generic Celery task to execute any registered action."""
+            # Prepare action data
             action_name, action_data = name, data
-            if type(action_data) == str:
+            
+            if isinstance(action_data, str):
                 action_data = json.loads(action_data)
 
+            task_chain_ids = action_data.get('task_chain_ids',[])
+            if 'NULL' not in action_data['task_id']:
+                action_data['task_chain_ids'].append(action_data['task_id'])
+
+            # Validate action exists
             if action_name not in self.ACTION_REGISTRY:
                 raise ValueError(f"Action '{action_name}' is not registered.")
-
-            # Initialize the action model and action handler
-            class_type:type[ServiceOrientedArchitecture] = self.ACTION_REGISTRY[action_name]
             
-            if previous_name:
-                pre_class_type:type[ServiceOrientedArchitecture] = self.ACTION_REGISTRY.get(previous_name, None)
-                # Create model instances
-                previous_model_instance = pre_class_type.Model(**action_data)
-                model_instance = class_type.Model.examples().pop()
-                model_instance = class_type.Model(**model_instance)
-                
-                # Get function name for conversion
-                function_name = self.smart_converter.get_function_name(pre_class_type, class_type)
-                code_snippet = self.get_code_snippet(function_name)
-                
-                if code_snippet is None:
-                    code_snippet,_ = self.smart_converter.build(pre_class_type, class_type)
-                    self.save_code_snippet(code_snippet, function_name)          
+            # if action_name != action_data['version']['class_name']:
+            #     previous_name = action_data['version']['class_name']
 
-                conversion_func = self.smart_converter.get_func_from_code(code_snippet, function_name)
-
-                model_instance,_ = self.smart_converter.convert_by_function(
-                    conversion_func, previous_model_instance, model_instance)
-            else:
-                # No previous class, create model directly
+            # Get the action class
+            class_type: type[ServiceOrientedArchitecture] = self.ACTION_REGISTRY[action_name]
+            
+            # Handle model creation based on pipeline context
+            model_instance = class_type.Model(**class_type.Model.examples().pop(0))            
+            
+            # Case 1: No previous action in pipeline
+            if not previous_name:
+                # Create model directly from input data
                 model_instance = class_type.Model(**action_data)
+                
+            # Case 2: Previous action with mapping provided
+            elif previous_name and previous_to_current_map:
+                action_data = _map_fields_between_models(
+                    action_data, previous_to_current_map)
+                
+                # Create model with example data and update args
+                model_instance.args = model_instance.args.model_copy(update=action_data)
+                
+            # Case 3: Previous action without mapping
+            elif previous_name and not previous_to_current_map:
+                # Use smart conversion between models
+                model_instance = _convert_between_models(
+                    self.ACTION_REGISTRY[previous_name],
+                    class_type,
+                    action_data
+                )
 
+            # Apply prior model configuration if provided
+            model_instance = model_instance.update_model_data(prior_model_data)
             model_instance.task_id=t.request.id
+
+            if task_chain_ids:
+                model_instance.task_chain_ids = task_chain_ids + [model_instance.task_id]
+
             model_instance = class_type.Action(model_instance,BasicApp=BasicApp)()
             model_dump = model_instance.model_dump_json()
             return model_dump
-            # return self.is_json_serializable(model_instance.model_dump())
 
         @task_received.connect
         def on_task_received(*args, **kwags):
@@ -118,9 +303,7 @@ class BasicCeleryTask:
                 self._make_api_action_handler(action_name, action_class),
                 'post',f"/{action_name.lower()}/")            
     
-    
-    ########################### essential function
-    
+        
     def save_code_snippet(self, code_snippet: str, function_name: str):
         code_snippets = self.BasicApp.store().get('code_snippets')
         if code_snippets is None:
@@ -161,24 +344,15 @@ class BasicCeleryTask:
         
         def handler(
             task_model: action_class.Model = Body(..., examples=examples),                    
-            execution_time: str = Query(
-                'NOW',
-                description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS (2025-04-03T06:00:30), NOW: no use"
-            ),
-            timezone: Literal[
-                "UTC", "Asia/Tokyo", "America/New_York", "Europe/London",
-                "Europe/Paris", "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"
-            ] = Query(
-                "Asia/Tokyo",
-                description="Choose a timezone from the list, if execution_time is not NOW"
-            )
+            execution_time: str = self.EXECUTION_TIME_PARAM,
+            timezone: self.VALID_TIMEZONES = self.TIMEZONE_PARAM
         ):
                             
             return self.api_perform_action(action_name, task_model.model_dump(),
                                             execution_time=execution_time,
                                             timezone=timezone)
         return handler
-    
+        
     def api_ok(self):
         if not self.BasicApp.check_services():
             raise HTTPException(status_code=503, detail={
@@ -199,7 +373,6 @@ class BasicCeleryTask:
             routes=root_fast_app.routes,
         )
         
-
     def reload_routes(self):
         self._reload_routes(self.root_fast_app)
         self.root_fast_app.include_router(self.router, prefix="", tags=["Tasks"])
@@ -374,17 +547,8 @@ class BasicCeleryTask:
     def api_perform_action(self,
         name: str, 
         data: dict,                        
-        execution_time: str = Query(
-            'NOW',
-            description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS (2025-04-03T06:00:30), NOW: no use"
-        ),
-        timezone: Literal[
-            "UTC", "Asia/Tokyo", "America/New_York", "Europe/London",
-            "Europe/Paris", "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"
-        ] = Query(
-            "Asia/Tokyo",
-            description="Choose a timezone from the list, if execution_time is not NOW"
-        )
+        execution_time: str = EXECUTION_TIME_PARAM,
+        timezone: VALID_TIMEZONES = TIMEZONE_PARAM,
     ):
         
         """API endpoint to execute a generic action asynchronously with optional delay."""
@@ -394,32 +558,14 @@ class BasicCeleryTask:
         if name not in self.ACTION_REGISTRY:
             return {"error": f"Action '{name}' is not available."}      
         
-        utc_execution_time = None
-        local_time = None
-
-        try:
-            if execution_time.upper() == "NOW":
-                utc_execution_time = datetime.datetime.now(datetime.timezone.utc)
-            elif execution_time.isdigit():
-                delay_seconds = int(execution_time)
-                utc_execution_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=delay_seconds)
-            else:
-                # Parse the datetime string
-                local_time = datetime.datetime.strptime(execution_time, "%Y-%m-%dT%H:%M:%S")
-                # Localize it to the given timezone
-                tz = pytz.timezone(timezone)
-                local_time = tz.localize(local_time)
-                # Convert to UTC
-                utc_execution_time = local_time.astimezone(pytz.UTC)
-        except Exception as e:
-            raise ValueError(f"Invalid execution_time format: {execution_time}. Error: {str(e)}")
+        utc_execution_time, local_time, next_schedule = self.parse_execution_time(execution_time, timezone)
+        
         # Schedule the task
-        task = self.perform_action.apply_async(args=[data, name], eta=utc_execution_time)
+        task = self.perform_action.apply_async(
+            # args=[data, name, prior_model_data, previous_name,previous_to_current_map],
+            args=[data, name, None, None, None],
+            eta=utc_execution_time)
 
-        return TaskModel(task_id=task.task_id,
-                        scheduled_for_the_timezone=local_time,
-                        timezone=timezone if local_time is not None else None,
-                        scheduled_for_utc=utc_execution_time,
-                    ).model_dump(exclude_none=True)
+        return TaskModel.create_task_response(task, utc_execution_time, local_time, timezone, next_schedule)
 
     

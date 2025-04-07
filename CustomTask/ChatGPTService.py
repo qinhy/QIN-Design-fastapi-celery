@@ -31,7 +31,10 @@ class ChatGPTService(ServiceOrientedArchitecture):
         class Return(BaseModel):
             response: str = Field("", description="The full model response")
 
+        
         class Logger(ServiceOrientedArchitecture.Model.Logger):
+            pass
+        class Version(ServiceOrientedArchitecture.Model.Version):
             pass
 
         @staticmethod
@@ -39,7 +42,7 @@ class ChatGPTService(ServiceOrientedArchitecture):
             return [
                 {
                     "param": {
-                        "api_key": "OpenAI_API_key or in env",
+                        "api_key": None,#"OpenAI_API_key or in env",
                         "model": "gpt-4o-mini",
                         "system_prompt": "You are a helpful assistant.",
                     },
@@ -49,7 +52,7 @@ class ChatGPTService(ServiceOrientedArchitecture):
                 },
                 {
                     "param": {
-                        "api_key": "OpenAI_API_key or in env",
+                        "api_key": None,#"OpenAI_API_key or in env",
                         "model": "gpt-4o-mini",
                         "system_prompt": "You are a helpful assistant.",
                         "temperature": 0.5,
@@ -62,10 +65,11 @@ class ChatGPTService(ServiceOrientedArchitecture):
                 }
             ]
 
+        version:Version = Version()
         param: Param = Param()
         args: Args = Args()
         ret: Optional[Return] = Return()
-        logger: Logger = Logger(name="ChatGPTService")
+        logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
         def __init__(self, model, BasicApp, level=None):

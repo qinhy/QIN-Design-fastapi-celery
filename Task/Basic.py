@@ -8,7 +8,7 @@ import re
 import requests
 import threading
 import time
-from typing import Optional
+from typing import Any, Optional
 from uuid import uuid4
 
 import celery
@@ -243,6 +243,7 @@ class FileSystemPubSub(PubSubInterface):
         if self.listener_thread and self.listener_thread.is_alive():
             self.listener_thread.join()
 
+            
 class TaskModel(BaseModel):
     task_id: str
     status: Optional[str] = None
@@ -250,7 +251,21 @@ class TaskModel(BaseModel):
     date_done: Optional[datetime] = None
     scheduled_for_the_timezone: Optional[datetime] = None
     scheduled_for_utc: Optional[datetime] = None
+    next_schedule: Optional[tuple[str,str]] = None
     timezone: Optional[str] = None
+
+    @classmethod
+    def create_task_response(cls, task: Any,
+                   utc_execution_time: Optional[datetime],
+                   local_time: Optional[datetime], 
+                   timezone: Optional[str],
+                   next_schedule: Optional[tuple[str,str]]=None) -> dict:
+        return cls(task_id=task.task_id,
+                scheduled_for_the_timezone=local_time,
+                timezone=timezone if local_time is not None else None,
+                scheduled_for_utc=utc_execution_time,
+                next_schedule=next_schedule,
+        ).model_dump(exclude_none=True)
 
 class AppInterface(PubSubInterface):
     def redis_client(self) -> redis.Redis: raise NotImplementedError('redis_client')
@@ -741,12 +756,22 @@ class ServiceOrientedArchitecture:
     BasicApp:AppInterface = None
 
     class Model(BaseModel):
-        task_id:Optional[str] = Field('AUTO_SET_BUT_NULL_NOW', description="task uuid")
+        task_id:Optional[str] = Field('AUTO_SET_BUT_NULL_NOW', description="task uuid")        
+        task_chain_ids:Optional[list[str]] = Field(default=[], description="task chain ids")
 
         class Version(BaseModel):
+            class_name: str = Field(default='NULL', description="class name")
             major: str = Field(default="1", description="Major version number")
             minor: str = Field(default="0", description="Minor version number")
             patch: str = Field(default="0", description="Patch version number")
+
+            @classmethod
+            def get_class_name(cls):
+                return cls.__qualname__.split('.')[0]
+
+            def __init__(self,*args,**kwargs):
+                super().__init__(*args,**kwargs)
+                self.class_name = self.get_class_name()
 
             def __repr__(self):
                 return self.__str__()
@@ -842,13 +867,26 @@ class ServiceOrientedArchitecture:
                     self._logger.removeHandler(handler)
 
                 
+        version:Version = Version()
         param:Param = Param()
         args:Args = Args()
         ret:Optional[Return] = Return()
-        logger:Logger = Logger()
+        logger: Logger = Logger()
+        version:Version = Version()
 
         @classmethod
         def examples(cls): return []
+        
+        def update_model_data(self,data:dict):
+            if data is not None:
+                # Update all model components from prior model
+                if 'param' in data:
+                    self.param = self.param.model_copy(update=data['param'])
+                if 'args' in data:
+                    self.args = self.args.model_copy(update=data['args'])
+                if 'ret' in data:
+                    self.ret = self.ret.model_copy(update=data['ret'])
+            return self
 
     class Action:
         def __init__(self, model,BasicApp:AppInterface,level=None):
@@ -863,7 +901,7 @@ class ServiceOrientedArchitecture:
             if level is None:level=ServiceOrientedArchitecture.Model.Logger.Levels.INFO
             self.logger.level = level
             self.logger.init(
-                name=f"{outer_class_name.__class__.__name__}:{self.model.task_id}",action_obj=self)
+                name=f"{model.version.class_name}:{self.model.task_id}",action_obj=self)
             self.listen_data_of_task_uuids = []
 
         def send_data_to_task(self, msg_dict={}):
