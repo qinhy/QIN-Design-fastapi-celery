@@ -53,65 +53,75 @@ class BasicCeleryTask:
     def parse_execution_time(execution_time_str, timezone_str):
         """
         Parses the execution_time_str and returns:
-        - utc_execution_time (datetime or None)
-        - local_time (datetime or None)
-        - recurrence_config (dict or None)
-        
+        - utc_execution_time (datetime in UTC)
+        - local_time (datetime in specified timezone)
+        - next_execution_time_str (formatted in specified timezone)
+
         Recurrence must be at least every 10 seconds.
+        Supports formats:
+        - 'NOW'
+        - '60' (delay in seconds)
+        - 'YYYY-MM-DDTHH:MM:SS'
+        - 'NOW@every 1 d', '2025-04-07T12:00:00@every 10 s', etc.
         """
+        print('parse_execution_time : get',execution_time_str, timezone_str)
+
         utc_now = datetime.datetime.now(datetime.timezone.utc)
+        tz = pytz.timezone(timezone_str)
+        local_now = utc_now.astimezone(tz)
+
         utc_execution_time = None
         local_time = None
-        recurrence_config = None
+        next_execution_time_str = execution_time_str  # default
 
         try:
             # Match recurrence pattern: "<base>@every <num> <unit>"
             recur_match = re.match(r"^(.+?)@every\s+(\d+)\s*([smhd])$", execution_time_str.strip(), re.IGNORECASE)
             if recur_match:
                 base_time_str, num_str, unit = recur_match.groups()
+                unit = unit.lower()
                 interval_seconds = {
                     's': int(num_str),
                     'm': int(num_str) * 60,
                     'h': int(num_str) * 3600,
                     'd': int(num_str) * 86400,
-                }[unit.lower()]
+                }[unit]
 
-                # ❗ Enforce minimum interval of 10 seconds
                 if interval_seconds < 10:
                     raise ValueError("Recurrence interval must be at least every 10 seconds.")
 
-                recurrence_config = {
-                    "every": interval_seconds,
-                    "unit": unit.lower(),
-                    "original": execution_time_str
-                }
-
-                # Determine base time
+                # Resolve base time
                 if base_time_str.upper() == "NOW":
-                    utc_execution_time = utc_now + datetime.timedelta(seconds=interval_seconds)
+                    base_local_time = local_now
                 else:
-                    local_time = datetime.datetime.strptime(base_time_str, "%Y-%m-%dT%H:%M:%S")
-                    tz = pytz.timezone(timezone_str)
-                    local_time = tz.localize(local_time)
-                    utc_execution_time = local_time.astimezone(pytz.UTC) + datetime.timedelta(seconds=interval_seconds)
-                
-                return utc_execution_time, local_time, recurrence_config
+                    base_local_time = datetime.datetime.strptime(base_time_str, "%Y-%m-%dT%H:%M:%S")
+                    base_local_time = tz.localize(base_local_time)
 
+                local_time = base_local_time + datetime.timedelta(seconds=interval_seconds)
+                utc_execution_time = local_time.astimezone(pytz.UTC)
+
+                formatted_base = (local_time + datetime.timedelta(seconds=interval_seconds)).strftime("%Y-%m-%dT%H:%M:%S")
+                next_execution_time_str = f"{formatted_base}@every {num_str} {unit}"
             # Handle "NOW"
-            if execution_time_str.upper() == "NOW":
-                return utc_now, None, None
-
+            elif execution_time_str.upper() == "NOW":
+                utc_execution_time = utc_now
+                local_time = local_now
+                next_execution_time_str = None
             # Handle delay in seconds
-            if execution_time_str.isdigit():
+            elif execution_time_str.isdigit():
                 delay_seconds = int(execution_time_str)
-                return utc_now + datetime.timedelta(seconds=delay_seconds), None, None
+                utc_execution_time = utc_now + datetime.timedelta(seconds=delay_seconds)
+                local_time = utc_execution_time.astimezone(tz)
+                next_execution_time_str = None
+            else:
+                # Handle absolute datetime
+                local_time = datetime.datetime.strptime(execution_time_str, "%Y-%m-%dT%H:%M:%S")
+                local_time = tz.localize(local_time)
+                utc_execution_time = local_time.astimezone(pytz.UTC)
+                next_execution_time_str = None
 
-            # Handle absolute datetime
-            local_time = datetime.datetime.strptime(execution_time_str, "%Y-%m-%dT%H:%M:%S")
-            tz = pytz.timezone(timezone_str)
-            local_time = tz.localize(local_time)
-            utc_execution_time = local_time.astimezone(pytz.UTC)
-            return utc_execution_time, local_time, None
+            print('parse_execution_time : return ',utc_execution_time,'|', local_time,'|',(next_execution_time_str,timezone_str))    
+            return utc_execution_time, local_time, (next_execution_time_str,timezone_str)
 
         except Exception as e:
             raise ValueError(f"Invalid execution_time format: {execution_time_str}. Error: {str(e)}")
@@ -525,7 +535,7 @@ class BasicCeleryTask:
         if name not in self.ACTION_REGISTRY:
             return {"error": f"Action '{name}' is not available."}      
         
-        utc_execution_time, local_time = self.parse_execution_time(execution_time, timezone)
+        utc_execution_time, local_time, next_schedule = self.parse_execution_time(execution_time, timezone)
         
         # Schedule the task
         task = self.perform_action.apply_async(
@@ -533,6 +543,6 @@ class BasicCeleryTask:
             args=[data, name, None, None, None],
             eta=utc_execution_time)
 
-        return TaskModel.create_task_response(task, utc_execution_time, local_time, timezone)
+        return TaskModel.create_task_response(task, utc_execution_time, local_time, timezone, next_schedule)
 
     

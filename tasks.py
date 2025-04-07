@@ -51,7 +51,7 @@ class CeleryTask(BasicCeleryTask):
             
             self.api_ok()
             
-            utc_execution_time, local_time = BasicCeleryTask.parse_execution_time(
+            utc_execution_time, local_time, next_schedule = BasicCeleryTask.parse_execution_time(
                                             execution_time, timezone)
             # Get model data
             current_data = in_model.model_dump()
@@ -120,7 +120,7 @@ class CeleryTask(BasicCeleryTask):
             print(f"Pipeline task IDs in execution order: {task_ids}")
             # Return task information
             return TaskModel.create_task_response(
-                chain_result, utc_execution_time, local_time, timezone)
+                chain_result, utc_execution_time, local_time, timezone, next_schedule)
 
         
         return api_pipeline_handler        

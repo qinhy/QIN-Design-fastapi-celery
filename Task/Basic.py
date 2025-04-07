@@ -251,17 +251,20 @@ class TaskModel(BaseModel):
     date_done: Optional[datetime] = None
     scheduled_for_the_timezone: Optional[datetime] = None
     scheduled_for_utc: Optional[datetime] = None
+    next_schedule: Optional[tuple[str,str]] = None
     timezone: Optional[str] = None
 
     @classmethod
     def create_task_response(cls, task: Any,
                    utc_execution_time: Optional[datetime],
                    local_time: Optional[datetime], 
-                   timezone: Optional[str]) -> dict:
+                   timezone: Optional[str],
+                   next_schedule: Optional[tuple[str,str]]=None) -> dict:
         return cls(task_id=task.task_id,
                 scheduled_for_the_timezone=local_time,
                 timezone=timezone if local_time is not None else None,
                 scheduled_for_utc=utc_execution_time,
+                next_schedule=next_schedule,
         ).model_dump(exclude_none=True)
 
 class AppInterface(PubSubInterface):
