@@ -47,42 +47,14 @@ class CeleryTask(BasicCeleryTask):
         
         def api_pipeline_handler(
                 in_model: first_in_class.Model=Body(..., examples=in_examples),
-                execution_time: str = Query(
-                    'NOW',
-                    description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS (2025-04-03T06:00:30), NOW: no use"
-                ),
-                timezone: Literal[
-                    "UTC", "Asia/Tokyo", "America/New_York", "Europe/London",
-                    "Europe/Paris", "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"
-                ] = Query(
-                    "Asia/Tokyo",
-                    description="Choose a timezone from the list, if execution_time is not NOW"
-                )
+                execution_time: str = self.EXECUTION_TIME_PARAM,
+                timezone: self.VALID_TIMEZONES = self.TIMEZONE_PARAM,
         )->last_out_class.Model:
             
             self.api_ok()
             
-            # Parse execution time
-            utc_execution_time = None
-            local_time = None
-
-            try:
-                if execution_time.upper() == "NOW":
-                    utc_execution_time = datetime.datetime.now(datetime.timezone.utc)
-                elif execution_time.isdigit():
-                    delay_seconds = int(execution_time)
-                    utc_execution_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=delay_seconds)
-                else:
-                    # Parse the datetime string
-                    local_time = datetime.datetime.strptime(execution_time, "%Y-%m-%dT%H:%M:%S")
-                    # Localize it to the given timezone
-                    tz = pytz.timezone(timezone)
-                    local_time = tz.localize(local_time)
-                    # Convert to UTC
-                    utc_execution_time = local_time.astimezone(pytz.UTC)
-            except Exception as e:
-                raise ValueError(f"Invalid execution_time format: {execution_time}. Error: {str(e)}")
-            
+            utc_execution_time, local_time = BasicCeleryTask.parse_execution_time(
+                                            execution_time, timezone)
             # Get model data
             current_data = in_model.model_dump()
             # Get pipeline config
@@ -124,7 +96,7 @@ class CeleryTask(BasicCeleryTask):
                 pipeline_config_maps         # Mappings between steps
             ):
                 # Add next action to chain
-                task_chain = task_chain | self.perform_action.signature(
+                task = self.perform_action.signature(
                     kwargs={
                         'name': func_name,
                         'prior_model_data': prior_model_data,
@@ -132,16 +104,25 @@ class CeleryTask(BasicCeleryTask):
                         'previous_to_current_map': mapping,
                     }
                 )
+                task_chain = task_chain | task
                 previous_name = func_name
             # Execute the chain
             chain_result = task_chain.apply_async(eta=utc_execution_time)
+            # Collect all task IDs in the chain
+            task_ids = []
+            current_task = chain_result
+            while current_task:
+                task_ids.append(current_task.task_id)
+                current_task = current_task.parent
+
+            # Reverse to get IDs in execution order (first task first)
+            task_ids = list(reversed(task_ids))
             
+            # Log task IDs for debugging
+            print(f"Pipeline task IDs in execution order: {task_ids}")
             # Return task information
-            return TaskModel(task_id=chain_result.task_id,
-                            scheduled_for_the_timezone=local_time,
-                            timezone=timezone if local_time is not None else None,
-                            scheduled_for_utc=utc_execution_time,
-                        ).model_dump(exclude_none=True)
+            return TaskModel.create_task_response(
+                chain_result, utc_execution_time, local_time, timezone)
 
         
         return api_pipeline_handler        

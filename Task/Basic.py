@@ -8,7 +8,7 @@ import re
 import requests
 import threading
 import time
-from typing import Optional
+from typing import Any, Optional
 from uuid import uuid4
 
 import celery
@@ -243,6 +243,7 @@ class FileSystemPubSub(PubSubInterface):
         if self.listener_thread and self.listener_thread.is_alive():
             self.listener_thread.join()
 
+            
 class TaskModel(BaseModel):
     task_id: str
     status: Optional[str] = None
@@ -251,6 +252,17 @@ class TaskModel(BaseModel):
     scheduled_for_the_timezone: Optional[datetime] = None
     scheduled_for_utc: Optional[datetime] = None
     timezone: Optional[str] = None
+
+    @classmethod
+    def create_task_response(cls, task: Any,
+                   utc_execution_time: Optional[datetime],
+                   local_time: Optional[datetime], 
+                   timezone: Optional[str]) -> dict:
+        return cls(task_id=task.task_id,
+                scheduled_for_the_timezone=local_time,
+                timezone=timezone if local_time is not None else None,
+                scheduled_for_utc=utc_execution_time,
+        ).model_dump(exclude_none=True)
 
 class AppInterface(PubSubInterface):
     def redis_client(self) -> redis.Redis: raise NotImplementedError('redis_client')
@@ -741,7 +753,8 @@ class ServiceOrientedArchitecture:
     BasicApp:AppInterface = None
 
     class Model(BaseModel):
-        task_id:Optional[str] = Field('AUTO_SET_BUT_NULL_NOW', description="task uuid")
+        task_id:Optional[str] = Field('AUTO_SET_BUT_NULL_NOW', description="task uuid")        
+        task_chain_ids:Optional[list[str]] = Field(default=[], description="task chain ids")
 
         class Version(BaseModel):
             class_name: str = Field(default='NULL', description="class name")
