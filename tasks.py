@@ -1,11 +1,11 @@
 # Standard library imports
+import datetime
 from typing import Literal
 
 # FastAPI imports
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
-import pytz
 
 # Custom imports
 from CustomTask.MT5Manager import Book, MT5Account
@@ -14,7 +14,8 @@ from Task.Basic import (
     FileSystemApp,
     RabbitmqMongoApp,
     RedisApp,
-    ServiceOrientedArchitecture
+    ServiceOrientedArchitecture,
+    TaskModel
 )
 from Task.BasicAPIs import BasicCeleryTask
 import CustomTask
@@ -45,10 +46,10 @@ class CeleryTask(BasicCeleryTask):
             in_examples = [{'args':i['args']} for i in in_examples]
         
         def api_pipeline_handler(
-                in_model: first_in_class.Model=Body(..., examples=in_examples),
+                in_model: first_in_class.Model=Body(..., examples=in_examples), # type: ignore
                 execution_time: str = self.EXECUTION_TIME_PARAM,
                 timezone: self.VALID_TIMEZONES = self.TIMEZONE_PARAM,
-        )->last_out_class.Model:
+        )->last_out_class.Model: # type: ignore
             
             self.api_ok()
             

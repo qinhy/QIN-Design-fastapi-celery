@@ -69,10 +69,14 @@ class BookService(ServiceOrientedArchitecture):
         class Logger(ServiceOrientedArchitecture.Model.Logger):
             pass
         
+        class Version(ServiceOrientedArchitecture.Model.Version):
+            pass
+        
+        version:Version = Version()
         param:Param = Param()
         args:Args = Args()
         ret:Return = Return()
-        logger:Logger = Logger(name='BookService')
+        logger:Logger = Logger(name=Version().class_name)
 
         @staticmethod
         def build(acc:MT5Account,book:Book,plan=False):
