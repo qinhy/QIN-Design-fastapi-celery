@@ -1,11 +1,9 @@
 # Standard library imports
-import datetime
-from typing import Literal, Optional
+from typing import Literal
 
 # FastAPI imports
-from fastapi import Body, FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import pytz
 from starlette.middleware.sessions import SessionMiddleware
 
 # Application imports

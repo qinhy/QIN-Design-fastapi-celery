@@ -3,10 +3,6 @@ import json
 import re
 import time
 import datetime
-from typing import Literal, Optional
-
-# Third-party imports
-import celery
 import pytz
 from celery.app import task as Task
 from celery.signals import task_received
