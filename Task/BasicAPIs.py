@@ -3,6 +3,7 @@ import json
 import re
 import time
 import datetime
+from typing import Literal
 import pytz
 from celery.app import task as Task
 from celery.signals import task_received
@@ -30,7 +31,7 @@ EXECUTION_TIME_PARAM = Query(
 )
 
 # Valid timezones for scheduling
-VALID_TIMEZONES = [
+VALID_TIMEZONES = Literal[
     "UTC", "Asia/Tokyo", "America/New_York", "Europe/London",
     "Europe/Paris", "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"
 ]
