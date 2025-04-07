@@ -17,7 +17,7 @@ from Task.Basic import (
     ServiceOrientedArchitecture,
     TaskModel
 )
-from Task.BasicAPIs import BasicCeleryTask
+from Task.BasicAPIs import BasicCeleryTask,EXECUTION_TIME_PARAM,VALID_TIMEZONES,TIMEZONE_PARAM 
 import CustomTask
 from config import *
 
@@ -261,15 +261,9 @@ class MT5CeleryTask(CeleryTask):
         return self.api_perform_action('BookService', m.model_dump(),'NOW')
 
     def api_schedule_book_send(self, acc: MT5Account, 
-    symbol:str='USDJPY',sl:float=147.0,tp:float=150.0,price_open:float=148.0,volume:float=0.01,
-    execution_time: str = Query(datetime.datetime.now(datetime.timezone.utc
-          ).isoformat().split('.')[0],
-           description="Datetime for execution in format YYYY-MM-DDTHH:MM:SS"),
-        timezone: Literal["UTC", "Asia/Tokyo", "America/New_York",
-                          "Europe/London", "Europe/Paris",
-                          "America/Los_Angeles", "Australia/Sydney", "Asia/Singapore"
-                          ] = Query("Asia/Tokyo", 
-                                    description="Choose a timezone from the list")
+        symbol:str='USDJPY',sl:float=147.0,tp:float=150.0,price_open:float=148.0,volume:float=0.01,
+        execution_time:str=EXECUTION_TIME_PARAM,
+        timezone:VALID_TIMEZONES=TIMEZONE_PARAM
     ):
         m = BookService.Model()
         m.param.account = acc
