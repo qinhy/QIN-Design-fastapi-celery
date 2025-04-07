@@ -31,7 +31,10 @@ class ChatGPTService(ServiceOrientedArchitecture):
         class Return(BaseModel):
             response: str = Field("", description="The full model response")
 
+        
         class Logger(ServiceOrientedArchitecture.Model.Logger):
+            pass
+        class Version(ServiceOrientedArchitecture.Model.Version):
             pass
 
         @staticmethod
@@ -62,6 +65,7 @@ class ChatGPTService(ServiceOrientedArchitecture):
                 }
             ]
 
+        version:Version = Version()
         param: Param = Param()
         args: Args = Args()
         ret: Optional[Return] = Return()

@@ -23,7 +23,10 @@ class CollatzSequence(ServiceOrientedArchitecture):
         class Return(BaseModel):
             sequence: List[int] = Field(default_factory=list, description="The Collatz sequence starting at n")
 
+        
         class Logger(ServiceOrientedArchitecture.Model.Logger):
+            pass
+        class Version(ServiceOrientedArchitecture.Model.Version):
             pass
 
         @staticmethod
@@ -33,6 +36,7 @@ class CollatzSequence(ServiceOrientedArchitecture):
                 "args": {"n": 6}
             }]
 
+        version:Version = Version()
         param: Param = Param()
         args: Args = Args()
         ret: Optional[Return] = Return()

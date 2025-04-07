@@ -744,9 +744,18 @@ class ServiceOrientedArchitecture:
         task_id:Optional[str] = Field('AUTO_SET_BUT_NULL_NOW', description="task uuid")
 
         class Version(BaseModel):
+            class_name: str = Field(default='NULL', description="class name")
             major: str = Field(default="1", description="Major version number")
             minor: str = Field(default="0", description="Minor version number")
             patch: str = Field(default="0", description="Patch version number")
+
+            @classmethod
+            def get_class_name(cls):
+                return cls.__qualname__.split('.')[0]
+
+            def __init__(self,*args,**kwargs):
+                super().__init__(*args,**kwargs)
+                self.class_name = self.get_class_name()
 
             def __repr__(self):
                 return self.__str__()
@@ -842,13 +851,26 @@ class ServiceOrientedArchitecture:
                     self._logger.removeHandler(handler)
 
                 
+        version:Version = Version()
         param:Param = Param()
         args:Args = Args()
         ret:Optional[Return] = Return()
         logger:Logger = Logger()
+        version:Version = Version()
 
         @classmethod
         def examples(cls): return []
+        
+        def update_model_data(self,data:dict):
+            if data is not None:
+                # Update all model components from prior model
+                if 'param' in data:
+                    self.param = self.param.model_copy(update=data['param'])
+                if 'args' in data:
+                    self.args = self.args.model_copy(update=data['args'])
+                if 'ret' in data:
+                    self.ret = self.ret.model_copy(update=data['ret'])
+            return self
 
     class Action:
         def __init__(self, model,BasicApp:AppInterface,level=None):

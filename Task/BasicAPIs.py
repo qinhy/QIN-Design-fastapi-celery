@@ -55,7 +55,7 @@ class BasicCeleryTask:
         self.router.get("/pipeline/refresh")(self.api_refresh_pipeline)
         self.router.delete("/pipeline/delete")(self.api_delete_pipeline)    
         
-        def convert_between_models(
+        def _convert_between_models(
             pre_class_type:type[ServiceOrientedArchitecture],
             class_type:type[ServiceOrientedArchitecture],
             action_data:dict,
@@ -78,16 +78,6 @@ class BasicCeleryTask:
 
             model_instance,_ = smart_converter.convert_by_function(
                 conversion_func, previous_model_instance, model_instance)
-            return model_instance
-        
-        # Apply prior model configuration if provided
-        def _apply_prior_model_data(model_instance, prior_model_data):
-            if prior_model_data is not None:
-                prior_model = model_instance.Model(**prior_model_data)
-                # Update all model components from prior model
-                model_instance.param = model_instance.param.model_copy(update=prior_model.param.model_dump())
-                model_instance.args = model_instance.args.model_copy(update=prior_model.args.model_dump())
-                model_instance.ret = model_instance.ret.model_copy(update=prior_model.ret.model_dump())
             return model_instance
         
         def _map_fields_between_models(action_data, previous_to_current_map,class_type):
@@ -142,14 +132,14 @@ class BasicCeleryTask:
             # Case 3: Previous action without mapping
             elif previous_name and not previous_to_current_map:
                 # Use smart conversion between models
-                model_instance = convert_between_models(
+                model_instance = _convert_between_models(
                     self.ACTION_REGISTRY[previous_name],
                     class_type,
                     action_data
                 )
 
             # Apply prior model configuration if provided
-            model_instance = _apply_prior_model_data(model_instance, prior_model_data)
+            model_instance = model_instance.update_model_data(prior_model_data)
 
             model_instance.task_id=t.request.id
             model_instance = class_type.Action(model_instance,BasicApp=BasicApp)()

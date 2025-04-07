@@ -50,7 +50,10 @@ class SmartModelConverter(ServiceOrientedArchitecture):
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
             pass
+        class Version(ServiceOrientedArchitecture.Model.Version):
+            pass
 
+        version:Version = Version()
         param: Param = Param()
         args: Args = Args()
         ret: Optional[Return] = Return()

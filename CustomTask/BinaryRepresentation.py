@@ -23,7 +23,10 @@ class BinaryRepresentation(ServiceOrientedArchitecture):
         class Return(BaseModel):
             binary: List[int] = Field(default_factory=list, description="The binary representation as a list of bits")
 
+        
         class Logger(ServiceOrientedArchitecture.Model.Logger):
+            pass
+        class Version(ServiceOrientedArchitecture.Model.Version):
             pass        
 
         @staticmethod
@@ -33,6 +36,7 @@ class BinaryRepresentation(ServiceOrientedArchitecture):
                 "args": {"n": 13}
             }]
 
+        version:Version = Version()
         param: Param = Param()
         args: Args = Args()
         ret: Optional[Return] = Return()
