@@ -51,6 +51,28 @@ class BasicCeleryTask:
 
     ########################### essential function    
     @staticmethod
+    def wait_until(execution_time_str, timezone_str='Asia/Tokyo', offset_seconds=-1):
+        # Split the datetime and the interval part (e.g., '2025-04-07T15:08:58@every 10 s')
+        datetime_str, _ = execution_time_str.split('@')
+        
+        # Parse the next scheduled time
+        tz = pytz.timezone(timezone_str)
+        scheduled_time = datetime.fromisoformat(datetime_str)
+        scheduled_time = tz.localize(scheduled_time)
+
+        # Add the offset
+        target_time = scheduled_time + datetime.timedelta(seconds=offset_seconds)
+
+        # Wait until target time
+        now = datetime.now(tz)
+        sleep_seconds = (target_time - now).total_seconds()
+        if sleep_seconds > 0:
+            print(f"Waiting for {sleep_seconds:.2f} seconds...")
+            time.sleep(sleep_seconds)
+        else:
+            print("Target time is in the past. Skipping wait.")
+
+    @staticmethod
     def parse_execution_time(execution_time_str, timezone_str):
         """
         Parses the execution_time_str and returns:
