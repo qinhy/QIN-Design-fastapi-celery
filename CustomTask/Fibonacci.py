@@ -37,7 +37,7 @@ class Fibonacci(ServiceOrientedArchitecture):
         param:Param = Param()
         args:Args = Args()
         ret:Optional[Return] = Return()
-        logger:Logger = Logger(name='Fibonacci')
+        logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
         def __init__(self, model, BasicApp, level=None):

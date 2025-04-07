@@ -855,7 +855,7 @@ class ServiceOrientedArchitecture:
         param:Param = Param()
         args:Args = Args()
         ret:Optional[Return] = Return()
-        logger:Logger = Logger()
+        logger: Logger = Logger()
         version:Version = Version()
 
         @classmethod
@@ -885,7 +885,7 @@ class ServiceOrientedArchitecture:
             if level is None:level=ServiceOrientedArchitecture.Model.Logger.Levels.INFO
             self.logger.level = level
             self.logger.init(
-                name=f"{outer_class_name.__class__.__name__}:{self.model.task_id}",action_obj=self)
+                name=f"{model.version.class_name}:{self.model.task_id}",action_obj=self)
             self.listen_data_of_task_uuids = []
 
         def send_data_to_task(self, msg_dict={}):

@@ -42,7 +42,7 @@ class PrimeNumberChecker(ServiceOrientedArchitecture):
         param: Param = Param()
         args: Args = Param()
         ret: Optional[Return] = Return()
-        logger: Logger = Logger(name='PrimeNumberChecker')
+        logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
         def __init__(self, model, BasicApp, level=None):

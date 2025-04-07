@@ -57,7 +57,7 @@ class SmartModelConverter(ServiceOrientedArchitecture):
         param: Param = Param()
         args: Args = Args()
         ret: Optional[Return] = Return()
-        logger: Logger = Logger(name='SmartModelConverter')
+        logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
         ACTION_REGISTRY:dict[str, ServiceOrientedArchitecture] = {}

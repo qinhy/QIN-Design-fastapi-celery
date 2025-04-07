@@ -33,13 +33,17 @@ class CeleryTask(BasicCeleryTask):
         super().__init__(BasicApp, celery_app, root_fast_app, ACTION_REGISTRY)    
 
         self.router.post("/pipeline/add")(self.api_add_pipeline)
-        
+        self.router.post("/pipeline/config")(self.api_set_config_pipeline)
+        self.router.get("/pipeline/config/{name}")(self.api_get_config_pipeline)
+
     def create_api_pipeline_handler(self,name: str,pipeline: list[str]):        
         ACTION_REGISTRY:dict[str,ServiceOrientedArchitecture]=self.ACTION_REGISTRY
 
         first_in_class = ACTION_REGISTRY[pipeline[0]]
         last_out_class = ACTION_REGISTRY[pipeline[-1]]
         in_examples = first_in_class.Model.examples() if hasattr(first_in_class.Model,'examples') else None
+        if in_examples:
+            in_examples = [{'args':i['args']} for i in in_examples]
         
         def api_pipeline_handler(
                 in_model: first_in_class.Model=Body(..., examples=in_examples),
@@ -83,22 +87,26 @@ class CeleryTask(BasicCeleryTask):
             current_data = in_model.model_dump()
             # Get pipeline config
             pipeline_config = self.BasicApp.store().get(f'pipelines_config:{name}')
-            
-            # Pipeline config should contain alternating models and mappings
             expected_config_length = len(pipeline) + len(pipeline) - 1
-            if len(pipeline_config) != expected_config_length:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Pipeline config must follow pattern: [model1, map1to2, model2, map2to3, model3, ...]"
-                )
+            
+            if pipeline_config:
+                # Pipeline config should contain alternating models and mappings
+                if len(pipeline_config) != expected_config_length:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Pipeline config must follow pattern: [model1, map1to2, model2, map2to3, model3, ...]"
+                    )
+            else:
+                pipeline_config = [None]*expected_config_length
 
             # Extract models and mappings from config
             pipeline_config_models = pipeline_config[::2]  # Every other item starting at 0
             pipeline_config_maps = pipeline_config[1::2]   # Every other item starting at 1
+                
 
             # Initialize task chain with first action
             task_chain = self.perform_action.signature(
-                # args=[data, name, prior_model, previous_name,previous_to_current_map],
+                # args=[data, name, prior_model_data, previous_name,previous_to_current_map],
                 args=[
                     current_data,      # Input data
                     pipeline[0],       # First action name
@@ -110,7 +118,7 @@ class CeleryTask(BasicCeleryTask):
 
             # Chain subsequent actions
             previous_name = pipeline[0]
-            for func_name, prior_model, mapping in zip(
+            for func_name, prior_model_data, mapping in zip(
                 pipeline[1:],             # Remaining actions
                 pipeline_config_models[1:],  # Remaining model configs
                 pipeline_config_maps         # Mappings between steps
@@ -119,7 +127,7 @@ class CeleryTask(BasicCeleryTask):
                 task_chain = task_chain | self.perform_action.signature(
                     kwargs={
                         'name': func_name,
-                        'prior_model': prior_model,
+                        'prior_model_data': prior_model_data,
                         'previous_name': previous_name,
                         'previous_to_current_map': mapping,
                     }
@@ -138,8 +146,8 @@ class CeleryTask(BasicCeleryTask):
         
         return api_pipeline_handler        
 
-    def api_config_pipeline(self,
-        name: str='FiboPrime', method: str = 'POST',
+    def api_set_config_pipeline(self,
+        name: str='FiboPrime',
         pipeline_config: list[dict] = [
             # 'Fibonacci'
             {
@@ -168,8 +176,13 @@ class CeleryTask(BasicCeleryTask):
         # "PrimeNumberChecker"
         # ]
         self.BasicApp.store().set(f'pipelines_config:{name}',pipeline_config)
-        return {"status": "success", "pipeline_config": pipeline_config}
+        return {"status": "success", 'name':name, 'pipeline_config': pipeline_config}
 
+    def api_get_config_pipeline(self,name: str='FiboPrime'):
+        self.api_ok()
+        pipeline_config = self.BasicApp.store().get(f'pipelines_config:{name}')
+        return {"status": "success", 'name':name, 'pipeline_config': pipeline_config}
+    
 
     def api_add_pipeline(self,name: str='FiboPrime', method: str = 'POST',
         pipeline: list[str] = ['Fibonacci','PrimeNumberChecker'],
