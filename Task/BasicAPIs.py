@@ -56,6 +56,8 @@ class BasicCeleryTask:
         - utc_execution_time (datetime or None)
         - local_time (datetime or None)
         - recurrence_config (dict or None)
+        
+        Recurrence must be at least every 10 seconds.
         """
         utc_now = datetime.datetime.now(datetime.timezone.utc)
         utc_execution_time = None
@@ -74,7 +76,10 @@ class BasicCeleryTask:
                     'd': int(num_str) * 86400,
                 }[unit.lower()]
 
-                # Recurrence config dict
+                # ❗ Enforce minimum interval of 10 seconds
+                if interval_seconds < 10:
+                    raise ValueError("Recurrence interval must be at least every 10 seconds.")
+
                 recurrence_config = {
                     "every": interval_seconds,
                     "unit": unit.lower(),
@@ -110,6 +115,7 @@ class BasicCeleryTask:
 
         except Exception as e:
             raise ValueError(f"Invalid execution_time format: {execution_time_str}. Error: {str(e)}")
+
 
     def __init__(self,
                  BasicApp:AppInterface,
