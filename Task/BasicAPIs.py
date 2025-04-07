@@ -1,5 +1,6 @@
 # Standard library imports
 import json
+import re
 import time
 import datetime
 from typing import Literal, Optional
@@ -18,11 +19,18 @@ from fastapi.routing import APIRoute
 
 # Application imports
 from Task.Basic import AppInterface, ServiceOrientedArchitecture, SmartModelConverter, TaskModel
+from fastapi import Query
 
 # Common execution time parameter for API endpoints
 EXECUTION_TIME_PARAM = Query(
     'NOW',
-    description="execution time in format YYYY-MM-DDTHH:MM:SS (2025-04-03T06:00:30), or 'NOW', or seconds delay"
+    description=(
+        "Execution time in one of the following formats:\n"
+        "- 'NOW' → immediate execution\n"
+        "- '60' → delay of 60 seconds from now\n"
+        "- '2025-04-03T06:00:30' → execute at this absolute datetime\n"
+        "- 'NOW@every 10 s', '2025-04-03T06:00:30@every 1 d' → recurring schedule"
+    )
 )
 
 # Valid timezones for scheduling
@@ -40,38 +48,73 @@ TIMEZONE_PARAM = Query(
 class BasicCeleryTask:
     
     ########################### essential val
-    # Common execution time parameter for API endpoints
     EXECUTION_TIME_PARAM = EXECUTION_TIME_PARAM
-    
-    # Valid timezones for scheduling
     VALID_TIMEZONES = VALID_TIMEZONES
-    
-    # Common timezone parameter for API endpoints
     TIMEZONE_PARAM = TIMEZONE_PARAM
+
     ########################### essential function    
     @staticmethod
     def parse_execution_time(execution_time_str, timezone_str):
-
+        """
+        Parses the execution_time_str and returns:
+        - utc_execution_time (datetime or None)
+        - local_time (datetime or None)
+        - recurrence_config (dict or None)
+        """
+        utc_now = datetime.datetime.now(datetime.timezone.utc)
         utc_execution_time = None
         local_time = None
+        recurrence_config = None
+
         try:
+            # Match recurrence pattern: "<base>@every <num> <unit>"
+            recur_match = re.match(r"^(.+?)@every\s+(\d+)\s*([smhd])$", execution_time_str.strip(), re.IGNORECASE)
+            if recur_match:
+                base_time_str, num_str, unit = recur_match.groups()
+                interval_seconds = {
+                    's': int(num_str),
+                    'm': int(num_str) * 60,
+                    'h': int(num_str) * 3600,
+                    'd': int(num_str) * 86400,
+                }[unit.lower()]
+
+                # Recurrence config dict
+                recurrence_config = {
+                    "every": interval_seconds,
+                    "unit": unit.lower(),
+                    "original": execution_time_str
+                }
+
+                # Determine base time
+                if base_time_str.upper() == "NOW":
+                    utc_execution_time = utc_now + datetime.timedelta(seconds=interval_seconds)
+                else:
+                    local_time = datetime.datetime.strptime(base_time_str, "%Y-%m-%dT%H:%M:%S")
+                    tz = pytz.timezone(timezone_str)
+                    local_time = tz.localize(local_time)
+                    utc_execution_time = local_time.astimezone(pytz.UTC) + datetime.timedelta(seconds=interval_seconds)
+                
+                return utc_execution_time, local_time, recurrence_config
+
+            # Handle "NOW"
             if execution_time_str.upper() == "NOW":
-                return datetime.datetime.now(datetime.timezone.utc)
-            elif execution_time_str.isdigit():
+                return utc_now, None, None
+
+            # Handle delay in seconds
+            if execution_time_str.isdigit():
                 delay_seconds = int(execution_time_str)
-                return datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=delay_seconds)
-            else:
-                # Parse the datetime string
-                local_time = datetime.datetime.strptime(execution_time_str, "%Y-%m-%dT%H:%M:%S")
-                # Localize it to the given timezone
-                tz = pytz.timezone(timezone_str)
-                local_time = tz.localize(local_time)
-                # Convert to UTC
-                utc_execution_time = local_time.astimezone(pytz.UTC)
+                return utc_now + datetime.timedelta(seconds=delay_seconds), None, None
+
+            # Handle absolute datetime
+            local_time = datetime.datetime.strptime(execution_time_str, "%Y-%m-%dT%H:%M:%S")
+            tz = pytz.timezone(timezone_str)
+            local_time = tz.localize(local_time)
+            utc_execution_time = local_time.astimezone(pytz.UTC)
+            return utc_execution_time, local_time, None
+
         except Exception as e:
             raise ValueError(f"Invalid execution_time format: {execution_time_str}. Error: {str(e)}")
-        return utc_execution_time, local_time
-    
+
     def __init__(self,
                  BasicApp:AppInterface,
                  celery_app,
