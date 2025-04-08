@@ -243,16 +243,27 @@ class FileSystemPubSub(PubSubInterface):
         if self.listener_thread and self.listener_thread.is_alive():
             self.listener_thread.join()
 
-            
 class TaskModel(BaseModel):
+    """Model representing a task with its metadata and scheduling information."""
+    # Core task identifiers
     task_id: str
+    parent_id: Optional[str] = None
+    
+    # Task status and results
     status: Optional[str] = None
     result: Optional[str] = None
+    traceback: Optional[str] = None
+    
+    # Execution timing information
     date_done: Optional[datetime] = None
-    scheduled_for_the_timezone: Optional[datetime] = None
     scheduled_for_utc: Optional[datetime] = None
-    next_schedule: Optional[tuple[str,str]] = None
-    timezone: Optional[str] = None
+    scheduled_for_the_timezone: Optional[datetime] = None
+    timezone: Optional[str] = None    
+    # Scheduling metadata
+    next_schedule: Optional[tuple[str, str]] = None    
+    # Task relationships
+    children: Optional[list[list[list[str]]]] = None
+
 
     @classmethod
     def create_task_response(cls, task: Any,
@@ -275,7 +286,7 @@ class AppInterface(PubSubInterface):
     def check_rabbitmq_health(self, url=None, user='', password='') -> bool:('check_rabbitmq_health')
     def check_mongodb_health(self, url=None) -> bool:('check_mongodb_health')
     def get_tasks_collection(self): raise NotImplementedError('get_tasks_collection')
-    def get_tasks_list(self)->list[TaskModel]: raise NotImplementedError('get_tasks_list')
+    def get_tasks_list(self)->list[dict]: raise NotImplementedError('get_tasks_list')
     def get_task_meta(self, task_id: str)->dict: raise NotImplementedError('get_task_meta')
     def set_task_status(self, task_id, result='', status=celery.states.STARTED): raise NotImplementedError('set_task_status')
 
@@ -346,18 +357,47 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
         collection = db.get_collection(self.celery_meta)
         return collection
 
-    def get_tasks_list(self):
+    def get_tasks_list(self, page=1, page_size=20, sort_by='_id', sort_order=-1):
+        """
+        Get a paginated list of tasks.
+        
+        Args:
+            page: Page number (starting from 1)
+            page_size: Number of items per page
+            sort_by: Field to sort by (default: '_id' which is typically creation time)
+            sort_order: Sort direction (1 for ascending, -1 for descending)
+            
+        Returns:
+            dict: Contains tasks list, total count, page info, and pagination metadata
+        """
         collection = self.get_tasks_collection()
+        
+        # Calculate skip value for pagination
+        skip = (page - 1) * page_size
+        
+        # Get total count for pagination metadata
+        total_count = collection.count_documents({})
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        # Get paginated and sorted results
+        cursor = collection.find().sort(sort_by, sort_order).skip(skip).limit(page_size)
+        
         tasks = []
-        for task in collection.find():
-            task_data = TaskModel(
-                task_id=task.get('_id'),
-                status=task.get('status'),
-                result=json.dumps(task.get('result')),
-                date_done=task.get('date_done')
-            )
-            tasks.append(task_data)
-        return tasks
+        for task in cursor:
+            task['task_id'] = task['_id']
+            del task['_id']
+            tasks.append(task)
+            
+        # Return tasks with pagination metadata
+        return {
+            'tasks': tasks,
+            'total_count': total_count,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': total_pages,
+            'has_next': page < total_pages,
+            'has_prev': page > 1
+        }
 
     def get_task_meta(self, task_id: str):
         collection = self.get_tasks_collection()
@@ -407,28 +447,44 @@ class RedisApp(AppInterface, RedisPubSub):
             return self.redis_client().ping()
         except redis.ConnectionError:
             return False
-
+        
     def get_tasks_collection(self):
         """Returns a list of keys representing tasks in Redis."""
         return self.redis_client().keys(pattern='celery-task-meta-*')
 
-    def get_tasks_list(self):
-        """Fetches a list of all tasks stored in Redis."""
+    def get_tasks_list(self, page=1, page_size=10):
+        """Fetches a list of all tasks stored in Redis with pagination support."""
         task_keys = self.get_tasks_collection()
+        total_tasks = len(task_keys)
+        total_pages = max(1, (total_tasks + page_size - 1) // page_size)
+        
+        # Adjust page if out of bounds
+        page = min(max(1, page), total_pages)
+        
+        # Calculate slice indices for pagination
+        start_idx = (page - 1) * page_size
+        end_idx = min(start_idx + page_size, total_tasks)
+        
+        # Get paginated keys
+        paginated_keys = task_keys[start_idx:end_idx]
         tasks = []
 
-        for key in task_keys:
+        for key in paginated_keys:
             task_data_json = self.redis_client().get(key)
             if task_data_json:
                 task: dict = json.loads(task_data_json)
-                task_data = TaskModel(
-                    task_id=task.get('task_id'),
-                    status=task.get('status'),
-                    result=json.dumps(task.get('result')),
-                    date_done=task.get('date_done')
-                )
-                tasks.append(task_data)
-        return tasks
+                tasks.append(task)
+        
+        # Return tasks with pagination metadata
+        return {
+            'tasks': tasks,
+            'total_count': total_tasks,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': total_pages,
+            'has_next': page < total_pages,
+            'has_prev': page > 1
+        }
 
     def get_task_meta(self, task_id: str):
         task_key = f'celery-task-meta-{task_id}'
@@ -445,7 +501,7 @@ class RedisApp(AppInterface, RedisPubSub):
                 task_id=task_id,
                 status=status,
                 result=result)
-        self.redis_client().set(task_key, json.dumps(task_data.model_dump()))
+        self.redis_client().set(task_key, json.dumps(task_data.model_dump(exclude_none=True)))
 
 class FileSystemApp(AppInterface, FileSystemPubSub):
     def __init__(self, base_dir="./FileSystemApp", celery_meta="tasks", task_pubsub_name="FileSystemPubSub"):
@@ -492,27 +548,65 @@ class FileSystemApp(AppInterface, FileSystemPubSub):
             return content == "ok"
         except Exception:
             return False
-
+        
     def get_tasks_collection(self):
         """Returns list of full paths to celery task metadata files."""
         return self.store().keys("celery-task-meta-*")
-
-    def get_tasks_list(self):
+    
+    def get_tasks_list(self, page: int = 1, page_size: int = 20):
+        """
+        Returns a paginated list of tasks.
+        
+        Parameters
+        ----------
+        page : int
+            The page number (1-indexed)
+        page_size : int
+            Number of items per page
+            
+        Returns
+        -------
+        dict
+            Contains tasks list, pagination metadata, and total count
+        """
+        all_task_ids = self.get_tasks_collection()
+        total_tasks = len(all_task_ids)
+        
+        # Calculate pagination
+        start_idx = (page - 1) * page_size
+        end_idx = min(start_idx + page_size, total_tasks)
+        
+        # Get only the tasks for the requested page
+        page_task_ids = all_task_ids[start_idx:end_idx]
+        
         tasks = []
-        for task_full_id in self.get_tasks_collection():
+        for task_full_id in page_task_ids:
             try:
                 task = TaskModel(**self.store().get(task_full_id))
-                tasks.append(task)
+                tasks.append(task.model_dump(exclude_none=True))
             except Exception as e:
                 print(f"Error reading task {task_full_id}: {e}")
-        return tasks
+        
+        # Calculate total pages
+        total_pages = (total_tasks + page_size - 1) // page_size
+            
+        # Return tasks with pagination metadata
+        return {
+            'tasks': tasks,
+            'total_count': total_tasks,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': total_pages,
+            'has_next': page < total_pages,
+            'has_prev': page > 1
+        }
 
     def get_task_meta(self, task_id: str):
         return self.store().get(f"celery-task-meta-{task_id}")
 
     def set_task_status(self, task_id, result='', status=celery.states.STARTED):
         task_data = TaskModel(task_id=task_id, status=status, result=result)
-        self.store().set(f"celery-task-meta-{task_id}",task_data.model_dump())
+        self.store().set(f"celery-task-meta-{task_id}",task_data.model_dump(exclude_none=True))
 
 class SmartModelConverter(BaseModel):
     """
