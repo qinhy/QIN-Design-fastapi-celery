@@ -1,7 +1,7 @@
 from .Fibonacci import Fibonacci
 from .PrimeNumberChecker import PrimeNumberChecker
 from .PalindromeChecker import PalindromeChecker
-from .ChatGPTService import ChatGPTService
+from .ChatGPTService import ChatGPTService, DeepseekService
 from .Downloader import Downloader
 from .BinaryRepresentation import BinaryRepresentation
 from .CollatzSequence import CollatzSequence

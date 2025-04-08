@@ -80,6 +80,8 @@ class ChatGPTService(ServiceOrientedArchitecture):
             top_p: float = Field(1.0, ge=0.0, le=1.0, description="Nucleus sampling parameter")
             stream: bool = Field(False, description="Whether to use streaming mode")
             system_prompt: Optional[str] = Field(None, description="Optional system prompt")
+            base_url: str = Field("https://api.openai.com/v1/chat/completions", description="OpenAI API endpoint")
+
 
         class Args(BaseModel):
             user_prompt: str = Field("Hi", description="The user prompt to send to ChatGPT")
@@ -175,10 +177,10 @@ class ChatGPTService(ServiceOrientedArchitecture):
             return self.model
 
 
-        def _get_api_key(self, param_key: Optional[str]) -> str:
-            api_key: Optional[str] = param_key or os.environ.get('OPENAI_API_KEY')
+        def _get_api_key(self, param_key: Optional[str], env_key: Optional[str]='OPENAI_API_KEY') -> str:
+            api_key: Optional[str] = param_key or os.environ.get(env_key)
             if not api_key:
-                raise ValueError("OpenAI API key is missing. Provide via param.api_key or 'OPENAI_API_KEY' env var.")
+                raise ValueError(f"API key is missing. Provide via param.api_key or '{env_key}' env var.")
             return api_key
 
 
@@ -225,7 +227,7 @@ class ChatGPTService(ServiceOrientedArchitecture):
 
         def _send_request(self, headers: Dict[str, str], payload: Dict[str, Any]) -> requests.Response:
             response = requests.post(
-                url='https://api.openai.com/v1/chat/completions',
+                url=self.model.param.base_url,
                 headers=headers,
                 data=json.dumps(payload),
                 stream=True
@@ -281,7 +283,117 @@ class ChatGPTService(ServiceOrientedArchitecture):
             self.logger.log(level, message)
             # self.send_data_to_task({level: message})
 
+class DeepseekService(ChatGPTService):
+    class Levels(ChatGPTService.Levels):
+        pass
 
+    class Model(ChatGPTService.Model):
+        class Param(ChatGPTService.Model.Param):
+            model: str = Field("deepseek-reasoner", description="Deepseek model to use")
+            base_url: str = Field("https://api.deepseek.com/v1/chat/completions", description="Deepseek API endpoint")
+
+        class Return(BaseModel):
+            response: str = Field("", description="The assistant's final response")
+            reasoning: Optional[str] = Field(None, description="The model's internal reasoning process")
+
+        param: Param = Param()
+        ret: Optional[Return] = Return()
+
+    class Action(ChatGPTService.Action):
+        def __init__(self, model, BasicApp, level=None):
+            super().__init__(model, BasicApp, level)
+            self.model: DeepseekService.Model = self.model
+
+        def _get_api_key(self, param_key: Optional[str], env_key: Optional[str]='DEEPSEEK_API_KEY') -> str:
+            return super()._get_api_key(param_key, env_key)
+        
+        def __call__(self, *args, **kwargs) -> Any:
+            with self.listen_stop_flag() as stop_flag:
+                if stop_flag.is_set():
+                    return self.to_stop()
+
+                try:
+                    param = self.model.param
+                    args_obj = self.model.args
+
+                    api_key: str = self._get_api_key(param.api_key)
+                    headers: Dict[str, str] = self._build_headers(api_key)
+                    payload: Dict[str, Any] = self._build_payload(
+                        model=param.model,
+                        system_prompt=param.system_prompt,
+                        user_prompt=args_obj.user_prompt,
+                        temperature=param.temperature,
+                        max_tokens=param.max_tokens,
+                        top_p=param.top_p,
+                        stream=param.stream
+                    )
+
+                    self.log_and_send("Sending request to Deepseek...")
+                    response: requests.Response = self._send_request(headers, payload)
+
+                    if param.stream:
+                        content, reasoning = self._stream_response_chunks(response, stop_flag)
+                    else:
+                        content = self._handle_non_stream_response(response)
+                        reasoning = self.model.ret.reasoning or ""
+
+                    self.model.ret.response = content
+                    self.model.ret.reasoning = reasoning
+
+                    if reasoning:
+                        self.log_and_send("Full reasoning:\n" + reasoning)
+                    self.log_and_send("Response completed.")
+
+                except Exception as e:
+                    self._handle_error(e)
+
+            return self.model
+
+        def _stream_response_chunks(self, response: requests.Response, stop_flag: threading.Event):
+            content = ""
+            reasoning = ""
+
+            for line in response.iter_lines():
+                if stop_flag.is_set():
+                    break
+
+                if line:
+                    decoded = self._decode_stream_line(line)
+                    if decoded == "[DONE]":
+                        break
+
+                    try:
+                        chunk = json.loads(decoded)
+                        delta = chunk['choices'][0]['delta']
+
+                        reasoning_delta = delta.get('reasoning_content', '')
+                        content_delta = delta.get('content', '')
+
+                        if reasoning_delta:
+                            self.log_and_send(f"[Reasoning] {reasoning_delta}")
+                            reasoning += reasoning_delta
+
+                        if content_delta:
+                            self.log_and_send(content_delta)
+                            content += content_delta
+
+                    except json.JSONDecodeError:
+                        self.log_and_send(f"Malformed chunk: {decoded}", DeepseekService.Levels.WARNING)
+
+            return content, reasoning
+
+        def _handle_non_stream_response(self, response: requests.Response) -> str:
+            try:
+                data: Dict[str, Any] = response.json()
+                message = data['choices'][0]['message']
+                content = message.get('content', '')
+                reasoning = message.get('reasoning_content')
+                self.model.ret.reasoning = reasoning
+                return content
+            except (KeyError, ValueError, json.JSONDecodeError) as e:
+                raise RuntimeError(f"Failed to parse non-stream response: {str(e)}")
+
+                
 def test_chatgpt_service():
     """Simple test function for ChatGPTService"""
     # Create a service instance
@@ -344,8 +456,39 @@ def test_chatgpt_service_with_image():
         print(f"Image test failed with error: {str(e)}")
         return False
 
+def test_deepseek_service():
+    """Simple test function for DeepseekService"""
+    import os
+
+    # Create a service instance
+    model = DeepseekService.Model()
+
+    # Configure parameters
+    model.param.model = "deepseek-reasoner"
+    model.param.api_key = os.environ.get('DEEPSEEK_API_KEY')  # Make sure this is set
+    model.param.max_tokens = 50
+    model.param.stream = True
+    model.param.system_prompt = "You are a logical assistant."
+
+    # Set the user prompt
+    model.args.user_prompt = "Which is greater, 3.14 or 2.718?"
+
+    # Run the service
+    try:
+        result = DeepseekService.Action(model, None)()
+        print("\nTest Result:")
+        print(f"Prompt: {model.args.user_prompt}")
+        print(f"Reasoning: {result.ret.reasoning}")
+        print(f"Response: {result.ret.response}")
+        print("Test end!")
+        return True
+    except Exception as e:
+        print(f"Test failed with error: {str(e)}")
+        return False
+
 
 if __name__ == "__main__":
     # Run the test when the script is executed directly
     test_chatgpt_service()
-    test_chatgpt_service_with_image()
+    # test_chatgpt_service_with_image()
+    test_deepseek_service()
