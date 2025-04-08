@@ -2,8 +2,7 @@ from .Fibonacci import Fibonacci
 from .PrimeNumberChecker import PrimeNumberChecker
 from .MT5Book import BookService, MT5CopyLastRatesService
 from .PalindromeChecker import PalindromeChecker
-from .MT5RatesDownloader import MT5RatesDownloader
-from .ChatGPTService import ChatGPTService
+from .ChatGPTService import ChatGPTService, DeepseekService
 from .Downloader import Downloader
 from .BinaryRepresentation import BinaryRepresentation
 from .CollatzSequence import CollatzSequence
@@ -14,6 +13,7 @@ SmartModelConverter.Action.ACTION_REGISTRY = {
     'PrimeNumberChecker': PrimeNumberChecker,
     'PalindromeChecker': PalindromeChecker,
     'ChatGPTService': ChatGPTService,
+    'DeepseekService': DeepseekService,
     'Downloader': Downloader,
     'BinaryRepresentation': BinaryRepresentation,
     'CollatzSequence': CollatzSequence,

@@ -125,8 +125,7 @@ class BasicCeleryTask:
             
         model_instance, _, class_type = self._prepare_action(data)
         if prior_data:
-            prior_model_instance, _, _ = self._prepare_action(prior_data)
-            model_instance.update_model_data(prior_model_instance.model_dump())
+            model_instance.update_model_data(prior_data)
         model_instance.task_id = task_id
         model_instance = class_type.Action(model_instance, BasicApp=self.BasicApp)()
         model_dump = model_instance.model_dump_json()
