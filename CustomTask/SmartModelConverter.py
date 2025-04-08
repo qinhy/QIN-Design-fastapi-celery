@@ -202,10 +202,16 @@ if __name__ == "__main__":
             
     from Fibonacci import Fibonacci
     from PrimeNumberChecker import PrimeNumberChecker
+    from SimpleWebRequest import SimpleWebRequest
+    from Downloader import Downloader
+    from UploadToFTP import UploadToFTP
     # Set up the registry
     SmartModelConverter.Action.ACTION_REGISTRY = {
         'Fibonacci': Fibonacci,
-        'PrimeNumberChecker': PrimeNumberChecker
+        'PrimeNumberChecker': PrimeNumberChecker,
+        'SimpleWebRequest': SimpleWebRequest,
+        'Downloader': Downloader,
+        'UploadToFTP': UploadToFTP
     }
     
     # Create model instance
@@ -215,7 +221,16 @@ if __name__ == "__main__":
     model.param.api_key = os.environ.get('OPENAI_API_KEY')
     
     model = SmartModelConverter.Action(model, None)()
+    print(f"Generated code: {model.ret.function_name}\n{model.ret.code_snippet}")
+    print("Test completed successfully")
+
+
+    # Create model instance
+    model = SmartModelConverter.Model()
+    model.args.source_class_name = "Downloader"
+    model.args.target_class_name = "UploadToFTP"
+    model.param.api_key = os.environ.get('OPENAI_API_KEY')
     
-    
+    model = SmartModelConverter.Action(model, None)()
     print(f"Generated code: {model.ret.function_name}\n{model.ret.code_snippet}")
     print("Test completed successfully")
