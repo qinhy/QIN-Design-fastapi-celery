@@ -3,7 +3,7 @@ import json
 import re
 import time
 import datetime
-from typing import Literal
+from typing import Literal, Optional
 import pytz
 from celery.app import task as Task
 from celery.signals import task_received
@@ -44,14 +44,256 @@ TIMEZONE_PARAM = Query(
 
 class BasicCeleryTask:
     
-    ########################### essential val
+    ########################### Essential Constants
     EXECUTION_TIME_PARAM = EXECUTION_TIME_PARAM
     VALID_TIMEZONES = VALID_TIMEZONES
     TIMEZONE_PARAM = TIMEZONE_PARAM
 
-    ########################### essential function    
+    ########################### Initialization
+    def __init__(self,
+                 BasicApp: AppInterface,
+                 celery_app,
+                 root_fast_app: FastAPI,
+                 ACTION_REGISTRY = {}):
+        
+        self.BasicApp = BasicApp
+        self.celery_app = celery_app
+        self.ACTION_REGISTRY: dict[str, ServiceOrientedArchitecture] = ACTION_REGISTRY
+        self.pipelines = {}
+        self.root_fast_app = root_fast_app
+        self.load_code_snippet()
+
+        # Initialize API router
+        self.router = APIRouter()
+        
+        # Register API endpoints
+        self._register_api_endpoints()
+        
+        # Setup Celery tasks and handlers
+        self._setup_celery_tasks()
+        
+        # Auto-generate endpoints for each action
+        self._register_action_endpoints()
+    
+    def _register_api_endpoints(self):
+        """Register all API endpoints"""
+        self.router.get("/tasks/")(self.api_list_tasks)
+        self.router.get("/tasks/meta/{task_id}")(self.api_task_meta)
+        self.router.get("/tasks/stop/{task_id}")(self.api_task_stop)
+        self.router.get("/tasks/sub/{task_id}")(self.api_listen_data_of_task)
+        self.router.get("/workers/")(self.api_get_workers)
+        self.router.get("/action/list")(self.api_perform_action_list)
+        self.router.post("/action/{name}")(self.api_perform_action)
+        
+        # Pipeline management endpoints
+        self.router.get("/pipeline/list")(self.api_list_pipelines)
+        # self.router.post("/pipeline/add")(self.api_add_pipeline)
+        self.router.get("/pipeline/refresh")(self.api_refresh_pipeline)
+        self.router.delete("/pipeline/delete")(self.api_delete_pipeline)
+    
+    def _register_action_endpoints(self):
+        """Auto-generate endpoints for each action"""
+        for action_name, action_class in self.ACTION_REGISTRY.items():
+            self.add_web_api(
+                self._make_api_action_handler(action_name, action_class),
+                'post', f"/{action_name.lower()}/")
+            
+    def _setup_celery_tasks(self):
+        """Setup Celery tasks and handlers"""
+        # Register task received handler
+        @task_received.connect
+        def on_task_received(*args, **kwags):
+            """Handle task received event"""
+            request = kwags.get('request')
+            if request is None:
+                return
+            headers = request.__dict__['_message'].headers
+            self.BasicApp.set_task_status(headers['id'],
+                            headers['argsrepr'], 'RECEIVED')
+        
+        self.on_task_received = on_task_received
+        self.celery_perform_simple_action = self._create_celery_perform_simple_action()
+        self.celery_perform_translate_action = self._create_celery_perform_translate_action()
+    
+    def perform_simple_action(
+        self,
+        task_id: str,
+        data: dict, 
+        prior_data: dict = None,
+    ) -> ServiceOrientedArchitecture.Model:
+        """Execute a simple action with the given data"""
+            
+        model_instance, _, class_type = self._prepare_action(data)
+        if prior_data:
+            prior_model_instance, _, _ = self._prepare_action(prior_data)
+            model_instance.update_model_data(prior_model_instance.model_dump())
+        model_instance.task_id = task_id
+        model_instance = class_type.Action(model_instance, BasicApp=self.BasicApp)()
+        model_dump = model_instance.model_dump_json()
+        return model_dump
+    
+    def perform_translate_action(
+        self,
+        task_id: str,
+        action_name: str,
+        previous_data: dict,
+        previous_to_current_map: dict = None,
+        prior_data: dict = None,
+    ) -> ServiceOrientedArchitecture.Model:
+        """Execute an action with data translated from a previous action""" 
+        
+        if action_name not in self.ACTION_REGISTRY:
+            raise ValueError(f"Action '{action_name}' is not registered.")            
+        # Get the action class
+        class_type: type[ServiceOrientedArchitecture] = self.ACTION_REGISTRY[action_name]            
+        # Handle model creation based on pipeline context
+        model_instance = class_type.Model(**class_type.Model.examples().pop(0))  
+
+        previous_model_instance, previous_name, _ = self._prepare_action(previous_data)
+        previous_data = previous_model_instance.model_dump()
+        
+        if previous_to_current_map:
+            action_data = self._map_fields_between_models(
+                previous_data, previous_to_current_map)
+            
+            # Create model with example data and update args
+            model_instance.args = model_instance.args.model_copy(update=action_data)
+        
+        elif not previous_to_current_map:
+            # Use smart conversion between models
+            model_instance = self._convert_between_models(
+                self.ACTION_REGISTRY[previous_name],
+                class_type,
+                previous_data
+            )
+
+        return self.perform_simple_action(task_id, model_instance.model_dump(), prior_data)
+    
+    def _create_celery_perform_simple_action(self):
+        """Create the celery_perform_simple_action task"""
+        @self.celery_app.task(bind=True)
+        def celery_perform_simple_action(
+            t: Task,
+            data: dict, 
+            prior_data: dict = None,
+        ) -> ServiceOrientedArchitecture.Model:
+            """Celery task wrapper for perform_simple_action"""
+            return self.perform_simple_action(t.request.id, data, prior_data)
+        
+        return celery_perform_simple_action
+    
+    def _create_celery_perform_translate_action(self):
+        """Create the celery_perform_translate_action task"""
+        @self.celery_app.task(bind=True)
+        def celery_perform_translate_action(
+            t: Task,
+            previous_data: dict,
+            action_name: str,
+            previous_to_current_map: dict = None,
+            prior_data: dict = None,
+        ) -> ServiceOrientedArchitecture.Model:
+            """Celery task wrapper for perform_translate_action"""
+            return self.perform_translate_action(t.request.id, action_name, previous_data, previous_to_current_map, prior_data)        
+        return celery_perform_translate_action
+    
+    def _create_task_received_handler(self):
+        """Create the task received event handler"""
+        @task_received.connect
+        def on_task_received(*args, **kwags):
+            """Handle task received event"""
+            request = kwags.get('request')
+            if request is None:
+                return
+            headers = request.__dict__['_message'].headers
+            self.BasicApp.set_task_status(headers['id'],
+                            headers['argsrepr'], 'RECEIVED')
+        
+        return on_task_received
+    
+    def _prepare_action(self, json_data: dict | str):
+        """Prepare and validate action data"""
+        # Validate input
+        if json_data is None:
+            raise ValueError("json_data cannot be None")
+            
+        action_data = json_data
+        
+        # Parse JSON string if needed
+        if isinstance(action_data, str):
+            try:
+                action_data = json.loads(action_data)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Invalid JSON format: {str(e)}") from e
+        
+        # Validate data structure
+        if not isinstance(action_data, dict):
+            raise TypeError(f"Expected dict or JSON string, got {type(action_data).__name__}")
+            
+        if 'version' not in action_data:
+            raise KeyError("Missing required 'version' field in action data")
+            
+        if 'class_name' not in action_data.get('version', {}):
+            raise KeyError("Missing required 'class_name' field in version data")
+
+        action_name = action_data['version']['class_name']
+
+        # Validate action exists
+        if action_name not in self.ACTION_REGISTRY:
+            available_actions = ", ".join(self.ACTION_REGISTRY.keys())
+            raise ValueError(f"Action '{action_name}' is not registered. Available actions: {available_actions}")
+        
+        # Get the action class
+        class_type: type[ServiceOrientedArchitecture] = self.ACTION_REGISTRY[action_name]
+        model_instance = class_type.Model(**action_data)            
+        return model_instance, action_name, class_type
+    
+    def _map_fields_between_models(self, action_data, previous_to_current_map):
+        """Map specific fields from previous return to current args"""
+        previous_ret_data = action_data['ret']
+        current_args_data = {}
+        for k, v in previous_to_current_map.items():
+            current_args_data[k] = previous_ret_data[v]
+        
+        return current_args_data
+    
+    def _convert_between_models(
+        self,
+        pre_class_type: type[ServiceOrientedArchitecture],
+        class_type: type[ServiceOrientedArchitecture],
+        action_data: dict,
+        smart_converter: SmartModelConverter = SmartModelConverter()
+    ):
+        """Convert data between different model types using smart conversion"""
+        # Create model instances
+        previous_model_instance = pre_class_type.Model(**action_data)
+        model_instance = class_type.Model.examples().pop(0)
+        model_instance = class_type.Model(**model_instance)
+        
+        # Get function name for conversion
+        function_name = smart_converter.get_function_name(pre_class_type, class_type)
+        code_snippet = self.get_code_snippet(function_name)
+        
+        if code_snippet is None:
+            code_snippet, _ = smart_converter.build(pre_class_type, class_type)
+            self.save_code_snippet(code_snippet, function_name)          
+
+        conversion_func = smart_converter.get_func_from_code(code_snippet, function_name)
+
+        model_instance, _ = smart_converter.convert_by_function(
+            conversion_func, previous_model_instance, model_instance)
+        return model_instance
+
+    ########################### Time and Scheduling Methods
     @staticmethod
     def wait_until(execution_time_str, timezone_str='Asia/Tokyo', offset_seconds=-1):
+        """
+        Wait until the specified execution time.
+        
+        Args:
+            execution_time_str: Execution time string in ISO format
+            timezone_str: Timezone string
+            offset_seconds: Offset in seconds to add to the execution time
+        """
         # Split the datetime and the interval part (e.g., '2025-04-07T15:08:58@every 10 s')
         datetime_str, _ = execution_time_str.split('@')
         
@@ -87,7 +329,7 @@ class BasicCeleryTask:
         - 'YYYY-MM-DDTHH:MM:SS'
         - 'NOW@every 1 d', '2025-04-07T12:00:00@every 10 s', etc.
         """
-        print('parse_execution_time : get',execution_time_str, timezone_str)
+        print('parse_execution_time: get', execution_time_str, timezone_str)
 
         utc_now = datetime.datetime.now(datetime.timezone.utc)
         tz = pytz.timezone(timezone_str)
@@ -143,167 +385,13 @@ class BasicCeleryTask:
                 utc_execution_time = local_time.astimezone(pytz.UTC)
                 next_execution_time_str = None
 
-            print('parse_execution_time : return ',utc_execution_time,'|', local_time,'|',(next_execution_time_str,timezone_str))    
-            return utc_execution_time, local_time, (next_execution_time_str,timezone_str)
+            print('parse_execution_time: return', utc_execution_time, '|', local_time, '|', (next_execution_time_str, timezone_str))    
+            return utc_execution_time, local_time, (next_execution_time_str, timezone_str)
 
         except Exception as e:
             raise ValueError(f"Invalid execution_time format: {execution_time_str}. Error: {str(e)}")
 
-
-    def __init__(self,
-                 BasicApp:AppInterface,
-                 celery_app,
-                 root_fast_app:FastAPI,
-                 ACTION_REGISTRY = {}):
-        
-        self.BasicApp = BasicApp
-        self.celery_app = celery_app
-        self.ACTION_REGISTRY:dict[str, ServiceOrientedArchitecture] = ACTION_REGISTRY
-        self.pipelines = {}
-        self.root_fast_app = root_fast_app
-        self.load_code_snippet()
-
-        self.router = APIRouter()
-        self.router.get("/tasks/")(
-                                    self.api_list_tasks)
-        self.router.get("/tasks/meta/{task_id}")(
-                                    self.api_task_meta)
-        self.router.get("/tasks/stop/{task_id}")(
-                                    self.api_task_stop)
-        self.router.get("/tasks/sub/{task_id}")(
-                                    self.api_listen_data_of_task)
-        self.router.get("/workers/")(
-                                    self.api_get_workers)
-        self.router.get("/action/list")(
-                                    self.api_perform_action_list)
-        self.router.post("/action/{name}")(
-                                    self.api_perform_action)
-        
-        self.router.get("/pipeline/list")(self.api_list_pipelines)
-        # self.router.post("/pipeline/add")(self.api_add_pipeline)
-        self.router.get("/pipeline/refresh")(self.api_refresh_pipeline)
-        self.router.delete("/pipeline/delete")(self.api_delete_pipeline)    
-        
-        def _convert_between_models(
-            pre_class_type:type[ServiceOrientedArchitecture],
-            class_type:type[ServiceOrientedArchitecture],
-            action_data:dict,
-            smart_converter:SmartModelConverter=SmartModelConverter()
-        ):
-            # Create model instances
-            previous_model_instance = pre_class_type.Model(**action_data)
-            model_instance = class_type.Model.examples().pop(0)
-            model_instance = class_type.Model(**model_instance)
-            
-            # Get function name for conversion
-            function_name = smart_converter.get_function_name(pre_class_type, class_type)
-            code_snippet = self.get_code_snippet(function_name)
-            
-            if code_snippet is None:
-                code_snippet,_ = smart_converter.build(pre_class_type, class_type)
-                self.save_code_snippet(code_snippet, function_name)          
-
-            conversion_func = smart_converter.get_func_from_code(code_snippet, function_name)
-
-            model_instance,_ = smart_converter.convert_by_function(
-                conversion_func, previous_model_instance, model_instance)
-            return model_instance
-        
-        def _map_fields_between_models(action_data, previous_to_current_map):
-            # Map specific fields from previous return to current args
-            previous_ret_data = action_data['ret']
-            current_args_data = {}
-            for k, v in previous_to_current_map.items():
-                current_args_data[k] = previous_ret_data[v]
-            
-            return current_args_data
-        
-        # Register the Celery task
-        @self.celery_app.task(bind=True)
-        def perform_action(
-            t: Task, 
-            data: dict, 
-            name: str = 'NULL',
-            prior_model_data: dict = None,
-            previous_name: str = None,
-            previous_to_current_map: dict = None,
-            BasicApp = BasicApp
-        ) -> int:
-            """Generic Celery task to execute any registered action."""
-            # Prepare action data
-            action_name, action_data = name, data
-            
-            if isinstance(action_data, str):
-                action_data = json.loads(action_data)
-
-            task_chain_ids = action_data.get('task_chain_ids',[])
-            if 'NULL' not in action_data['task_id']:
-                action_data['task_chain_ids'].append(action_data['task_id'])
-
-            # Validate action exists
-            if action_name not in self.ACTION_REGISTRY:
-                raise ValueError(f"Action '{action_name}' is not registered.")
-            
-            # if action_name != action_data['version']['class_name']:
-            #     previous_name = action_data['version']['class_name']
-
-            # Get the action class
-            class_type: type[ServiceOrientedArchitecture] = self.ACTION_REGISTRY[action_name]
-            
-            # Handle model creation based on pipeline context
-            model_instance = class_type.Model(**class_type.Model.examples().pop(0))            
-            
-            # Case 1: No previous action in pipeline
-            if not previous_name:
-                # Create model directly from input data
-                model_instance = class_type.Model(**action_data)
-                
-            # Case 2: Previous action with mapping provided
-            elif previous_name and previous_to_current_map:
-                action_data = _map_fields_between_models(
-                    action_data, previous_to_current_map)
-                
-                # Create model with example data and update args
-                model_instance.args = model_instance.args.model_copy(update=action_data)
-                
-            # Case 3: Previous action without mapping
-            elif previous_name and not previous_to_current_map:
-                # Use smart conversion between models
-                model_instance = _convert_between_models(
-                    self.ACTION_REGISTRY[previous_name],
-                    class_type,
-                    action_data
-                )
-
-            # Apply prior model configuration if provided
-            model_instance = model_instance.update_model_data(prior_model_data)
-            model_instance.task_id=t.request.id
-
-            if task_chain_ids:
-                model_instance.task_chain_ids = task_chain_ids + [model_instance.task_id]
-
-            model_instance = class_type.Action(model_instance,BasicApp=BasicApp)()
-            model_dump = model_instance.model_dump_json()
-            return model_dump
-
-        @task_received.connect
-        def on_task_received(*args, **kwags):
-            request =  kwags.get('request')
-            if request is None:return
-            headers =  request.__dict__['_message'].headers
-            BasicApp.set_task_status(headers['id'],
-                            headers['argsrepr'],'RECEIVED')
-            
-        self.perform_action = perform_action
-        self.on_task_received = on_task_received
-
-        # Auto-generate endpoints for each action
-        for action_name, action_class in ACTION_REGISTRY.items():
-            self.add_web_api(
-                self._make_api_action_handler(action_name, action_class),
-                'post',f"/{action_name.lower()}/")            
-    
-        
+    ########################### Code Snippet Management
     def save_code_snippet(self, code_snippet: str, function_name: str):
         code_snippets = self.BasicApp.store().get('code_snippets')
         if code_snippets is None:
@@ -558,14 +646,18 @@ class BasicCeleryTask:
         if name not in self.ACTION_REGISTRY:
             return {"error": f"Action '{name}' is not available."}      
         
-        utc_execution_time, local_time, next_schedule = self.parse_execution_time(execution_time, timezone)
+        utc_execution_time, local_time, (next_execution_time_str,timezone_str) = self.parse_execution_time(execution_time, timezone)
         
         # Schedule the task
-        task = self.perform_action.apply_async(
-            # args=[data, name, prior_model_data, previous_name,previous_to_current_map],
-            args=[data, name, None, None, None],
+        task = self.celery_perform_simple_action.apply_async(
+            # args=[data, prior_data,],
+            args=[data, None,],
             eta=utc_execution_time)
-
-        return TaskModel.create_task_response(task, utc_execution_time, local_time, timezone, next_schedule)
-
+        if next_execution_time_str:
+            return TaskModel.create_task_response(
+                task, utc_execution_time, local_time, timezone,
+                (next_execution_time_str,timezone_str))
+        else:
+            return TaskModel.create_task_response(
+                task, utc_execution_time, local_time, timezone, None)
     

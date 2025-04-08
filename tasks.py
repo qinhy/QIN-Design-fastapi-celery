@@ -49,12 +49,12 @@ class CeleryTask(BasicCeleryTask):
                 in_model: first_in_class.Model=Body(..., examples=in_examples), # type: ignore
                 execution_time: str = self.EXECUTION_TIME_PARAM,
                 timezone: self.VALID_TIMEZONES = self.TIMEZONE_PARAM,
-        )->last_out_class.Model: # type: ignore
+        )->dict:#last_out_class.Model:
             
             self.api_ok()
             
-            utc_execution_time, local_time, next_schedule = BasicCeleryTask.parse_execution_time(
-                                            execution_time, timezone)
+            utc_execution_time, local_time, (next_execution_time_str,timezone_str) = self.parse_execution_time(execution_time, timezone)
+        
             # Get model data
             current_data = in_model.model_dump()
             # Get pipeline config
@@ -77,35 +77,42 @@ class CeleryTask(BasicCeleryTask):
                 
 
             # Initialize task chain with first action
-            task_chain = self.perform_action.signature(
-                # args=[data, name, prior_model_data, previous_name,previous_to_current_map],
+            # task_chain = self.perform_action.signature(
+            #     # args=[data, name, prior_model_data, previous_name,previous_to_current_map],
+            #     args=[
+            #         current_data,      # Input data
+            #         pipeline[0],       # First action name
+            #         pipeline_config_models[0],  # First model config
+            #         None,             # No previous action for first step
+            #         None              # No mapping for first step
+            #     ]
+            # )
+
+            # Initialize task chain with first action
+            task_chain = self.celery_perform_simple_action.signature(                
                 args=[
-                    current_data,      # Input data
-                    pipeline[0],       # First action name
-                    pipeline_config_models[0],  # First model config
-                    None,             # No previous action for first step
-                    None              # No mapping for first step
+                    current_data,
+                    pipeline_config_models[0],
                 ]
             )
 
             # Chain subsequent actions
-            previous_name = pipeline[0]
             for func_name, prior_model_data, mapping in zip(
                 pipeline[1:],             # Remaining actions
                 pipeline_config_models[1:],  # Remaining model configs
                 pipeline_config_maps         # Mappings between steps
             ):
                 # Add next action to chain
-                task = self.perform_action.signature(
+                task = self.celery_perform_translate_action.signature(
+                    #  previous_data: dict, 
+                    #  action_name:str, previous_to_current_map:dict, prior_data:dict,
                     kwargs={
-                        'name': func_name,
-                        'prior_model_data': prior_model_data,
-                        'previous_name': previous_name,
+                        'action_name': func_name,
                         'previous_to_current_map': mapping,
+                        'prior_data': prior_model_data,
                     }
                 )
                 task_chain = task_chain | task
-                previous_name = func_name
             # Execute the chain
             chain_result = task_chain.apply_async(eta=utc_execution_time)
             # Collect all task IDs in the chain
@@ -120,11 +127,16 @@ class CeleryTask(BasicCeleryTask):
             
             # Log task IDs for debugging
             print(f"Pipeline task IDs in execution order: {task_ids}")
-            # Return task information
-            return TaskModel.create_task_response(
-                chain_result, utc_execution_time, local_time, timezone, next_schedule)
 
-        
+            # Return task information
+            if next_execution_time_str:
+                return TaskModel.create_task_response(
+                    chain_result, utc_execution_time, local_time, timezone,
+                    (next_execution_time_str,timezone_str))
+            else:
+                return TaskModel.create_task_response(
+                    chain_result, utc_execution_time, local_time, timezone, None)
+                    
         return api_pipeline_handler        
 
     def api_set_config_pipeline(self,
