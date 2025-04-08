@@ -199,6 +199,10 @@ class SmartModelConverter(ServiceOrientedArchitecture):
 
 # Simple test for SmartModelConverter
 if __name__ == "__main__":
+
+    with open('code_snippets.json', 'r') as f:
+        code_snippets = json.load(f)
+        print(f"Loaded {len(code_snippets)} code snippets from file")
             
     from Fibonacci import Fibonacci
     from PrimeNumberChecker import PrimeNumberChecker
@@ -213,24 +217,23 @@ if __name__ == "__main__":
         'Downloader': Downloader,
         'UploadToFTP': UploadToFTP
     }
+    def test_conversion(source_class_name, target_class_name):
+        # Create model instance
+        model = SmartModelConverter.Model()
+        model.args.source_class_name = source_class_name
+        model.args.target_class_name = target_class_name
+        model.param.api_key = os.environ.get('OPENAI_API_KEY')
+        
+        model = SmartModelConverter.Action(model, None)()
+        if model.ret.function_name in code_snippets:
+            code_snippets[model.ret.function_name] = model.ret.code_snippet
+        print(f"Generated code: {model.ret.function_name}\n{model.ret.code_snippet}")
+        print("Test completed successfully")
     
-    # Create model instance
-    model = SmartModelConverter.Model()
-    model.args.source_class_name = "Fibonacci"
-    model.args.target_class_name = "PrimeNumberChecker"
-    model.param.api_key = os.environ.get('OPENAI_API_KEY')
-    
-    model = SmartModelConverter.Action(model, None)()
-    print(f"Generated code: {model.ret.function_name}\n{model.ret.code_snippet}")
-    print("Test completed successfully")
+    # test_conversion("Fibonacci", "PrimeNumberChecker")
+    # test_conversion("Downloader", "UploadToFTP")
+    test_conversion("UploadToFTP", "SimpleWebRequest")
 
+    with open('code_snippets.json', 'w') as f:
+        json.dump(code_snippets, f)
 
-    # Create model instance
-    model = SmartModelConverter.Model()
-    model.args.source_class_name = "Downloader"
-    model.args.target_class_name = "UploadToFTP"
-    model.param.api_key = os.environ.get('OPENAI_API_KEY')
-    
-    model = SmartModelConverter.Action(model, None)()
-    print(f"Generated code: {model.ret.function_name}\n{model.ret.code_snippet}")
-    print("Test completed successfully")
