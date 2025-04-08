@@ -12,6 +12,7 @@ SmartModelConverter.Action.ACTION_REGISTRY = {
     'PrimeNumberChecker': PrimeNumberChecker,
     'PalindromeChecker': PalindromeChecker,
     'ChatGPTService': ChatGPTService,
+    'DeepseekService': DeepseekService,
     'Downloader': Downloader,
     'BinaryRepresentation': BinaryRepresentation,
     'CollatzSequence': CollatzSequence,
