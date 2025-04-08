@@ -5,7 +5,7 @@ import time
 import uuid
 from typing import Any, Dict, List
 
-from Task.Basic import ServiceOrientedArchitecture
+from Task.Basic import AppInterface, ServiceOrientedArchitecture
 try:
     import MetaTrader5 as mt5
 except Exception as e:
@@ -547,7 +547,24 @@ class BookService(ServiceOrientedArchitecture):
             self.model.ret.books = res
             return self.model
         
-        def __init__(self, model=None):
+        def __init__(self,model:'BookService.Model',BasicApp:AppInterface,level = 'INFO', retry_times_on_error=3):
+            outer_class_name:ServiceOrientedArchitecture = self.__class__.__qualname__.split('.')[0]
+            if isinstance(model, dict):
+                nones = [k for k,v in model.items() if v is None]
+                for i in nones:del model[i]
+                model = outer_class_name.Model(**model)
+            self.model = model
+            self.BasicApp = BasicApp
+            self.logger = self.model.logger
+            self.logger.level = level
+            self.logger.init(
+                name=f"{outer_class_name.__class__.__name__}:{self.model.task_id}",action_obj=self)
+            self.listen_data_of_task_uuids = []
+
+            self.uuid = uuid.uuid4()
+            self._account: MT5Account = self.model.param.account
+            self.retry_times_on_error = retry_times_on_error
+
             if isinstance(model, dict):
                 # Remove keys with None values from the dictionary
                 nones = [k for k, v in model.items() if v is None]
@@ -557,13 +574,10 @@ class BookService(ServiceOrientedArchitecture):
                 model = BookService.Model(**model)
             # Store the model instance
             self.model: BookService.Model = model
-            account = self.model.param.account
-
-            super().__init__(account)
             self.book = self.model.param.book
         
         def log_and_send(self,info:str):
-            self.logger.log(info)
+            self.logger.log(self.logger.level,info)
             self.send_data_to_task(info)
 
         def change_run(self, func_name, kwargs):

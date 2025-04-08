@@ -34,11 +34,11 @@ class CeleryTask(BasicCeleryTask):
         self.router.get( "/rates/")(self.api_rates_copy)
         
         @self.celery_app.task(bind=True)
-        def celery_book_service(t: Task, acc: MT5Account, book: Book, action: str,**kwargs):
+        def celery_book_service(t: Task, acc: MT5Account, book: Book, action: str, BasicApp=BasicApp, **kwargs):
             """Celery task to calculate the nth book_service number."""
             model = BookService.Model.build(acc,book,action in ['send'])
             model.task_id = t.request.id
-            ba = BookService.Action(model)
+            ba = BookService.Action(model,BasicApp=BasicApp)
             res = ba.change_run(action, kwargs)()
             
             if action == 'getBooks':
