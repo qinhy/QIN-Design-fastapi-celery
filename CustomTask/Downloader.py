@@ -13,7 +13,6 @@ except:
 class Downloader(ServiceOrientedArchitecture):
     class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):
         pass
-
     class Model(ServiceOrientedArchitecture.Model):
 
         class Param(BaseModel):
@@ -27,6 +26,7 @@ class Downloader(ServiceOrientedArchitecture):
         class Return(BaseModel):
             success: bool = Field(False, description="Whether the download and Redis upload succeeded")
             message: str = Field("", description="Status or error message")            
+            file_path: str = Field("", description="Path to the downloaded file or Redis key if uploaded to Redis. Example: '/path/to/file.txt' for local file or 'redis://localhost:6379/0:web:example.com:sample.txt' for Redis key")
 
         
         class Logger(ServiceOrientedArchitecture.Model.Logger):
@@ -44,6 +44,36 @@ class Downloader(ServiceOrientedArchitecture):
                 "args": {
                     "url": "http://example.com/sample.txt",
                     "destination_path": "sample.txt"
+                }
+            },
+            {
+                "param": {
+                    "chunk_size": 8192,
+                    "redis_url": None
+                },
+                "args": {
+                    "url": "https://www.python.org/static/img/python-logo.png",
+                    "destination_path": "python-logo.png"
+                }
+            },
+            {
+                "param": {
+                    "chunk_size": 16384,
+                    "redis_url": "redis://redis-server:6379/1"
+                },
+                "args": {
+                    "url": "https://github.com/downloads/example/data.zip",
+                    "destination_path": "/tmp/downloads/data.zip"
+                }
+            },
+            {
+                "param": {
+                    "chunk_size": 2048,
+                    "redis_url": None
+                },
+                "args": {
+                    "url": "http://speedtest.ftp.otenet.gr/files/test10Mb.db",
+                    "destination_path": "test_download.db"
                 }
             }]
 
@@ -119,6 +149,12 @@ class Downloader(ServiceOrientedArchitecture):
                 if os.path.exists(dest_path):
                     os.remove(dest_path)
                     self.log_and_send(f"Deleted local file: {dest_path}")
+                
+                # Set the file_path to the Redis key with redis_url prefix
+                self.model.ret.file_path = f"{redis_url}:{redis_key}"
+            else:
+                # Set the file_path to the local file path
+                self.model.ret.file_path = dest_path
 
             # Update return values
             self.model.ret.success = True
@@ -161,12 +197,14 @@ class Downloader(ServiceOrientedArchitecture):
             self.log_and_send(message, Downloader.Levels.ERROR)
             self.model.ret.success = False
             self.model.ret.message = message
+            self.model.ret.file_path = ""
 
         def to_stop(self):
             """Handle stop flag being set."""
             self.log_and_send("Stop flag detected. Download halted.", Downloader.Levels.WARNING)
             self.model.ret.success = False
             self.model.ret.message = "Download stopped by user."
+            self.model.ret.file_path = ""
             return self.model
 
         def log_and_send(self, message: str, level=None):
@@ -196,6 +234,7 @@ if __name__ == "__main__":
     # Print the result
     print(f"Download success: {result.ret.success}")
     print(f"Message: {result.ret.message}")
+    print(f"File path: {result.ret.file_path}")
     
     # Test with Redis if available
     print("\nTesting with Redis...")
@@ -203,3 +242,4 @@ if __name__ == "__main__":
     result = action()
     print(f"Redis upload success: {result.ret.success}")
     print(f"Message: {result.ret.message}")
+    print(f"Redis key: {result.ret.file_path}")
