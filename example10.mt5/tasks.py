@@ -78,9 +78,10 @@ class CeleryTask(BasicCeleryTask):
 
         task = self.celery_book_service.apply_async(args=[acc.model_dump(),book.model_dump(),action], eta=execution_time)
 
-        res = TaskModel(task_id=task.id)
-        if execution_time: res.scheduled_for_utc = execution_time
-        return res.model_dump(exclude_unset=True)
+        return TaskModel(
+                    task_id=task.id,
+                    scheduled_for_utc=execution_time,
+                ).model_dump(exclude_unset=True)
     
     def api_schedule_book_service(self, acc: MT5Account, book: Book, action: str,
         execution_time: str = Query(datetime.datetime.now(datetime.timezone.utc
@@ -92,7 +93,7 @@ class CeleryTask(BasicCeleryTask):
         self.api_ok()
         """API to execute BookService task at a specific date and time, with timezone support."""
         # Convert to UTC for Celery
-        local_dt,execution_time_utc = self.convert_to_utc(execution_time,timezone)
+        local_dt,execution_time = self.convert_to_utc(execution_time,timezone)
         
         # Schedule the task in UTC
         task = self.celery_book_service.apply_async(args=[acc.model_dump(),book.model_dump(),action], eta=execution_time)
@@ -100,10 +101,9 @@ class CeleryTask(BasicCeleryTask):
         return TaskModel(
                     task_id=task.id,
                     scheduled_for_the_timezone=local_dt,
-                    scheduled_for_utc=execution_time_utc,
+                    scheduled_for_utc=execution_time,
                     timezone=timezone
                 ).model_dump(exclude_unset=True)
-
     
     def api_rates_copy(self, acc: MT5Account, symbol: str, timeframe: str, count: int, debug: bool = False):
         """

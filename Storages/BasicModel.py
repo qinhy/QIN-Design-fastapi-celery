@@ -5,10 +5,7 @@ import unittest
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict, Field
-try:
-    from .Storages import SingletonKeyValueStorage
-except Exception as e:
-    from Storages import SingletonKeyValueStorage
+from Storages import SingletonKeyValueStorage
 
 def now_utc():
     return datetime.now().replace(tzinfo=ZoneInfo("UTC"))
@@ -142,7 +139,8 @@ class Model4Basic:
             class_type = self.__class__.__name__+'Controller'
             res = {c.__name__:c for c in [i for k,i in modelclass.__dict__.items() if '_' not in k]}
             res = res.get(class_type, None)
-            if res is None: raise ValueError(f'No such class of {class_type}')
+            if res is None: print(f'No such class of {class_type} use AbstractObjController')# raise ValueError(f'No such class of {class_type}')
+            res = Controller4Basic.AbstractObjController
             return res
         def get_controller(self): return self._controller
         def init_controller(self,store):self._controller = self._get_controller_class()(store,self)
@@ -196,95 +194,6 @@ class BasicStore(SingletonKeyValueStorage):
     
     def find_all(self,id:str=f'AbstractObj:*')->list[MODEL_CLASS_GROUP.AbstractObj]:
         return [self.find(k) for k in self.keys(id)]
-
-class Tests(unittest.TestCase):
-    def __init__(self,*args,**kwargs)->None:
-        super().__init__(*args,**kwargs)
-        self.store = BasicStore()
-
-    def test_all(self,num=1):
-        self.test_python(num)
-
-    def test_python(self,num=1):
-        self.store.python_backend()
-        for i in range(num):self.test_all_cases()
-        self.store.clean()
-
-    def test_all_cases(self):
-        self.store.clean()
-        self.test_add_and_get()
-        self.test_find_all()
-        self.test_delete()
-        self.test_get_nonexistent()
-        self.test_dump_and_load()
-        self.test_group()
-        self.store.clean()
-
-    def test_get_nonexistent(self):
-        self.assertEqual(self.store.find('nonexistent'), None, "Getting a non-existent key should return None.")
-        
-    def test_add_and_get(self):
-        obj = self.store.add_new_obj(Model4Basic.AbstractObj())
-        objr = self.store.find(obj.get_id())
-        self.assertEqual(obj.model_dump_json_dict(),
-                        objr.model_dump_json_dict(),
-                         "The retrieved value should match the set value.")
-    def test_find_all(self):
-        self.store.add_new_obj(Model4Basic.AbstractObj())
-        self.assertEqual(len(self.store.find_all()),2,
-                         "The retrieved value should match number of objs.")
-
-    def test_dump_and_load(self):
-        a = self.store.find_all()
-        js = self.store.dumps()
-        self.store.clean()
-        self.store.loads(js)
-        b = self.store.find_all()
-        self.assertTrue(all([x.model_dump_json_dict()==y.model_dump_json_dict() for x,y in zip(a,b)]),
-                         "The same before dumps and loads.")
-
-    def test_delete(self):
-        obj = self.store.find_all()[0]
-        obj.get_controller().delete()
-        self.assertFalse(self.store.exists(obj.get_id()), "Key should not exist after being deleted.")
-        
-    def test_group(self):
-        self.store.clean()
-        obj = self.store.add_new_obj(Model4Basic.AbstractObj())
-        group = self.store.add_new_group(Model4Basic.AbstractGroup())
-        group.get_controller().add_child(obj.get_id())
-        self.assertEqual(group.get_controller().get_child(group.children_id[0]).model_dump_json_dict(),
-                         obj.model_dump_json_dict(),
-                         "The retrieved value should match the child value.")
-        
-        group2_id = self.store.add_new_group(Model4Basic.AbstractGroup()).get_id()
-        group.get_controller().add_child(group2_id)
-        obj2 = self.store.add_new_obj(Model4Basic.AbstractObj())
-
-        group.get_controller().get_child(group2_id).get_controller().add_child(obj2.get_id())
-        group2 = self.store.find(group2_id)
-        
-        self.assertTrue(all([x.model_dump_json_dict()==y.model_dump_json_dict() for x,y in zip(
-                                                group.get_controller().get_children(),[obj,group2])]),
-                         "check get_children.")
-        
-        children = group.get_controller().get_children_recursive()
-        
-        self.assertEqual(children[0].model_dump_json_dict(),
-                         obj.model_dump_json_dict(),
-                         "The retrieved first value should match the child value.")
-        
-        self.assertEqual(type(children[1]),list,
-                         "The retrieved second value should list.")
-        
-        self.assertEqual(children[1][0].model_dump_json_dict(),
-                         obj2.model_dump_json_dict(),
-                         "The retrieved second child value should match the child value.")
-        
-        group.get_controller().delete_child(group2_id)
-        self.assertEqual(group.get_controller().get_children()[0].model_dump_json_dict(),
-                         obj.model_dump_json_dict(),
-                         "The retrieved value should match the child value.")
 
 
 

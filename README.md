@@ -1,137 +1,169 @@
-# QIN-Design-fastapi-celery
- QIN Design of fastapi with celery
+# 🧠 Task Queue Backend with FastAPI, Celery, Redis/RabbitMQ, and MongoDB
 
-## Target
-- working at both win and linux
-- Object-oriented, MVC model.
+A modular, plug-and-play backend system built with **FastAPI**, **Celery**, and flexible backends such as **Redis** or **RabbitMQ + MongoDB**, providing asynchronous task execution, scheduling, and a clean API interface.
 
+---
 
-# FastAPI Celery Microservice
+## 🚀 Features
 
-## Overview
-This project is a **FastAPI** microservice integrating **Celery** for task management and execution. It supports **Redis** and **MongoDB with RabbitMQ** as backend configurations and provides an API to compute Fibonacci numbers asynchronously.
+- ✨ RESTful API powered by **FastAPI**
+- 🧵 Background task management with **Celery**
+- ⚙️ Dynamic backend selection: `redis` or `mongodbrabbitmq`
+- 🐇 RabbitMQ support with `advanced.config` auto-updating
+- 🌼 Monitoring via **Flower**
+- 🕒 Timezone-aware scheduling
+- 🔌 Plug-and-play custom task support
 
-## Features
-- **FastAPI-based API** with **CORS** and **session management**.
-- **Celery integration** for background task execution.
-- **Redis or MongoDB with RabbitMQ** as backend options.
-- **Task management endpoints** to list, track, and revoke tasks.
-- **Fibonacci computation service** with an option for fast or recursive mode.
-- **Generic task execution framework** for scalable microservice actions.
+---
 
-## Installation
+## 🛠 Tech Stack
 
-### Prerequisites
-- **Python 3.8+**
-- **Redis or RabbitMQ with MongoDB**
-- **Celery**
-- **Uvicorn** (for running FastAPI)
-- **Pydantic** (for request validation)
+| Component      | Tech                     |
+|----------------|--------------------------|
+| API Framework  | FastAPI, Pydantic        |
+| Task Queue     | Celery                   |
+| Broker         | Redis or RabbitMQ        |
+| Result Backend | Redis or MongoDB         |
+| Middleware     | Starlette, CORS, Session |
+| Monitoring     | Flower                   |
 
-### Install Dependencies
-```bash
-pip install fastapi celery uvicorn pydantic redis pymongo requests
-```
+---
 
-## Configuration
+## 📦 Dependencies
 
-Environment variables can be used to configure backend settings:
+Install requirements with:
 
 ```bash
-export APP_BACK_END=redis               # Choose between "redis" or "mongodbrabbitmq"
-export APP_INVITE_CODE=123
-export APP_SECRET_KEY=super_secret_key
-export ACCESS_TOKEN_EXPIRE_MINUTES=30
-export UVICORN_PORT=8000
-export FLOWER_PORT=5555
-export RABBITMQ_URL=amqp://localhost
-export RABBITMQ_USER=guest
-export RABBITMQ_PASSWORD=guest
-export MONGO_URL=mongodb://localhost:27017
-export MONGO_DB=tasks
-export CELERY_RABBITMQ_BROKER=amqp://localhost
-export REDIS_URL=redis://localhost:6379/0
+pip install -r requirements.txt
 ```
 
-## Running the Application ( all in one is provided in examples)
+<details>
+<summary>requirements.txt</summary>
 
-### Start FastAPI
-```bash
-uvicorn tasks:CeleryTask.api --host 0.0.0.0 --port 8000 --reload
+```
+requests
+celery
+flower
+redis
+fastapi
+pydantic
+pydantic[email]
+pydantic-settings
+starlette
+pymongo
+pika
+itsdangerous
+pytz
+uvicorn
 ```
 
-### Start Celery Worker
-For **Redis backend**:
-```bash
-celery -A tasks.celery_app worker --loglevel=info
+</details>
+
+---
+
+## ⚙️ Configuration
+
+All configuration is driven by environment variables. Create a `.env` file in the root directory:
+
+```env
+# Select Backend: redis OR mongodbrabbitmq
+APP_BACK_END=redis
+
+# Core App Settings
+APP_INVITE_CODE=123
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+UVICORN_PORT=8000
+FLOWER_PORT=5555
+
+# RabbitMQ
+RABBITMQ_URL=localhost:15672
+RABBITMQ_USER=guest
+RABBITMQ_PASSWORD=guest
+RABBITMQ_CONSUMER_TIMEOUT=259200000
+
+# MongoDB
+MONGO_URL=mongodb://localhost:27017
+MONGO_DB=tasks
+
+# Celery
+CELERY_CONCURRENCY=4
+CELERY_META=celery_taskmeta
+CELERY_RABBITMQ_BROKER=amqp://localhost
+
+# Redis
+REDIS_URL=redis://localhost:6379/0
 ```
-For **MongoDB with RabbitMQ backend**:
-```bash
-celery -A tasks.celery_app worker --loglevel=info --broker=$CELERY_RABBITMQ_BROKER
+
+---
+
+## 📡 Running the App
+
+check folder of /sh/...
+
+---
+
+## 🧪 Sample Task: Fibonacci
+
+The app includes an example `Fibonacci` task with both **immediate** and **scheduled** execution.
+
+### GET Request Example:
+
+```http
+GET /myapi/fibonacci/?n=10&mode=fast
 ```
 
-### Start Flower (Celery Monitoring Tool)
-```bash
-celery -A tasks.celery_app flower --port=5555
+### POST Endpoint Examples:
+
+```http
+POST /fibonacci/
+POST /fibonacci/schedule/
 ```
 
-## API Endpoints
+---
 
-### 1. **Get API Documentation**
-- **Method:** `GET`
-- **URL:** `/`
-- **Redirects to:** `/docs` (Swagger UI)
+## 📁 Custom Tasks
 
-### 2. **List Available Tasks**
-- **Method:** `GET`
-- **URL:** `/tasks/`
-- **Response:** JSON list of available tasks.
+To define a custom task:
 
-### 3. **Get Task Metadata**
-- **Method:** `GET`
-- **URL:** `/tasks/meta/{task_id}`
-- **Response:** Task status and details.
+1. Create a class in `CustomTask`
+2. Inherit from `ServiceOrientedArchitecture`
+3. Define a nested `Model` using Pydantic
+4. Your tasks will be auto-registered via reflection
 
-### 4. **Stop a Running Task**
-- **Method:** `GET`
-- **URL:** `/tasks/stop/{task_id}`
-- **Response:** Stops the task execution.
+---
 
-### 5. **List Active Celery Workers**
-- **Method:** `GET`
-- **URL:** `/workers/`
-- **Response:** List of active Celery workers with their statuses.
+## 🧠 Backend Selection Logic
 
-### 6. **Calculate Fibonacci Number (Async)**
-- **Method:** `POST`
-- **URL:** `/fibonacci/`
-- **Payload:**
-```json
-{
-  "args": {"n": 10},
-  "param": {"mode": "fast"}
-}
+- `redis`: Uses Redis as both broker and backend
+- `mongodbrabbitmq`: Uses RabbitMQ + MongoDB; will also validate and optionally update the `advanced.config` to match `RABBITMQ_CONSUMER_TIMEOUT`
+
+---
+
+## 🧰 Dev Utilities
+
+```python
+# Access external IP
+AppConfig().external_ip
+
+# Automatically fix RabbitMQ's advanced.config
+AppConfig().validate_backend()
 ```
-- **Response:** `{"task_id": "some-task-id"}`
 
-### 7. **Perform Generic Action**
-- **Method:** `POST`
-- **URL:** `/action/perform`
-- **Payload:**
-```json
-{
-  "name": "Fibonacci",
-  "data": {
-    "args": {"n": 10}
-  }
-}
-```
-- **Response:** `{"task_id": "some-task-id"}`
+---
 
-## Notes
-- The Fibonacci function supports **fast (iterative)** and **recursive** modes.
-- The API uses **Celery workers** for background task execution.
-- You can check task status using `/tasks/meta/{task_id}`.
+## 🌐 API Docs
 
-## License
-MIT
+- Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
+- Redoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+---
+
+## 🤝 Contributing
+
+Pull requests welcome! Custom tasks, backend strategies, and plugin systems are especially appreciated.
+
+---
+
+## 📄 License
+
+MIT License. Use freely and improve openly.
