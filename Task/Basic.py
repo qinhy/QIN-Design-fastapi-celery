@@ -757,7 +757,6 @@ class ServiceOrientedArchitecture:
 
     class Model(BaseModel):
         task_id:Optional[str] = Field('AUTO_SET_BUT_NULL_NOW', description="task uuid")        
-        task_chain_ids:Optional[list[str]] = Field(default=[], description="task chain ids")
 
         class Version(BaseModel):
             class_name: str = Field(default='NULL', description="class name")
@@ -884,15 +883,15 @@ class ServiceOrientedArchitecture:
         @classmethod
         def examples(cls): return []
         
-        def update_model_data(self,data:dict):
-            if data is not None:
+        def update_model_data(self,json_data:dict):
+            if json_data is not None:
                 # Update all model components from prior model
-                if 'param' in data:
-                    self.param = self.param.model_copy(update=data['param'])
-                if 'args' in data:
-                    self.args = self.args.model_copy(update=data['args'])
-                if 'ret' in data:
-                    self.ret = self.ret.model_copy(update=data['ret'])
+                if 'param' in json_data:
+                    self.param = self.param.model_copy(update=json_data['param'])
+                if 'args' in json_data:
+                    self.args = self.args.model_copy(update=json_data['args'])
+                if 'ret' in json_data:
+                    self.ret = self.ret.model_copy(update=json_data['ret'])
             return self
 
     class Action:
