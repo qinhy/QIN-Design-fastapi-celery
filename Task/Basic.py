@@ -103,9 +103,9 @@ class RabbitmqPubSub(PubSubInterface):
         message = json.dumps({'topic': topic, 'data': data})
         channel.basic_publish(exchange=self.task_pubsub_name, routing_key=self.ROOT_KEY, body=message)
         connection.close()
-
+        
     def start_listener(self):
-        connection,channel = self._conn()
+        connection, channel = self._conn()
         self.connection = connection
         self.channel = channel
 
@@ -115,6 +115,7 @@ class RabbitmqPubSub(PubSubInterface):
 
         self.listener_thread = threading.Thread(target=self.listen_data_of_topic, args=(queue_name,), daemon=True)
         self.listener_thread.start()
+        self.is_listening = True
 
     def listen_data_of_topic(self, queue_name):
         def callback(ch, method, properties, body):
@@ -124,8 +125,31 @@ class RabbitmqPubSub(PubSubInterface):
                             
             self.call_subscribers(topic,message.get('data'))
 
-        self.channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
-        self.channel.start_consuming()
+        while self.is_listening:
+            try:
+                self.channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
+                self.channel.start_consuming()
+            except pika.exceptions.AMQPConnectionError:
+                # Connection lost, attempt to reconnect
+                print(f"RabbitMQ connection lost. Attempting to reconnect in 5 seconds...")
+                time.sleep(5)
+                try:
+                    # Reconnect
+                    connection, channel = self._conn()
+                    self.connection = connection
+                    self.channel = channel
+                    
+                    # Recreate queue and binding
+                    result = self.channel.queue_declare(queue='', exclusive=True)
+                    queue_name = result.method.queue
+                    self.channel.queue_bind(exchange=self.task_pubsub_name, queue=queue_name, routing_key=self.ROOT_KEY)
+                    
+                    print("Successfully reconnected to RabbitMQ")
+                except Exception as e:
+                    print(f"Failed to reconnect: {str(e)}")
+            except Exception as e:
+                print(f"Unexpected error in RabbitMQ listener: {str(e)}")
+                time.sleep(5)
 
     def stop_listener(self):
         self.channel.stop_consuming()
@@ -158,7 +182,7 @@ class RedisPubSub(PubSubInterface):
         """Publish a message to a topic."""
         message = json.dumps({'topic': topic, 'data': data})
         self.redis_pubsub_client.publish(self.ROOT_KEY, message)
-
+        
     def start_listener(self):
         """Start listening to subscribed topics in a separate thread."""
         self.listener_thread = threading.Thread(target=self.listen_data_of_topic, daemon=True)
@@ -166,13 +190,31 @@ class RedisPubSub(PubSubInterface):
 
     def listen_data_of_topic(self):
         """Continuously listen for messages on subscribed topics."""
-        self.pubsub.subscribe(self.ROOT_KEY)
-        for message in self.pubsub.listen():
-            if message["type"] == "message":
-                message:dict = json.loads(message["data"])
-                topic = message.get('topic')
-                if not topic:continue
-                self.call_subscribers(topic,message.get('data'))
+        while True:
+            try:
+                # Establish connection and subscribe
+                self.pubsub.subscribe(self.ROOT_KEY)
+                for message in self.pubsub.listen():
+                    if message["type"] == "message":
+                        message_data = json.loads(message["data"])
+                        topic = message_data.get('topic')
+                        if not topic:
+                            continue
+                        self.call_subscribers(topic, message_data.get('data'))
+            except redis.exceptions.ConnectionError as e:
+                print(f"Redis connection error: {str(e)}")
+                print("Attempting to reconnect in 5 seconds...")
+                time.sleep(5)
+                try:
+                    # Reconnect to Redis
+                    self.redis_pubsub_client = redis.Redis.from_url(self.redis_url)
+                    self.pubsub = self.redis_pubsub_client.pubsub()
+                    print("Successfully reconnected to Redis")
+                except Exception as e:
+                    print(f"Failed to reconnect: {str(e)}")
+            except Exception as e:
+                print(f"Unexpected error in Redis listener: {str(e)}")
+                time.sleep(5)
 
     def unsubscribe(self, id: str):
         """Unsubscribe from a topic and remove Redis subscription."""

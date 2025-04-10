@@ -652,6 +652,8 @@ class BasicCeleryTask:
             # args=[data, prior_data,],
             args=[data, None,],
             eta=utc_execution_time)
+        
+        self.BasicApp.set_task_status(task.task_id,status='SENDED')
         if next_execution_time_str:
             return TaskModel.create_task_response(
                 task, utc_execution_time, local_time, timezone,
