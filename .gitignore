@@ -161,3 +161,5 @@ tmp/private_key.pem
 .DS_Store
 *.pid
 /sh/control
+*.jpg
+tmp/test_image_tiler.json

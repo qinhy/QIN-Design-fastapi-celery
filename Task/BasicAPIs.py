@@ -1,9 +1,11 @@
 # Standard library imports
+import base64
 import json
 import re
 import time
 import datetime
 from typing import Literal, Optional
+import zlib
 import pytz
 from celery.app import task as Task
 from celery.signals import task_received
@@ -114,12 +116,30 @@ class BasicCeleryTask:
         self.on_task_received = on_task_received
         self.celery_perform_simple_action = self._create_celery_perform_simple_action()
         self.celery_perform_translate_action = self._create_celery_perform_translate_action()
-    
+        
+    def _compress_result(self, content: str) -> str:
+        "Compress a string using zlib and encode it as base64."
+        if not content:
+            return ""
+        compressed_bytes = zlib.compress(content.encode('utf-8'))
+        return base64.b64encode(compressed_bytes).decode('utf-8')
+
+    def _decompress_result(self, compressed_b64: str) -> str:
+        "Decompress a base64-encoded zlib-compressed string."
+        if not compressed_b64:
+            return ""
+        try:
+            compressed_bytes = base64.b64decode(compressed_b64)
+            return zlib.decompress(compressed_bytes).decode('utf-8')
+        except Exception as e:
+            raise ValueError(f"Failed to decompress data: {str(e)}")
+        
     def perform_simple_action(
         self,
         task_id: str,
         data: dict, 
         prior_data: dict = None,
+        compress: bool = True,
     ) -> ServiceOrientedArchitecture.Model:
         """Execute a simple action with the given data"""
             
@@ -128,8 +148,9 @@ class BasicCeleryTask:
             model_instance.update_model_data(prior_data)
         model_instance.task_id = task_id
         model_instance = class_type.Action(model_instance, BasicApp=self.BasicApp)()
-        model_dump = model_instance.model_dump_json()
-        return model_dump
+        res = model_instance.model_dump_json()        
+        res = self._compress_result(res) if compress else res
+        return res
     
     def perform_translate_action(
         self,
@@ -550,6 +571,14 @@ class BasicCeleryTask:
         self.api_ok()
         res = self.BasicApp.get_task_meta(task_id)
         if res is None:raise HTTPException(status_code=404, detail="task not found")
+
+        r = res['result']
+        try:
+            r = json.loads(r)
+        except Exception as e:
+            r = self._decompress_result(r)
+
+        res['result'] = r
         return res
 
     def api_task_stop(self,task_id: str):
