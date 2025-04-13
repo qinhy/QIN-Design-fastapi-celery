@@ -330,6 +330,7 @@ class AppInterface(PubSubInterface):
     def get_tasks_collection(self): raise NotImplementedError('get_tasks_collection')
     def get_tasks_list(self)->list[dict]: raise NotImplementedError('get_tasks_list')
     def get_task_meta(self, task_id: str)->dict: raise NotImplementedError('get_task_meta')
+    def delete_task_meta(self, task_id: str): raise NotImplementedError('delete_task_meta')
     def set_task_status(self, task_id, result='', status=celery.states.STARTED): raise NotImplementedError('set_task_status')
 
     def get_task_status(self, task_id: str):
@@ -449,6 +450,10 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
             return res
         else:
             return None
+        
+    def delete_task_meta(self, task_id: str):
+        collection = self.get_tasks_collection()
+        collection.delete_one({'_id': task_id})
             
     def set_task_status(self, task_id, result='', status=celery.states.STARTED):
         collection = self.get_tasks_collection()
@@ -535,7 +540,11 @@ class RedisApp(AppInterface, RedisPubSub):
             task_data = json.loads(task_data_json)
             return task_data
         return None
-        
+    
+    def delete_task_meta(self, task_id: str):
+        task_key = f'celery-task-meta-{task_id}'
+        self.redis_client().delete(task_key)
+
     def set_task_status(self, task_id, result='', status=celery.states.STARTED):
         """Marks a task as started in Redis."""
         task_key = f'celery-task-meta-{task_id}'
@@ -645,6 +654,9 @@ class FileSystemApp(AppInterface, FileSystemPubSub):
 
     def get_task_meta(self, task_id: str):
         return self.store().get(f"celery-task-meta-{task_id}")
+    
+    def delete_task_meta(self, task_id: str):
+        self.store().delete(f"celery-task-meta-{task_id}")
 
     def set_task_status(self, task_id, result='', status=celery.states.STARTED):
         task_data = TaskModel(task_id=task_id, status=status, result=result)

@@ -81,6 +81,7 @@ class BasicCeleryTask:
         """Register all API endpoints"""
         self.router.get("/tasks/")(self.api_list_tasks)
         self.router.get("/tasks/meta/{task_id}")(self.api_task_meta)
+        self.router.get("/tasks/meta/delete/{task_id}")(self.api_task_meta_delete)
         self.router.get("/tasks/stop/{task_id}")(self.api_task_stop)
         self.router.get("/tasks/sub/{task_id}")(self.api_listen_data_of_task)
         self.router.get("/workers/")(self.api_get_workers)
@@ -580,6 +581,11 @@ class BasicCeleryTask:
 
         res['result'] = r
         return res
+
+    def api_task_meta_delete(self,task_id: str):
+        self.api_ok()
+        self.BasicApp.delete_task_meta(task_id)
+        return {"status": "deleted", "task": task_id}
 
     def api_task_stop(self,task_id: str):
         self.api_ok()
