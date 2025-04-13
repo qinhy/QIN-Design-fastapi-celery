@@ -350,7 +350,6 @@ class BasicCeleryTask:
         - 'YYYY-MM-DDTHH:MM:SS'
         - 'NOW@every 1 d', '2025-04-07T12:00:00@every 10 s', etc.
         """
-        print('parse_execution_time: get', execution_time_str, timezone_str)
 
         utc_now = datetime.datetime.now(datetime.timezone.utc)
         tz = pytz.timezone(timezone_str)
@@ -406,7 +405,6 @@ class BasicCeleryTask:
                 utc_execution_time = local_time.astimezone(pytz.UTC)
                 next_execution_time_str = None
 
-            print('parse_execution_time: return', utc_execution_time, '|', local_time, '|', (next_execution_time_str, timezone_str))    
             return utc_execution_time, local_time, (next_execution_time_str, timezone_str)
 
         except Exception as e:
@@ -678,8 +676,10 @@ class BasicCeleryTask:
 
         # Validate that the requested action exists
         if name not in self.ACTION_REGISTRY:
-            return {"error": f"Action '{name}' is not available."}      
-        
+            return {"error": f"Action '{name}' is not available."}
+        if not isinstance(timezone,str):
+            timezone:str = timezone.default
+
         utc_execution_time, local_time, (next_execution_time_str,timezone_str) = self.parse_execution_time(execution_time, timezone)
         
         # Schedule the task

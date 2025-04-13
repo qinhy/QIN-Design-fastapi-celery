@@ -1,5 +1,7 @@
 # Standard library imports
 import datetime
+import time
+from threading import Thread
 from typing import Literal
 
 # FastAPI imports
@@ -229,6 +231,7 @@ class MT5CeleryTask(CeleryTask):
     def __init__(self, BasicApp, celery_app, root_fast_app:FastAPI, ACTION_REGISTRY = ACTION_REGISTRY):
         super().__init__(BasicApp, celery_app, root_fast_app, ACTION_REGISTRY)
         
+        self.router.get( "/myfibo")(self.api_my_fibo)
         self.router.get( "/accounts/info")(self.api_account_info)
         self.router.get( "/books/")(self.api_get_books)
         self.router.post("/books/send")(self.api_book_send)
@@ -238,7 +241,17 @@ class MT5CeleryTask(CeleryTask):
         self.router.post("/books/change/tpsl")(self.api_book_change_tp_sl)
         self.router.get( "/rates/")(self.api_rates_copy)
 
+    def api_delete_task_delay(self,task_id:str,delay:int=30):
+        self.api_ok()
+        def delete_task_delay(task_id=task_id,delay=delay):
+            print(f"deleting task {task_id} in {delay} seconds")
+            time.sleep(delay)
+            print(f"deleting task.")
+            self.BasicApp.delete_task_meta(task_id)
+            print(f"task {task_id} deleted")
 
+        Thread(target=delete_task_delay,args=()).start()
+        return {"status": "success", "task_id": task_id, "delay": delay}
 # {
 #   "param": {
 #     "account": {
@@ -249,20 +262,31 @@ class MT5CeleryTask(CeleryTask):
 #     "action": "account_info"
 #   }
 # }
+    def api_my_fibo(self,n:int=13,mode:Literal['fast','slow']='fast'):
+        m = Fibonacci.Model()
+        m.param.mode = mode
+        m.args.n = n
+        res = self.api_perform_action('Fibonacci', m.model_dump(),'NOW')        
+        self.api_delete_task_delay(res['task_id'],30)
+        return res
 
     def api_account_info(self, acc: MT5Account):
         """Endpoint to fetch account information."""
         m = BookService.Model()
         m.param.account = acc
         m.param.action= 'account_info'
-        return self.api_perform_action('BookService', m.model_dump(),'NOW')
+        res = self.api_perform_action('BookService', m.model_dump(),'NOW')
+        self.api_delete_task_delay(res['task_id'],30)
+        return res
     
     def api_get_books(self, acc: MT5Account):
         """Endpoint to get books for a given MT5 account."""
         m = BookService.Model()
         m.param.account = acc
         m.param.action= 'getBooks'
-        return self.api_perform_action('BookService', m.model_dump(),'NOW')
+        res = self.api_perform_action('BookService', m.model_dump(),'NOW')
+        self.api_delete_task_delay(res['task_id'],30)
+        return res
 
     def api_book_send(self, acc: MT5Account, book: Book):
         """Endpoint to send a book."""
@@ -270,7 +294,9 @@ class MT5CeleryTask(CeleryTask):
         m.param.account = acc
         m.param.action= 'send'
         m.param.book= book
-        return self.api_perform_action('BookService', m.model_dump(),'NOW')
+        res = self.api_perform_action('BookService', m.model_dump(),'NOW')
+        self.api_delete_task_delay(res['task_id'],30)
+        return res
 
     def api_schedule_book_send(self, acc: MT5Account, 
         symbol:str='USDJPY',sl:float=147.0,tp:float=150.0,price_open:float=148.0,volume:float=0.01,
@@ -289,7 +315,9 @@ class MT5CeleryTask(CeleryTask):
         m.param.account = acc
         m.param.action= 'close'
         m.param.book= book
-        return self.api_perform_action('BookService', m.model_dump(),'NOW')
+        res = self.api_perform_action('BookService', m.model_dump(),'NOW')
+        self.api_delete_task_delay(res['task_id'],30)
+        return res
     
     def api_book_change_price(self, acc: MT5Account, book: Book, p: float):
         """Endpoint to change the price of a book."""
@@ -299,7 +327,9 @@ class MT5CeleryTask(CeleryTask):
         m.param.book= book
         m.param.book.price_open = p
         m.args.p = p
-        return self.api_perform_action('BookService', m.model_dump(),'NOW')
+        res = self.api_perform_action('BookService', m.model_dump(),'NOW')
+        self.api_delete_task_delay(res['task_id'],30)
+        return res
 
     def api_book_change_tp_sl(self, acc: MT5Account, book: Book, tp: float, sl: float):
         """Endpoint to change tp sl values of a book."""
@@ -311,7 +341,9 @@ class MT5CeleryTask(CeleryTask):
         m.param.book.sl = sl
         m.args.tp = tp
         m.args.sl = sl
-        return self.api_perform_action('BookService', m.model_dump(),'NOW')
+        res = self.api_perform_action('BookService', m.model_dump(),'NOW')
+        self.api_delete_task_delay(res['task_id'],30)
+        return res
     
     def api_rates_copy(self, acc: MT5Account, symbol: str, timeframe: str, count: int, debug: bool = False):
         """
@@ -323,7 +355,9 @@ class MT5CeleryTask(CeleryTask):
         m.args.timeframe = timeframe
         m.args.count = count
         m.args.debug = debug
-        return self.api_perform_action('MT5CopyLastRatesService', m.model_dump(),'NOW')
+        res = self.api_perform_action('MT5CopyLastRatesService', m.model_dump(),'NOW')
+        self.api_delete_task_delay(res['task_id'],30)
+        return res
     
 ########################################################
 conf = AppConfig()
