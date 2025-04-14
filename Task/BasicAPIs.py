@@ -562,9 +562,9 @@ class BasicCeleryTask:
         # Update local pipelines dictionary
         self.pipelines = server_pipelines
 
-    def api_list_tasks(self,):
+    def api_list_tasks(self,page:int=1, page_size:int=10):
         self.api_ok()
-        return self.BasicApp.get_tasks_list()
+        return self.BasicApp.get_tasks_list(page,page_size)
 
     def api_task_meta(self,task_id: str):
         self.api_ok()
