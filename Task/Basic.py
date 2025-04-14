@@ -328,7 +328,7 @@ class AppInterface(PubSubInterface):
     def check_rabbitmq_health(self, url=None, user='', password='') -> bool:('check_rabbitmq_health')
     def check_mongodb_health(self, url=None) -> bool:('check_mongodb_health')
     def get_tasks_collection(self): raise NotImplementedError('get_tasks_collection')
-    def get_tasks_list(self)->list[dict]: raise NotImplementedError('get_tasks_list')
+    def get_tasks_list(self,page:int=1, page_size:int=10)->list[dict]: raise NotImplementedError('get_tasks_list')
     def get_task_meta(self, task_id: str)->dict: raise NotImplementedError('get_task_meta')
     def delete_task_meta(self, task_id: str): raise NotImplementedError('delete_task_meta')
     def set_task_status(self, task_id, result='', status=celery.states.STARTED): raise NotImplementedError('set_task_status')
@@ -400,7 +400,7 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
         collection = db.get_collection(self.celery_meta)
         return collection
 
-    def get_tasks_list(self, page=1, page_size=20, sort_by='_id', sort_order=-1):
+    def get_tasks_list(self, page:int=1, page_size:int=10, sort_by='_id', sort_order=-1):
         """
         Get a paginated list of tasks.
         
@@ -499,7 +499,7 @@ class RedisApp(AppInterface, RedisPubSub):
         """Returns a list of keys representing tasks in Redis."""
         return self.redis_client().keys(pattern='celery-task-meta-*')
 
-    def get_tasks_list(self, page=1, page_size=10):
+    def get_tasks_list(self, page:int=1, page_size:int=10):
         """Fetches a list of all tasks stored in Redis with pagination support."""
         task_keys = self.get_tasks_collection()
         total_tasks = len(task_keys)
@@ -604,7 +604,7 @@ class FileSystemApp(AppInterface, FileSystemPubSub):
         """Returns list of full paths to celery task metadata files."""
         return self.store().keys("celery-task-meta-*")
     
-    def get_tasks_list(self, page: int = 1, page_size: int = 20):
+    def get_tasks_list(self, page:int=1, page_size:int=10):
         """
         Returns a paginated list of tasks.
         
