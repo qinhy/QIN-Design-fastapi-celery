@@ -4,54 +4,8 @@ from typing import Optional
 try:
     import MetaTrader5 as mt5
 except ImportError:
-    # Mock MetaTrader5 for testing
-    class MockMT5:
-        TIMEFRAME_M1 = 1
-        TIMEFRAME_M5 = 5
-        TIMEFRAME_M15 = 15
-        TIMEFRAME_M30 = 30
-        TIMEFRAME_H1 = 60
-        TIMEFRAME_H4 = 240
-        TIMEFRAME_D1 = 1440
-        TIMEFRAME_W1 = 10080
-        TIMEFRAME_MN1 = 43200
-        def __init__(self):
-            print("[warning]: MockMT5 initialized")
-
-        @staticmethod
-        def initialize():
-            return True
-        
-        @staticmethod
-        def shutdown():
-            return True
-        
-        @staticmethod
-        def copy_rates_from_pos(symbol, timeframe, start_pos, count):
-            # Create mock data with the correct structure
-            dtype = [('time', '<i8'), ('open', '<f8'), ('high', '<f8'), 
-                    ('low', '<f8'), ('close', '<f8'), ('tick_volume', '<u8'), 
-                    ('spread', '<i4'), ('real_volume', '<u8')]
-            
-            # Return None for invalid symbols to test error handling
-            if symbol == "INVALID":
-                return None
-                
-            # Generate mock data
-            data = []
-            for i in range(count):
-                # Simple mock data with predictable values
-                time_val = 1600000000 + i * 60  # Incrementing timestamps
-                open_val = 1.1000 + (i * 0.0001)
-                high_val = open_val + 0.0010
-                low_val = open_val - 0.0010
-                close_val = open_val + 0.0005
-                
-                data.append((time_val, open_val, high_val, low_val, close_val, 100, 2, 100))
-                
-            return np.array(data, dtype=dtype)
-    
-    mt5 = MockMT5()
+    from MockMetaTrader5 import MetaTrader5
+    mt5 = MetaTrader5()
 
 import numpy as np
 from pydantic import BaseModel, Field
