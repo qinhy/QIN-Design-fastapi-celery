@@ -1,5 +1,6 @@
 import os
 import ftplib
+import base64  # Import base64 to handle decoding
 from typing import Optional
 from pydantic import BaseModel, Field
 try:
@@ -22,6 +23,10 @@ class UploadToFTP(ServiceOrientedArchitecture):
             host: str = Field("", description="FTP server hostname")
             username: str = Field("", description="FTP username")
             password: str = Field("", description="FTP password")
+            # New field for providing the file content encoded in base64
+            local_file_content_b64: Optional[str] = Field(
+                "", description="Base64 encoded content to create local_file if it does not exist"
+            )
 
         class Return(BaseModel):
             success: bool = Field(False, description="Whether the upload was successful")
@@ -29,7 +34,8 @@ class UploadToFTP(ServiceOrientedArchitecture):
             error_message: str = Field("", description="Error message if upload failed")
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
-            pass        
+            pass
+
         class Version(ServiceOrientedArchitecture.Model.Version):
             pass
 
@@ -42,37 +48,65 @@ class UploadToFTP(ServiceOrientedArchitecture):
                     "remote_dir": "/uploads",
                     "host": "ftp.example.com",
                     "username": "user",
-                    "password": "password"
+                    "password": "password",
+                }
+            },
+            {
+                "param": {"passive_mode": True},
+                "args": {
+                    "local_file": "/tmp/image_upload.png",
+                    "remote_dir": "/images",
+                    "host": "ftp.imagehost.com",
+                    "username": "imguser",
+                    "password": "imgpass",
+                    "local_file_content_b64": "iVBORw0KGgoAAAANSUhEUgAAAAUA"  
                 }
             }]
         
-        version:Version = Version()
-        param:Param = Param()
-        args:Args = Args()
-        ret:Optional[Return] = Return()
+        version: Version = Version()
+        param: Param = Param()
+        args: Args = Args()
+        ret: Optional[Return] = Return()
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
         def __init__(self, model, BasicApp, level=None):
             super().__init__(model, BasicApp, level)
-            self.model:UploadToFTP.Model = self.model
-            
+            self.model: UploadToFTP.Model = self.model
+
         def __call__(self, *args, **kwargs):
+            # Flag to check if the file is created from base64 content
+            temp_created = False
             with self.listen_stop_flag() as stop_flag:
                 if stop_flag.is_set():
                     return self.to_stop()
 
                 local_file = self.model.args.local_file
                 remote_dir = self.model.args.remote_dir
-                
-                # Check if local file exists
+
+                # If the local file does not exist, try to create it using the provided base64 content.
                 if not os.path.exists(local_file):
-                    self.log_and_send(f"Error: Local file {local_file} not found", UploadToFTP.Levels.ERROR)
-                    self.model.ret.success = False
-                    self.model.ret.error_message = f"Local file {local_file} not found"
-                    return self.model
-                
-                # Prepare FTP config
+                    if self.model.args.local_file_content_b64:
+                        self.log_and_send(f"Local file {local_file} not found; creating from provided base64 content")
+                        try:
+                            # Decode the base64 content and write it to local_file
+                            file_content = base64.b64decode(self.model.args.local_file_content_b64)
+                            with open(local_file, "wb") as f:
+                                f.write(file_content)
+                            temp_created = True
+                        except Exception as e:
+                            error_msg = f"Failed to create local file from base64 content: {str(e)}"
+                            self.log_and_send(error_msg, UploadToFTP.Levels.ERROR)
+                            self.model.ret.success = False
+                            self.model.ret.error_message = error_msg
+                            return self.model
+                    else:
+                        self.log_and_send(f"Error: Local file {local_file} not found", UploadToFTP.Levels.ERROR)
+                        self.model.ret.success = False
+                        self.model.ret.error_message = f"Local file {local_file} not found"
+                        return self.model
+
+                # Prepare FTP configuration
                 ftp_config = {
                     'host': self.model.args.host,
                     'username': self.model.args.username,
@@ -89,7 +123,7 @@ class UploadToFTP(ServiceOrientedArchitecture):
                     with ftplib.FTP(ftp_config['host'], ftp_config['username'], ftp_config['password']) as ftp:
                         ftp.set_pasv(self.model.param.passive_mode)
                         
-                        # Create directory if it doesn't exist
+                        # Create remote directory if it doesn't exist
                         try:
                             self.log_and_send(f"Checking if directory {remote_dir} exists")
                             ftp.cwd(remote_dir)
@@ -100,7 +134,7 @@ class UploadToFTP(ServiceOrientedArchitecture):
                         
                         # Upload file
                         with open(local_file, 'rb') as file:
-                            self.log_and_send(f"Uploading file...")
+                            self.log_and_send("Uploading file...")
                             ftp.storbinary(f'STOR {os.path.basename(local_file)}', file)
                     
                     self.log_and_send(f"File uploaded successfully to {remote_path}")
@@ -112,8 +146,15 @@ class UploadToFTP(ServiceOrientedArchitecture):
                     self.log_and_send(error_msg, UploadToFTP.Levels.ERROR)
                     self.model.ret.success = False
                     self.model.ret.error_message = error_msg
-
                 finally:
+                    # Clean up the temporary file if it was created from base64 content
+                    if temp_created and os.path.exists(local_file):
+                        try:
+                            os.unlink(local_file)
+                            self.log_and_send(f"Temporary file {local_file} deleted after upload")
+                        except Exception as e:
+                            self.log_and_send(f"Failed to delete temporary file {local_file}: {e}",
+                                              UploadToFTP.Levels.WARNING)
                     return self.model
 
         def to_stop(self):
@@ -128,15 +169,19 @@ class UploadToFTP(ServiceOrientedArchitecture):
             self.logger.log(level, message)
             self.send_data_to_task({level: message})
 
+######################
+# Testing Functions  #
+######################
+
 def test_upload_to_ftp():
-    """Test function for UploadToFTP"""
-    # Create a service instance
+    """Test function for standard scenarios of UploadToFTP."""
     from unittest.mock import patch, MagicMock
     import tempfile
     import os
     import ftplib
-    
-    # Create a temporary file for testing
+    import uuid
+
+    # Create a temporary file for testing the normal upload scenario
     with tempfile.NamedTemporaryFile(delete=False) as temp_file:
         temp_file.write(b"Test content")
         temp_file_path = temp_file.name
@@ -145,7 +190,7 @@ def test_upload_to_ftp():
         # Mock BasicApp
         mock_basic_app = MagicMock()
         
-        # Create model instance
+        # Create model instance for a successful upload using an existing file
         model = UploadToFTP.Model()
         model.param.passive_mode = True
         model.args.local_file = temp_file_path
@@ -153,37 +198,32 @@ def test_upload_to_ftp():
         model.args.host = "ftp.example.com"
         model.args.username = "testuser"
         model.args.password = "testpass"
+        model.args.local_file_content_b64 = ""  # Not used in this test
         
-        # Test successful upload
+        # Test successful upload with existing file
         with patch('ftplib.FTP') as mock_ftp_class:
-            # Configure mock FTP instance
             mock_ftp = MagicMock()
             mock_ftp_class.return_value.__enter__.return_value = mock_ftp
             
-            # Create action instance
             action = UploadToFTP.Action(model, mock_basic_app)
-            
-            # Execute action
             result = action()
             
-            # Verify results
             assert result.ret.success is True
             assert result.ret.remote_path == f"/test_uploads/{os.path.basename(temp_file_path)}"
             assert result.ret.error_message == ""
-            
-            # Verify FTP interactions
             mock_ftp.set_pasv.assert_called_once_with(True)
             mock_ftp.cwd.assert_called_once_with("/test_uploads")
             mock_ftp.storbinary.assert_called_once()
         
-        # Test file not found
+        # Test scenario when the file is not found and no base64 content is provided
         model.args.local_file = "/nonexistent/file.txt"
+        model.args.local_file_content_b64 = ""
         action = UploadToFTP.Action(model, mock_basic_app)
         result = action()
         assert result.ret.success is False
         assert "not found" in result.ret.error_message.lower()
         
-        # Test FTP error
+        # Test FTP error handling (simulate permission errors)
         model.args.local_file = temp_file_path
         with patch('ftplib.FTP') as mock_ftp_class:
             mock_ftp = MagicMock()
@@ -197,12 +237,60 @@ def test_upload_to_ftp():
             assert result.ret.success is False
             assert "ftp upload failed" in result.ret.error_message.lower()
         
-        print("All tests passed!")
+        print("Standard tests passed!")
     
     finally:
-        # Clean up temporary file
+        # Clean up the temporary file if it still exists
         if os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
 
+def test_upload_with_local_file_content_b64():
+    """
+    Test uploading using base64 content when the file does not already exist.
+    This test ensures that the file is created from the base64 data,
+    the upload proceeds, and the temporary file is deleted afterwards.
+    """
+    from unittest.mock import patch, MagicMock
+    import tempfile
+    import os
+    import uuid
+    import base64
+
+    # Generate a unique temporary file path that does not exist
+    temp_file_path = os.path.join(tempfile.gettempdir(), f"temp_{uuid.uuid4().hex}.txt")
+    # Prepare base64 encoded content for the file (e.g., "Hello World")
+    file_content = b"Hello World"
+    encoded_content = base64.b64encode(file_content).decode('utf-8')
+
+    # Create model instance for upload using base64 content
+    model = UploadToFTP.Model()
+    model.param.passive_mode = True
+    model.args.local_file = temp_file_path
+    model.args.remote_dir = "/test_uploads_base64"
+    model.args.host = "ftp.example.com"
+    model.args.username = "testuser"
+    model.args.password = "testpass"
+    model.args.local_file_content_b64 = encoded_content
+
+    # Simulate the FTP server behavior using patch
+    with patch('ftplib.FTP') as mock_ftp_class:
+        mock_ftp = MagicMock()
+        mock_ftp_class.return_value.__enter__.return_value = mock_ftp
+
+        mock_basic_app = MagicMock()
+        action = UploadToFTP.Action(model, mock_basic_app)
+        result = action()
+
+        # Assert that the upload was successful and the remote path is calculated correctly
+        assert result.ret.success is True
+        assert result.ret.remote_path == f"/test_uploads_base64/{os.path.basename(temp_file_path)}"
+        # Check that the FTP upload method was called
+        mock_ftp.storbinary.assert_called_once()
+        # Verify that the temporary file has been deleted after the upload
+        assert not os.path.exists(temp_file_path)
+
+    print("Base64 content file upload test passed!")
+
 if __name__ == "__main__":
     test_upload_to_ftp()
+    test_upload_with_local_file_content_b64()

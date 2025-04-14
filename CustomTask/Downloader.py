@@ -39,7 +39,6 @@ class Downloader(ServiceOrientedArchitecture):
             return [{
                 "param": {
                     "chunk_size": 4096,
-                    "redis_url": "redis://localhost:6379/0"
                 },
                 "args": {
                     "url": "http://example.com/sample.txt",
