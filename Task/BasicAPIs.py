@@ -1,4 +1,5 @@
 # Standard library imports
+import ast
 import base64
 import json
 import re
@@ -111,29 +112,66 @@ class BasicCeleryTask:
             if request is None:
                 return
             headers = request.__dict__['_message'].headers
-            self.BasicApp.set_task_status(headers['id'],
-                            headers['argsrepr'], 'RECEIVED')
+            data:list[dict] = ast.literal_eval(headers['argsrepr'])  # convert Python-code string to real Python objects 
+            data = data[0]
+            self.BasicApp.set_task_status(headers['id'], json.dumps(data), 'RECEIVED')
         
         self.on_task_received = on_task_received
         self.celery_perform_simple_action = self._create_celery_perform_simple_action()
         self.celery_perform_translate_action = self._create_celery_perform_translate_action()
         
-    def _compress_result(self, content: str) -> str:
-        "Compress a string using zlib and encode it as base64."
-        if not content:
-            return ""
-        compressed_bytes = zlib.compress(content.encode('utf-8'))
-        return base64.b64encode(compressed_bytes).decode('utf-8')
 
-    def _decompress_result(self, compressed_b64: str) -> str:
-        "Decompress a base64-encoded zlib-compressed string."
-        if not compressed_b64:
-            return ""
+    def _compress_result(self, content: Optional[str]) -> str:
+        if content is None:
+            raise ValueError("Compression failed: input is None.")
+        if not isinstance(content, str):
+            raise ValueError(f"Compression failed: expected a string, got {type(content).__name__}.")
+        if content.strip() == "":
+            raise ValueError("Compression failed: input string is empty.")
+
+        try:
+            encoded = content.encode('utf-8')
+        except UnicodeEncodeError as e:
+            raise ValueError(f"Compression failed: UTF-8 encoding error: {e}") from e
+
+        try:
+            compressed = zlib.compress(encoded)
+        except zlib.error as e:
+            raise ValueError(f"Compression failed: zlib compression error: {e}") from e
+
+        try:
+            result = base64.b64encode(compressed).decode('utf-8')
+        except Exception as e:
+            raise ValueError(f"Compression failed: base64 encoding error: {e}") from e
+
+        return result
+
+
+    def _decompress_result(self, compressed_b64: Optional[str]) -> str:
+        if compressed_b64 is None:
+            raise ValueError("Decompression failed: input is None.")
+        if not isinstance(compressed_b64, str):
+            raise ValueError(f"Decompression failed: expected a string, got {type(compressed_b64).__name__}.")
+        if compressed_b64.strip() == "":
+            raise ValueError("Decompression failed: input string is empty.")
+
         try:
             compressed_bytes = base64.b64decode(compressed_b64)
-            return zlib.decompress(compressed_bytes).decode('utf-8')
-        except Exception as e:
-            raise ValueError(f"Failed to decompress data: {str(e)}")
+        except (base64.binascii.Error, ValueError) as e:
+            raise ValueError(f"Decompression failed: base64 decoding error: {e}") from e
+
+        try:
+            decompressed = zlib.decompress(compressed_bytes)
+        except zlib.error as e:
+            raise ValueError(f"Decompression failed: zlib decompression error: {e}") from e
+
+        try:
+            result = decompressed.decode('utf-8')
+        except UnicodeDecodeError as e:
+            raise ValueError(f"Decompression failed: UTF-8 decoding error: {e}") from e
+
+        return result
+
         
     def perform_simple_action(
         self,
@@ -573,7 +611,7 @@ class BasicCeleryTask:
 
         r = res['result']
         try:
-            r = json.loads(r)
+            json.loads(r)
         except Exception as e:
             r = self._decompress_result(r)
 
