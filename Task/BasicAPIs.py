@@ -1,4 +1,5 @@
 # Standard library imports
+import ast
 import base64
 import json
 import re
@@ -111,8 +112,9 @@ class BasicCeleryTask:
             if request is None:
                 return
             headers = request.__dict__['_message'].headers
-            self.BasicApp.set_task_status(headers['id'],
-                            headers['argsrepr'], 'RECEIVED')
+            data:list[dict] = ast.literal_eval(headers['argsrepr'])  # convert Python-code string to real Python objects 
+            data = data[0]
+            self.BasicApp.set_task_status(headers['id'], json.dumps(data), 'RECEIVED')
         
         self.on_task_received = on_task_received
         self.celery_perform_simple_action = self._create_celery_perform_simple_action()
@@ -609,7 +611,7 @@ class BasicCeleryTask:
 
         r = res['result']
         try:
-            r = json.loads(r)
+            json.loads(r)
         except Exception as e:
             r = self._decompress_result(r)
 
