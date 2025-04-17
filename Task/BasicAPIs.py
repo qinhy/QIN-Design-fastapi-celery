@@ -1,4 +1,4 @@
-# Standard library imports
+﻿# Standard library imports
 import ast
 import base64
 import json
@@ -104,6 +104,9 @@ class BasicCeleryTask:
             
     def _setup_celery_tasks(self):
         """Setup Celery tasks and handlers"""
+        self.celery_perform_simple_action = self._create_celery_perform_simple_action()
+        self.celery_perform_translate_action = self._create_celery_perform_translate_action()
+
         # Register task received handler
         @task_received.connect
         def on_task_received(*args, **kwags):
@@ -112,14 +115,27 @@ class BasicCeleryTask:
             if request is None:
                 return
             headers = request.__dict__['_message'].headers
-            data:list[dict] = ast.literal_eval(headers['argsrepr'])  # convert Python-code string to real Python objects 
-            data = data[0]
-            self.BasicApp.set_task_status(headers['id'], json.dumps(data), 'RECEIVED')
-        
+            try:
+                data:list[dict] = ast.literal_eval(headers['argsrepr'])  # convert Python-code string to real Python objects 
+                data = data[0]
+                json_str = json.dumps(data)
+            except Exception as e:
+                json_str = '{}'
+            self.BasicApp.set_task_status(headers['id'], json_str, 'RECEIVED')
+            
         self.on_task_received = on_task_received
-        self.celery_perform_simple_action = self._create_celery_perform_simple_action()
-        self.celery_perform_translate_action = self._create_celery_perform_translate_action()
-        
+
+    def api_task_meta(self,task_id: str):
+        self.api_ok()
+        res = self.BasicApp.get_task_meta(task_id)
+        if res is None:raise HTTPException(status_code=404, detail="task not found")
+
+        r_json_str = res['result']
+        try:
+            json.loads(r_json_str)
+        except Exception as e:
+            res['result'] = self._decompress_result(r_json_str)
+        return res
 
     def _compress_result(self, content: Optional[str]) -> str:
         if content is None:
@@ -153,6 +169,7 @@ class BasicCeleryTask:
         if not isinstance(compressed_b64, str):
             raise ValueError(f"Decompression failed: expected a string, got {type(compressed_b64).__name__}.")
         if compressed_b64.strip() == "":
+            return ''
             raise ValueError("Decompression failed: input string is empty.")
 
         try:
@@ -254,20 +271,6 @@ class BasicCeleryTask:
             """Celery task wrapper for perform_translate_action"""
             return self.perform_translate_action(t.request.id, action_name, previous_data, previous_to_current_map, prior_data)        
         return celery_perform_translate_action
-    
-    def _create_task_received_handler(self):
-        """Create the task received event handler"""
-        @task_received.connect
-        def on_task_received(*args, **kwags):
-            """Handle task received event"""
-            request = kwags.get('request')
-            if request is None:
-                return
-            headers = request.__dict__['_message'].headers
-            self.BasicApp.set_task_status(headers['id'],
-                            headers['argsrepr'], 'RECEIVED')
-        
-        return on_task_received
     
     def _prepare_action(self, json_data: dict | str):
         """Prepare and validate action data"""
@@ -603,20 +606,6 @@ class BasicCeleryTask:
     def api_list_tasks(self,page:int=1, page_size:int=10):
         self.api_ok()
         return self.BasicApp.get_tasks_list(page,page_size)
-
-    def api_task_meta(self,task_id: str):
-        self.api_ok()
-        res = self.BasicApp.get_task_meta(task_id)
-        if res is None:raise HTTPException(status_code=404, detail="task not found")
-
-        r = res['result']
-        try:
-            json.loads(r)
-        except Exception as e:
-            r = self._decompress_result(r)
-
-        res['result'] = r
-        return res
 
     def api_task_meta_delete(self,task_id: str):
         self.api_ok()
