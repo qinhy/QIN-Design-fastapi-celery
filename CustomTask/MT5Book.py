@@ -226,10 +226,17 @@ class MT5CopyLastRatesService(ServiceOrientedArchitecture):
                     join_formatted_rates=join_formatted_rates
                 )
 
-        # Set default instances for Param, Args, and Return to enable easy initialization
-        param: Param = Param()
-        args: Args = Args()
-        ret: Return = Return()
+        class Logger(ServiceOrientedArchitecture.Model.Logger):
+            pass
+        
+        class Version(ServiceOrientedArchitecture.Model.Version):
+            pass
+        
+        version:Version = Version()
+        param:Param = Param()
+        args:Args = Args()
+        ret:Return = Return()
+        logger:Logger = Logger(name=Version().class_name)
         
     class Action(ServiceOrientedArchitecture.Action, MT5Action):
         _start_pos = 0
