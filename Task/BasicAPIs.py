@@ -1,12 +1,10 @@
 ﻿# Standard library imports
 import ast
-import base64
 import json
 import re
 import time
 import datetime
-from typing import Literal, Optional
-import zlib
+from typing import Literal
 import pytz
 from celery.app import task as Task
 from celery.signals import task_received
