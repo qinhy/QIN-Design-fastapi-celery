@@ -102,6 +102,36 @@ class BasicCeleryTask:
                 self._make_api_action_handler(action_name, action_class),
                 'post', f"/{action_name.lower()}/")
             
+    def task_result_normalize_to_jsonStr(self, res):
+        """Convert task result to a JSON string format."""
+        if not res or res.strip() == "":
+            return '{}'
+        
+        try:
+            # Convert Python-code string to real Python objects
+            data = ast.literal_eval(res)
+            if isinstance(data, list) and data:
+                data = data[0]
+            return json.dumps(data)
+        except Exception:
+            return '{}'
+    
+    def task_result_decode_as_jsonStr(self, res):
+        """Decode task result to a JSON string, decompressing if necessary."""
+        if not res or res.strip() == "":
+            return '{}'
+        
+        try:
+            # Check if it's already valid JSON
+            json.loads(res)
+            return res
+        except Exception:
+            # If not valid JSON, try to decompress it
+            try:
+                return self.BasicApp._decompress_str(res)
+            except ValueError:
+                return '{}'
+    
     def _setup_celery_tasks(self):
         """Setup Celery tasks and handlers"""
         self.celery_perform_simple_action = self._create_celery_perform_simple_action()
@@ -109,87 +139,39 @@ class BasicCeleryTask:
 
         # Register task received handler
         @task_received.connect
-        def on_task_received(*args, **kwags):
+        def on_task_received(*args, **kwargs):
             """Handle task received event"""
-            request = kwags.get('request')
+            request = kwargs.get('request')
             if request is None:
                 return
-            headers = request.__dict__['_message'].headers
+                
             try:
-                data:list[dict] = ast.literal_eval(headers['argsrepr'])  # convert Python-code string to real Python objects 
-                data = data[0]
-                json_str = json.dumps(data)
-            except Exception as e:
-                json_str = '{}'
-            self.BasicApp.set_task_status(headers['id'], json_str, 'RECEIVED')
+                headers:dict = request.__dict__['_message'].headers
+                task_id = headers.get('id')
+                args_repr = headers.get('argsrepr')
+                
+                if task_id:
+                    normalized_args = self.task_result_normalize_to_jsonStr(args_repr)
+                    self.BasicApp.set_task_status(task_id, normalized_args, 'RECEIVED')
+            except Exception:
+                # Silently handle errors in task received handler
+                pass
             
         self.on_task_received = on_task_received
 
-    def api_task_meta(self,task_id: str):
+    def api_task_meta(self, task_id: str):
+        """API endpoint to get task metadata."""
         self.api_ok()
         res = self.BasicApp.get_task_meta(task_id)
-        if res is None:raise HTTPException(status_code=404, detail="task not found")
-
-        r_json_str = res['result']
-        try:
-            json.loads(r_json_str)
-        except Exception as e:
-            res['result'] = self._decompress_result(r_json_str)
+        
+        if res is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+            
+        if 'result' in res:
+            res['result'] = self.task_result_decode_as_jsonStr(res['result'])
+            
         return res
 
-    def _compress_result(self, content: Optional[str]) -> str:
-        if content is None:
-            raise ValueError("Compression failed: input is None.")
-        if not isinstance(content, str):
-            raise ValueError(f"Compression failed: expected a string, got {type(content).__name__}.")
-        if content.strip() == "":
-            raise ValueError("Compression failed: input string is empty.")
-
-        try:
-            encoded = content.encode('utf-8')
-        except UnicodeEncodeError as e:
-            raise ValueError(f"Compression failed: UTF-8 encoding error: {e}") from e
-
-        try:
-            compressed = zlib.compress(encoded)
-        except zlib.error as e:
-            raise ValueError(f"Compression failed: zlib compression error: {e}") from e
-
-        try:
-            result = base64.b64encode(compressed).decode('utf-8')
-        except Exception as e:
-            raise ValueError(f"Compression failed: base64 encoding error: {e}") from e
-
-        return result
-
-
-    def _decompress_result(self, compressed_b64: Optional[str]) -> str:
-        if compressed_b64 is None:
-            raise ValueError("Decompression failed: input is None.")
-        if not isinstance(compressed_b64, str):
-            raise ValueError(f"Decompression failed: expected a string, got {type(compressed_b64).__name__}.")
-        if compressed_b64.strip() == "":
-            return ''
-            raise ValueError("Decompression failed: input string is empty.")
-
-        try:
-            compressed_bytes = base64.b64decode(compressed_b64)
-        except (base64.binascii.Error, ValueError) as e:
-            raise ValueError(f"Decompression failed: base64 decoding error: {e}") from e
-
-        try:
-            decompressed = zlib.decompress(compressed_bytes)
-        except zlib.error as e:
-            raise ValueError(f"Decompression failed: zlib decompression error: {e}") from e
-
-        try:
-            result = decompressed.decode('utf-8')
-        except UnicodeDecodeError as e:
-            raise ValueError(f"Decompression failed: UTF-8 decoding error: {e}") from e
-
-        return result
-
-        
     def perform_simple_action(
         self,
         task_id: str,
@@ -205,7 +187,7 @@ class BasicCeleryTask:
         model_instance.task_id = task_id
         model_instance = class_type.Action(model_instance, BasicApp=self.BasicApp)()
         res = model_instance.model_dump_json()        
-        res = self._compress_result(res) if compress else res
+        res = self.BasicApp._compress_str(res) if compress else res
         return res
     
     def perform_translate_action(
@@ -615,7 +597,7 @@ class BasicCeleryTask:
     def api_task_stop(self,task_id: str):
         self.api_ok()
         self.BasicApp.send_data_to_task(task_id,{'status': 'REVOKED'})
-        self.BasicApp.set_task_status(task_id,'','REVOKED')
+        self.BasicApp.set_task_status(task_id,'{}','REVOKED')
 
     def api_listen_data_of_task(self, task_id: str,
                                       request: Request):
