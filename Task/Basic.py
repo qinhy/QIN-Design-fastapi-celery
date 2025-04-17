@@ -1,3 +1,5 @@
+import ast
+import base64
 from contextlib import contextmanager
 from datetime import datetime
 import io
@@ -5,6 +7,7 @@ import json
 import logging
 import os
 import re
+import zlib
 import requests
 import threading
 import time
@@ -331,19 +334,66 @@ class AppInterface(PubSubInterface):
     def get_tasks_list(self,page:int=1, page_size:int=10)->list[dict]: raise NotImplementedError('get_tasks_list')
     def get_task_meta(self, task_id: str)->dict: raise NotImplementedError('get_task_meta')
     def delete_task_meta(self, task_id: str): raise NotImplementedError('delete_task_meta')
-    def set_task_status(self, task_id, result='', status=celery.states.STARTED): raise NotImplementedError('set_task_status')
-
-    def get_task_status(self, task_id: str):
-        return self.get_task_meta(task_id).get('status', None)   
+    def set_task_status(self, task_id, result='{}', status=celery.states.STARTED): raise NotImplementedError('set_task_status')
     
-    def set_task_started(self, task_model: 'ServiceOrientedArchitecture.Model'):
-        self.set_task_status(task_model.task_id,task_model.model_dump_json(),celery.states.STARTED)
-
-    def send_data_to_task(self, task_id, data):        
+    def get_task_status(self, task_id: str):
+        return self.get_task_meta(task_id).get('status', None) 
+    
+    def send_data_to_task(self, task_id, data):
         self.publish(task_id,data)
         
     def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False):
         return self.subscribe(task_id,data_callback,eternal)
+    
+    def _decompress_str(self, compressed_b64: Optional[str]) -> str:
+        if compressed_b64 is None:
+            raise ValueError("Decompression failed: input is None.")
+        if not isinstance(compressed_b64, str):
+            raise ValueError(f"Decompression failed: expected a string, got {type(compressed_b64).__name__}.")
+        if compressed_b64.strip() == "":
+            raise ValueError("Decompression failed: input string is empty.")
+
+        try:
+            compressed_bytes = base64.b64decode(compressed_b64)
+        except (base64.binascii.Error, ValueError) as e:
+            raise ValueError(f"Decompression failed: base64 decoding error: {e}") from e
+
+        try:
+            decompressed = zlib.decompress(compressed_bytes)
+        except zlib.error as e:
+            raise ValueError(f"Decompression failed: zlib decompression error: {e}") from e
+
+        try:
+            result = decompressed.decode('utf-8')
+        except UnicodeDecodeError as e:
+            raise ValueError(f"Decompression failed: UTF-8 decoding error: {e}") from e
+
+        return result
+    
+    def _compress_str(self, content: Optional[str]) -> str:
+        if content is None:
+            raise ValueError("Compression failed: input is None.")
+        if not isinstance(content, str):
+            raise ValueError(f"Compression failed: expected a string, got {type(content).__name__}.")
+        if content.strip() == "":
+            raise ValueError("Compression failed: input string is empty.")
+
+        try:
+            encoded = content.encode('utf-8')
+        except UnicodeEncodeError as e:
+            raise ValueError(f"Compression failed: UTF-8 encoding error: {e}") from e
+
+        try:
+            compressed = zlib.compress(encoded)
+        except zlib.error as e:
+            raise ValueError(f"Compression failed: zlib compression error: {e}") from e
+
+        try:
+            result = base64.b64encode(compressed).decode('utf-8')
+        except Exception as e:
+            raise ValueError(f"Compression failed: base64 encoding error: {e}") from e
+
+        return result
 
 class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
     def __init__(self, rabbitmq_url:str, rabbitmq_user:str, rabbitmq_password:str, 
@@ -455,7 +505,7 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
         collection = self.get_tasks_collection()
         collection.delete_one({'_id': task_id})
             
-    def set_task_status(self, task_id, result='', status=celery.states.STARTED):
+    def set_task_status(self, task_id, result='{}', status=celery.states.STARTED):
         collection = self.get_tasks_collection()
         collection.update_one(
             {'_id': task_id},
@@ -545,7 +595,7 @@ class RedisApp(AppInterface, RedisPubSub):
         task_key = f'celery-task-meta-{task_id}'
         self.redis_client().delete(task_key)
 
-    def set_task_status(self, task_id, result='', status=celery.states.STARTED):
+    def set_task_status(self, task_id, result='{}', status=celery.states.STARTED):
         """Marks a task as started in Redis."""
         task_key = f'celery-task-meta-{task_id}'
         task_data = TaskModel(
@@ -658,7 +708,7 @@ class FileSystemApp(AppInterface, FileSystemPubSub):
     def delete_task_meta(self, task_id: str):
         self.store().delete(f"celery-task-meta-{task_id}")
 
-    def set_task_status(self, task_id, result='', status=celery.states.STARTED):
+    def set_task_status(self, task_id, result='{}', status=celery.states.STARTED):
         task_data = TaskModel(task_id=task_id, status=status, result=result)
         self.store().set(f"celery-task-meta-{task_id}",task_data.model_dump(exclude_none=True))
 
@@ -1067,9 +1117,9 @@ class ServiceOrientedArchitecture:
             self.listen_data_of_task_uuids.append(id)
             return id
 
-        def set_task_status(self,status):
+        def set_status(self,status):
             self.BasicApp.set_task_status(self.model.task_id,self.model.model_dump_json(),status)
-
+        
         def get_task_status(self):
             return self.BasicApp.get_task_status(self.model.task_id)
 
@@ -1094,11 +1144,11 @@ class ServiceOrientedArchitecture:
                 stop_flag.set()
                 yield stop_flag
             else:
-                self.set_task_status(celery.states.STARTED)
+                self.set_status(celery.states.STARTED)
                 # Function to check if the task should be stopped, running in a separate thread
                 def check_task_status(data:dict):
                     if data.get('status',None) == celery.states.REVOKED:
-                        self.set_task_status(celery.states.REVOKED)
+                        self.set_status(celery.states.REVOKED)
                         stop_flag.set()
                 self.listen_data_of_task(check_task_status,True)
                 
