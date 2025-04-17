@@ -1,12 +1,10 @@
 ﻿# Standard library imports
 import ast
-import base64
 import json
 import re
 import time
 import datetime
-from typing import Literal, Optional
-import zlib
+from typing import Literal
 import pytz
 from celery.app import task as Task
 from celery.signals import task_received
@@ -153,9 +151,9 @@ class BasicCeleryTask:
                 if task_id:
                     normalized_args = self.task_result_normalize_to_jsonStr(args_repr)
                     self.BasicApp.set_task_status(task_id, normalized_args, 'RECEIVED')
-            except Exception:
+            except Exception as e:
                 # Silently handle errors in task received handler
-                pass
+                print(f'[on_task_received] error : {e}')
             
         self.on_task_received = on_task_received
 
