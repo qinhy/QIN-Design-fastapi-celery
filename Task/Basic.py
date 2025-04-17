@@ -919,6 +919,8 @@ class ServiceOrientedArchitecture:
             def __init__(self,*args,**kwargs):
                 super().__init__(*args,**kwargs)
                 self.class_name = self.get_class_name()
+                if self.class_name =='ServiceOrientedArchitecture':
+                    raise ValueError('this is interface, cannot be instanced!')
 
             def __repr__(self):
                 return self.__str__()
