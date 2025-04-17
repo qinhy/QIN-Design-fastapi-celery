@@ -153,9 +153,9 @@ class BasicCeleryTask:
                 if task_id:
                     normalized_args = self.task_result_normalize_to_jsonStr(args_repr)
                     self.BasicApp.set_task_status(task_id, normalized_args, 'RECEIVED')
-            except Exception:
+            except Exception as e:
                 # Silently handle errors in task received handler
-                pass
+                print(f'[on_task_received] error : {e}')
             
         self.on_task_received = on_task_received
 
