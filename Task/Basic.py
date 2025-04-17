@@ -1023,12 +1023,11 @@ class ServiceOrientedArchitecture:
                     self._logger.removeHandler(handler)
 
                 
-        version:Version = Version()
+        version:Version
         param:Param = Param()
         args:Args = Args()
         ret:Optional[Return] = Return()
         logger: Logger = Logger()
-        version:Version = Version()
 
         @classmethod
         def examples(cls): return []
