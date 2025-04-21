@@ -271,11 +271,38 @@ my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
 #     target = z.localize(dd.fromisoformat(t)) - dd.now(z)
 #     time.sleep(max(0, target.total_seconds()) + offset)
 
-# t,tz = "NOW@every 10 s","Asia/Tokyo"
-# params = {"execution_time": t,"timezone": tz}
-# while True:
-#     response = requests.post(url, params=params, headers=headers, json=data)
-#     t,tz = response.json()['next_schedule']
-#     params = {"execution_time": t,"timezone": tz}
-#     print(t,tz)
-#     wait_until(t,tz,-2)
+# def schedule_recurring_requests(
+#     url: str,
+#     headers: dict,
+#     data: dict,
+#     start_time: str = 'NOW',
+#     timezone: str = "Asia/Tokyo",
+#     initial_interval: str = "10 s"
+# ) -> None:
+#     import requests
+#     request_params = {
+#         "execution_time": f"{start_time}@every {initial_interval}",
+#         "timezone": timezone
+#     }
+    
+#     while True:
+#         try:
+#             response = requests.post(
+#                 url=url,
+#                 params=request_params,
+#                 headers=headers,
+#                 json=data
+#             )
+#             response.raise_for_status()
+#             next_execution_time, next_timezone = response.json()['next_schedule']
+#         except requests.RequestException as e:
+#             print(f"Error during request: {e}")
+#             break
+
+#         request_params.update({
+#             "execution_time": next_execution_time,
+#             "timezone": next_timezone
+#         })
+        
+#         print(f"Next execution: {next_execution_time} {next_timezone}")
+#         wait_until(next_execution_time, next_timezone, offset=-5)
