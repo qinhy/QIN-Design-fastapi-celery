@@ -263,3 +263,19 @@ def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
     return my_app.api_perform_action('Fibonacci', m.model_dump(),0)
 
 my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
+
+
+# def wait_until(t:str, tz='Asia/Tokyo', offset=-10):
+#     import time, pytz, datetime
+#     z,dd,t = pytz.timezone(tz), datetime.datetime, t[:19]
+#     target = z.localize(dd.fromisoformat(t)) - dd.now(z)
+#     time.sleep(max(0, target.total_seconds()) + offset)
+
+# t,tz = "NOW@every 10 s","Asia/Tokyo"
+# params = {"execution_time": t,"timezone": tz}
+# while True:
+#     response = requests.post(url, params=params, headers=headers, json=data)
+#     t,tz = response.json()['next_schedule']
+#     params = {"execution_time": t,"timezone": tz}
+#     print(t,tz)
+#     wait_until(t,tz,-2)

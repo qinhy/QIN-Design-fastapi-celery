@@ -337,19 +337,11 @@ class BasicCeleryTask:
             offset_seconds: Offset in seconds to add to the execution time
         """
         # Split the datetime and the interval part (e.g., '2025-04-07T15:08:58@every 10 s')
-        datetime_str, _ = execution_time_str.split('@')
-        
-        # Parse the next scheduled time
-        tz = pytz.timezone(timezone_str)
-        scheduled_time = datetime.fromisoformat(datetime_str)
-        scheduled_time = tz.localize(scheduled_time)
-
-        # Add the offset
-        target_time = scheduled_time + datetime.timedelta(seconds=offset_seconds)
-
-        # Wait until target time
-        now = datetime.now(tz)
-        sleep_seconds = (target_time - now).total_seconds()
+        import time, pytz, datetime
+        z,dd,t = pytz.timezone(timezone_str), datetime.datetime, execution_time_str[:19]
+        target = z.localize(dd.fromisoformat(t)) - dd.now(z)
+        sleep_seconds = max(0, target.total_seconds()) + offset
+                
         if sleep_seconds > 0:
             print(f"Waiting for {sleep_seconds:.2f} seconds...")
             time.sleep(sleep_seconds)
