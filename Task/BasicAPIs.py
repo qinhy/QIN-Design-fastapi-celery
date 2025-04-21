@@ -208,7 +208,7 @@ class BasicCeleryTask:
         previous_model_instance, previous_name, _ = self._prepare_action(previous_data)
         previous_data = previous_model_instance.model_dump()
         
-        if previous_to_current_map:
+        if isinstance(previous_to_current_map,dict):
             action_data = self._map_fields_between_models(
                 previous_data, previous_to_current_map)
             
@@ -263,9 +263,10 @@ class BasicCeleryTask:
         # Parse JSON string if needed
         if isinstance(action_data, str):
             try:
+                action_data = self.task_result_decode_as_jsonStr(json_data)
                 action_data = json.loads(action_data)
             except json.JSONDecodeError as e:
-                raise ValueError(f"Invalid JSON format: {str(e)}") from e
+                raise ValueError(f"Invalid JSON : {str(action_data)}")
         
         # Validate data structure
         if not isinstance(action_data, dict):
@@ -337,19 +338,11 @@ class BasicCeleryTask:
             offset_seconds: Offset in seconds to add to the execution time
         """
         # Split the datetime and the interval part (e.g., '2025-04-07T15:08:58@every 10 s')
-        datetime_str, _ = execution_time_str.split('@')
-        
-        # Parse the next scheduled time
-        tz = pytz.timezone(timezone_str)
-        scheduled_time = datetime.fromisoformat(datetime_str)
-        scheduled_time = tz.localize(scheduled_time)
-
-        # Add the offset
-        target_time = scheduled_time + datetime.timedelta(seconds=offset_seconds)
-
-        # Wait until target time
-        now = datetime.now(tz)
-        sleep_seconds = (target_time - now).total_seconds()
+        import time, pytz, datetime
+        z,dd,t = pytz.timezone(timezone_str), datetime.datetime, execution_time_str[:19]
+        target = z.localize(dd.fromisoformat(t)) - dd.now(z)
+        sleep_seconds = max(0, target.total_seconds()) + offset
+                
         if sleep_seconds > 0:
             print(f"Waiting for {sleep_seconds:.2f} seconds...")
             time.sleep(sleep_seconds)

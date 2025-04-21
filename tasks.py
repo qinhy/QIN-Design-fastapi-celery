@@ -131,7 +131,7 @@ class CeleryTask(BasicCeleryTask):
             print(f"Pipeline task IDs in execution order: {task_ids}")
 
             # Return task information            
-            self.BasicApp.set_task_status(task.task_id,status='SENDED')
+            self.BasicApp.set_task_status(chain_result.task_id,status='SENDED')
             if next_execution_time_str:
                 return TaskModel.create_task_response(
                     chain_result, utc_execution_time, local_time, timezone,
@@ -144,7 +144,7 @@ class CeleryTask(BasicCeleryTask):
 
     def api_set_config_pipeline(self,
         name: str='FiboPrime',
-        pipeline_config: list[dict] = [
+        pipeline_config: list[dict|None] = [
             # 'Fibonacci'
             {
                 "param": {
@@ -400,3 +400,46 @@ def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
     return my_app.api_perform_action('Fibonacci', m.model_dump(),'NOW')
 
 my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
+
+
+# def wait_until(t:str, tz='Asia/Tokyo', offset=-10):
+#     import time, pytz, datetime
+#     z,dd,t = pytz.timezone(tz), datetime.datetime, t[:19]
+#     target = z.localize(dd.fromisoformat(t)) - dd.now(z)
+#     time.sleep(max(0, target.total_seconds()) + offset)
+
+# def schedule_recurring_requests(
+#     url: str,
+#     headers: dict,
+#     data: dict,
+#     start_time: str = 'NOW',
+#     timezone: str = "Asia/Tokyo",
+#     initial_interval: str = "10 s"
+# ) -> None:
+#     import requests
+#     request_params = {
+#         "execution_time": f"{start_time}@every {initial_interval}",
+#         "timezone": timezone
+#     }
+    
+#     while True:
+#         try:
+#             response = requests.post(
+#                 url=url,
+#                 params=request_params,
+#                 headers=headers,
+#                 json=data
+#             )
+#             response.raise_for_status()
+#             next_execution_time, next_timezone = response.json()['next_schedule']
+#         except requests.RequestException as e:
+#             print(f"Error during request: {e}")
+#             break
+
+#         request_params.update({
+#             "execution_time": next_execution_time,
+#             "timezone": next_timezone
+#         })
+        
+#         print(f"Next execution: {next_execution_time} {next_timezone}")
+#         wait_until(next_execution_time, next_timezone, offset=-5)
