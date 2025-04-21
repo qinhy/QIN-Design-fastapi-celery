@@ -127,7 +127,7 @@ class CeleryTask(BasicCeleryTask):
             print(f"Pipeline task IDs in execution order: {task_ids}")
 
             # Return task information            
-            self.BasicApp.set_task_status(task.task_id,status='SENDED')
+            self.BasicApp.set_task_status(chain_result.task_id,status='SENDED')
             if next_execution_time_str:
                 return TaskModel.create_task_response(
                     chain_result, utc_execution_time, local_time, timezone,
@@ -140,7 +140,7 @@ class CeleryTask(BasicCeleryTask):
 
     def api_set_config_pipeline(self,
         name: str='FiboPrime',
-        pipeline_config: list[dict] = [
+        pipeline_config: list[dict|None] = [
             # 'Fibonacci'
             {
                 "param": {

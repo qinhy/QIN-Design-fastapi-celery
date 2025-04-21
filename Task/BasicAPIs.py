@@ -208,7 +208,7 @@ class BasicCeleryTask:
         previous_model_instance, previous_name, _ = self._prepare_action(previous_data)
         previous_data = previous_model_instance.model_dump()
         
-        if previous_to_current_map:
+        if isinstance(previous_to_current_map,dict):
             action_data = self._map_fields_between_models(
                 previous_data, previous_to_current_map)
             
@@ -263,9 +263,10 @@ class BasicCeleryTask:
         # Parse JSON string if needed
         if isinstance(action_data, str):
             try:
+                action_data = self.task_result_decode_as_jsonStr(json_data)
                 action_data = json.loads(action_data)
             except json.JSONDecodeError as e:
-                raise ValueError(f"Invalid JSON format: {str(e)}") from e
+                raise ValueError(f"Invalid JSON : {str(action_data)}")
         
         # Validate data structure
         if not isinstance(action_data, dict):
