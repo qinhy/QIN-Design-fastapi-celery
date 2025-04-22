@@ -72,22 +72,10 @@ class CeleryTask(BasicCeleryTask):
             # Extract models and mappings from config
             pipeline_config_models = pipeline_config[::2]  # Every other item starting at 0
             pipeline_config_maps = pipeline_config[1::2]   # Every other item starting at 1
-                
-
+            
             # Initialize task chain with first action
-            # task_chain = self.perform_action.signature(
-            #     # args=[data, name, prior_model_data, previous_name,previous_to_current_map],
-            #     args=[
-            #         current_data,      # Input data
-            #         pipeline[0],       # First action name
-            #         pipeline_config_models[0],  # First model config
-            #         None,             # No previous action for first step
-            #         None              # No mapping for first step
-            #     ]
-            # )
-
-            # Initialize task chain with first action
-            task_chain = self.celery_perform_simple_action.signature(                
+            task_chain = self.celery_perform_simple_action.signature(      
+                 # args=[data, name, prior_model_data, previous_name,previous_to_current_map],          
                 args=[
                     current_data,
                     pipeline_config_models[0],
@@ -128,14 +116,14 @@ class CeleryTask(BasicCeleryTask):
 
             # Return task information            
             self.BasicApp.set_task_status(chain_result.task_id,status='SENDED')
-            if next_execution_time_str:
-                return TaskModel.create_task_response(
-                    chain_result, utc_execution_time, local_time, timezone,
-                    (next_execution_time_str,timezone_str))
-            else:
-                return TaskModel.create_task_response(
-                    chain_result, utc_execution_time, local_time, timezone, None)
-                    
+            next_schedule = (next_execution_time_str, timezone_str) if next_execution_time_str else None
+            return TaskModel.create_task_response(
+                chain_result, 
+                utc_execution_time, 
+                local_time, 
+                timezone,
+                next_schedule
+            )
         return api_pipeline_handler        
 
     def api_set_config_pipeline(self,
