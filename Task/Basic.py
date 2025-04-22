@@ -306,7 +306,7 @@ class TaskModel(BaseModel):
     # Scheduling metadata
     next_schedule: Optional[tuple[str, str]] = None    
     # Task relationships
-    children: Optional[list[list[list[str]]]] = None
+    children: Optional[list[str]] = None
 
 
     @classmethod
@@ -314,12 +314,14 @@ class TaskModel(BaseModel):
                    utc_execution_time: Optional[datetime],
                    local_time: Optional[datetime], 
                    timezone: Optional[str],
-                   next_schedule: Optional[tuple[str,str]]=None) -> dict:
+                   next_schedule: Optional[tuple[str,str]]=None,
+                   children: Optional[list[str]] = None) -> dict:
         return cls(task_id=task.task_id,
                 scheduled_for_the_timezone=local_time,
                 timezone=timezone if local_time is not None else None,
                 scheduled_for_utc=utc_execution_time,
                 next_schedule=next_schedule,
+                children=children,
         ).model_dump(exclude_none=True)
 
 class AppInterface(PubSubInterface):

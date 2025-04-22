@@ -7,6 +7,7 @@ from .BinaryRepresentation import BinaryRepresentation
 from .CollatzSequence import CollatzSequence
 from .SmartModelConverter import SmartModelConverter
 from .UploadToFTP import UploadToFTP
+from .HttpRequestTask import HttpRequestTask
 
 SmartModelConverter.Action.ACTION_REGISTRY = {
     'Fibonacci': Fibonacci,
