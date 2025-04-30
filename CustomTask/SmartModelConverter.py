@@ -26,12 +26,12 @@ class SmartModelConverter(ServiceOrientedArchitecture):
             target_class_name: str = Field(None, description="The target class name for conversion.")
             prompt_template: str = Field(
                 (
-                    "Please complete the following code and only provide the implementation "
+                    "Please complete the following python code and only provide the implementation "
                     "of the ret to args converter function:\n\n"
-                    "```{from_class_name}.ret pydanctic schema\n"
+                    "```{from_class_name}.ret pydantic schema\n"
                     "{from_schema}\n"
                     "```\n\n"
-                    "```{to_class_name}.args pydanctic schema\n"
+                    "```{to_class_name}.args pydantic schema\n"
                     "{to_schema}\n"
                     "```\n\n"
                     "```python\n"
