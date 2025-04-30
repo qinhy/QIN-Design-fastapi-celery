@@ -166,6 +166,7 @@ class SmartModelConverter(ServiceOrientedArchitecture):
 
             self.log_and_send(f"Sending request to OpenAI API using model: {model}", self.Levels.INFO)
             try:
+                self.log_and_send(f"Post content : {json.dumps(data)}", self.Levels.DEBUG)
                 response = requests.post(url, headers=headers, data=json.dumps(data))
                 response.raise_for_status()
                 self.log_and_send("Received successful response from OpenAI API", self.Levels.INFO)
