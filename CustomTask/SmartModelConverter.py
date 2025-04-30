@@ -18,7 +18,7 @@ class SmartModelConverter(ServiceOrientedArchitecture):
 
     class Model(ServiceOrientedArchitecture.Model):
         class Param(BaseModel):
-            model: str = Field("gpt-4o-mini", description="The model to use for conversion.")
+            model: str = Field("gpt-4.1-nano", description="The model to use for conversion.")
             api_key: Optional[str] = Field(None, description="API key for authentication, if required.")
 
         class Args(BaseModel):
@@ -28,10 +28,10 @@ class SmartModelConverter(ServiceOrientedArchitecture):
                 (
                     "Please complete the following code and only provide the implementation "
                     "of the ret to args converter function:\n\n"
-                    "```{from_class_name}.Model pydanctic schema\n"
+                    "```{from_class_name}.ret pydanctic schema\n"
                     "{from_schema}\n"
                     "```\n\n"
-                    "```{to_class_name}.Model pydanctic schema\n"
+                    "```{to_class_name}.args pydanctic schema\n"
                     "{to_schema}\n"
                     "```\n\n"
                     "```python\n"

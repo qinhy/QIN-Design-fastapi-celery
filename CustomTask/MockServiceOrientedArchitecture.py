@@ -45,6 +45,9 @@ class ServiceOrientedArchitecture:
                 WARNING:str='WARNING'
                 INFO:str='INFO'
                 DEBUG:str='DEBUG'
+                @staticmethod
+                def all():
+                    return ['ERROR','WARNING','INFO','DEBUG']
                 
             name: str  = "service" # Logger name
             level: str = "INFO"  # Default log level
@@ -146,8 +149,8 @@ class ServiceOrientedArchitecture:
                 model = outer_class_name.Model(**model)
             self.model = model
             self.logger = self.model.logger
-            if level is None:level=ServiceOrientedArchitecture.Model.Logger.Levels.INFO
-            self.logger.level = level
+            if level is not None and level in ServiceOrientedArchitecture.Model.Logger.Levels.all():
+                self.logger.level = level
             self.logger.init(
                 name=f"{model.version.class_name}:{self.model.task_id}",action_obj=self)
             self.listen_data_of_task_uuids = []

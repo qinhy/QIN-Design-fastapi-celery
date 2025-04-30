@@ -992,6 +992,9 @@ class ServiceOrientedArchitecture:
                 INFO:str='INFO'
                 DEBUG:str='DEBUG'
                 
+                @staticmethod
+                def all():
+                    return ['ERROR','WARNING','INFO','DEBUG']
             name: str  = "service" # Logger name
             level: str = "INFO"  # Default log level
             logs:str = ''
@@ -1104,8 +1107,8 @@ class ServiceOrientedArchitecture:
             self.model = model
             self.BasicApp = BasicApp
             self.logger = self.model.logger
-            if level is None:level=ServiceOrientedArchitecture.Model.Logger.Levels.INFO
-            self.logger.level = level
+            if level is not None and level in ServiceOrientedArchitecture.Model.Logger.Levels.all():
+                self.logger.level = level
             self.logger.init(
                 name=f"{model.version.class_name}:{self.model.task_id}",action_obj=self)
             self.listen_data_of_task_uuids = []
