@@ -283,3 +283,10 @@ def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
 my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
 
 
+from fastapi_mcp import FastApiMCP
+mcp = FastApiMCP(my_app.root_fast_app,
+    describe_full_response_schema=True,  # Describe the full response JSON-schema instead of just a response example
+    describe_all_responses=True,  # Describe all the possible responses instead of just the success (2XX) response
+)
+
+mcp.mount()
