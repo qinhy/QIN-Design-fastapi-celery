@@ -364,7 +364,7 @@ class BasicCeleryTask:
         - 'YYYY-MM-DDTHH:MM:SS'
         - 'NOW@every 1 d', '2025-04-07T12:00:00@every 10 s', etc.
         """
-
+        execution_time_str = f'{execution_time_str}'
         utc_now = datetime.datetime.now(datetime.timezone.utc)
         tz = pytz.timezone(timezone_str)
         local_now = utc_now.astimezone(tz)
