@@ -67,6 +67,14 @@ class PromptBuilder:
 
 
 class ChatGPTService(ServiceOrientedArchitecture):
+    @classmethod
+    def description(cls):
+        return """
+Provides an interface to interact with ChatGPT and other OpenAI models.
+Supports text generation, completion, and multimodal capabilities.
+Allows customization of model parameters and handles API communication.
+"""
+    
     class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):
         pass
 

@@ -11,11 +11,13 @@ except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
 
 class SmartModelConverter(ServiceOrientedArchitecture):
-    """
-    A class for building and managing conversion functions between different
-    ServiceOrientedArchitecture classes using LLM.
-    """
-
+    @classmethod
+    def description(cls):
+        return """
+Converts between different ServiceOrientedArchitecture class models using LLM.
+Generates conversion functions between source and target classes.
+Supports customizable prompt templates for the conversion process.
+"""
     class Model(ServiceOrientedArchitecture.Model):
         class Param(BaseModel):
             model: str = Field("gpt-4.1-nano", description="The model to use for conversion.")

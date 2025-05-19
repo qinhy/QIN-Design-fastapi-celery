@@ -7,6 +7,15 @@ except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
 
 class SimpleWebRequest(ServiceOrientedArchitecture):
+    @classmethod
+    def description(cls):
+        return """
+Performs web requests with configurable parameters.
+Supports multiple HTTP methods (GET, POST, PUT, DELETE).
+Allows custom headers and request data.
+Returns status code, response text, and JSON content if available.
+"""
+    
     class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):
         pass
 

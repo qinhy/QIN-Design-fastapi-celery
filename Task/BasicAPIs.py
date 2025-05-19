@@ -643,26 +643,32 @@ class BasicCeleryTask:
         return workers
 
     ############################# general function
-    def api_perform_action_list(self,):
-        """Returns a list of all available actions that can be performed."""
+    def api_perform_action_list(self,format:Literal['mcp','openai']='mcp'):
+        """Returns a mcp tool list of all available actions that can be performed."""
         self.api_ok()
-        available_actions = []
-        for k,v in self.ACTION_REGISTRY.items():
-            model_schema = {}
-            for kk,vv in zip(['param','args','ret'],[v.Model.Param,v.Model.Args,v.Model.Return]):
-                schema = vv.model_json_schema()
-                model_schema.update({
-                    kk: {
-                        key: {
-                            "type": value["type"],
-                            "description": value.get("description", "")
-                        }
-                        for key, value in schema["properties"].items() if 'type' in value
-                    },
-                    f"{kk}_required": schema.get("required", [])
-                })
-            available_actions.append({k:model_schema})
-        return {"available_actions": available_actions}
+        if format == 'mcp':
+            return [v.as_mcp_tool() for k,v in self.ACTION_REGISTRY.items()]
+        elif format == 'openai':
+            return {k:v.as_openai_tool() for k,v in self.ACTION_REGISTRY.items()}
+        else:
+            raise ValueError(f"Invalid format: {format}")
+        # available_actions = []
+        # for k,v in self.ACTION_REGISTRY.items():
+        #     model_schema = {}
+        #     for kk,vv in zip(['param','args','ret'],[v.Model.Param,v.Model.Args,v.Model.Return]):
+        #         schema = vv.model_json_schema()
+        #         model_schema.update({
+        #             kk: {
+        #                 key: {
+        #                     "type": value["type"],
+        #                     "description": value.get("description", "")
+        #                 }
+        #                 for key, value in schema["properties"].items() if 'type' in value
+        #             },
+        #             f"{kk}_required": schema.get("required", [])
+        #         })
+        #     available_actions.append({k:model_schema})
+        # return {"available_actions": available_actions}
     
     def api_perform_action(self,
         name: str, 

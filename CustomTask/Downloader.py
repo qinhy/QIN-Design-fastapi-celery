@@ -11,6 +11,14 @@ except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
 
 class Downloader(ServiceOrientedArchitecture):
+    @classmethod
+    def description(cls):
+        return """
+Downloads files from specified URLs to local storage.
+Supports configurable chunk sizes for efficient downloading.
+Optionally uploads downloaded files to Redis and removes local copies.
+"""
+    
     class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):
         pass
     class Model(ServiceOrientedArchitecture.Model):

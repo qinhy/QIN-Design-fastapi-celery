@@ -7,6 +7,15 @@ except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
 
 class Fibonacci(ServiceOrientedArchitecture):
+    @classmethod
+    def description(cls):
+        return """
+Computes the Fibonacci number at a given position n.
+Supports two computation modes:
+- fast: Uses iterative approach, more efficient
+- slow: Uses recursive approach, less efficient but demonstrates the mathematical concept
+"""
+
     class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):
         pass
 
@@ -33,82 +42,7 @@ class Fibonacci(ServiceOrientedArchitecture):
         def examples():
             return [{ "param": {"mode": "fast"},"args": {"n": 13}},]
         
-        @classmethod
-        def description(cls):
-            return """
-Computes the Fibonacci number at a given position n.
-Supports two computation modes:
-- fast: Uses iterative approach, more efficient
-- slow: Uses recursive approach, less efficient but demonstrates the mathematical concept
-            """
-
-        @classmethod
-        def as_mcp_tool(cls):
-            "https://modelcontextprotocol.io/docs/concepts/tools"
-            "To be used in MCP tools"
-            param_schema = cls.Param.schema()
-            args_schema = cls.Args.schema()
-
-            # Determine if "param" and/or "args" should be required at the top level
-            top_level_required = []
-            if param_schema.get("required"):
-                top_level_required.append("param")
-            if args_schema.get("required"):
-                top_level_required.append("args")
-
-            return [{
-                "name": cls.__name__.lower(),
-                "description": cls.description().strip(),
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "param": param_schema,
-                        "args": args_schema,
-                    },
-                    "required": top_level_required
-                },
-                "annotations": {
-                    "title": cls.__name__.replace("_", " "),
-                    "readOnlyHint": True,
-                    "destructiveHint": False,
-                    "idempotentHint": True,
-                    "openWorldHint": False
-                }
-            }]
-
-        @classmethod
-        def as_openai_tool(cls):
-            "https://modelcontextprotocol.io/docs/concepts/tools"
-            "To be used in MCP tools"
-            param_schema = cls.Param.schema()
-            args_schema = cls.Args.schema()
-
-            # Determine if "param" and/or "args" should be required at the top level
-            top_level_required = []
-            if param_schema.get("required"):
-                top_level_required.append("param")
-            if args_schema.get("required"):
-                top_level_required.append("args")
-
-            return [{
-                "name": cls.__name__.lower(),
-                "description": cls.description().strip(),
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "param": param_schema,
-                        "args": args_schema,
-                    },
-                    "required": top_level_required
-                },
-                "annotations": {
-                    "title": cls.__name__.replace("_", " "),
-                    "readOnlyHint": True,
-                    "destructiveHint": False,
-                    "idempotentHint": True,
-                    "openWorldHint": False
-                }
-            }]
+            
         version:Version = Version()
         param:Param = Param()
         args:Args
@@ -178,4 +112,4 @@ Supports two computation modes:
 
 if __name__ == "__main__":
     import json
-    print(json.dumps(Fibonacci.Model.as_mcp_tools(), indent=4))
+    print(json.dumps(Fibonacci.as_mcp_tool(), indent=4))
