@@ -467,7 +467,7 @@ class BasicCeleryTask:
             task_model: action_class.Model = Body(..., examples=examples),                    
             execution_time: str = self.EXECUTION_TIME_PARAM,
             timezone: self.VALID_TIMEZONES = self.TIMEZONE_PARAM
-        ):
+        )->TaskModel:
                             
             return self.api_perform_action(action_name, task_model.model_dump(),
                                             execution_time=execution_time,
