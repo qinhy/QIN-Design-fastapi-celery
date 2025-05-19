@@ -198,12 +198,8 @@ class BasicCeleryTask:
     ) -> ServiceOrientedArchitecture.Model:
         """Execute an action with data translated from a previous action""" 
         
-        if action_name not in self.ACTION_REGISTRY:
-            raise ValueError(f"Action '{action_name}' is not registered.")            
-        # Get the action class
-        class_type: type[ServiceOrientedArchitecture] = self.ACTION_REGISTRY[action_name]            
         # Handle model creation based on pipeline context
-        model_instance = class_type.Model(**class_type.Model.examples().pop(0))  
+        model_instance = self._prepare_model_example(action_name)
 
         previous_model_instance, previous_name, _ = self._prepare_action(previous_data)
         previous_data = previous_model_instance.model_dump()
@@ -251,9 +247,29 @@ class BasicCeleryTask:
             """Celery task wrapper for perform_translate_action"""
             return self.perform_translate_action(t.request.id, action_name, previous_data, previous_to_current_map, prior_data)        
         return celery_perform_translate_action
-    
+
+    def _prepare_model_example(self, action_name: str):
+        """Prepare model examples for a given class type"""
+        
+        if action_name not in self.ACTION_REGISTRY:
+            raise ValueError(f"Action '{action_name}' is not registered.")
+            
+        # Get the action class
+        class_type: type[ServiceOrientedArchitecture] = self.ACTION_REGISTRY[action_name]
+
+        try:
+            # Create model instance
+            model_instance = class_type.Model()
+        except Exception as e:
+            try:
+                # Handle model creation based on pipeline context
+                model_instance = class_type.Model(**class_type.Model.examples().pop(0))
+            except Exception as e:
+                raise ValueError(f"Failed to create model instance for action '{action_name}', need to add examples.")
+        return model_instance
+
     def _prepare_action(self, json_data: dict | str):
-        """Prepare and validate action data"""
+        """Prepare and validate action data"""        
         # Validate input
         if json_data is None:
             raise ValueError("json_data cannot be None")
@@ -649,7 +665,7 @@ class BasicCeleryTask:
         if format == 'mcp':
             return [v.as_mcp_tool() for k,v in self.ACTION_REGISTRY.items()]
         elif format == 'openai':
-            return {k:v.as_openai_tool() for k,v in self.ACTION_REGISTRY.items()}
+            return [v.as_openai_tool() for k,v in self.ACTION_REGISTRY.items()]
         else:
             raise ValueError(f"Invalid format: {format}")
         # available_actions = []
@@ -689,9 +705,13 @@ class BasicCeleryTask:
         utc_execution_time, local_time, (next_execution_time_str,timezone_str) = self.parse_execution_time(execution_time, timezone)
         
         # Schedule the task
+        # print('[api_perform_action]',name,data)
+        d = self._prepare_model_example(name).model_dump()
+        d.update(data)
+        # print('[api_perform_action]',data)
         task = self.celery_perform_simple_action.apply_async(
             # args=[data, prior_data,],
-            args=[data, None,],
+            args=[d, None,],
             eta=utc_execution_time)
         
         self.BasicApp.set_task_status(task.task_id,status='SENDED')
