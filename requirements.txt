@@ -12,3 +12,12 @@ pika
 itsdangerous
 pytz
 uvicorn
+typing
+pathlib
+urllib3
+beautifulsoup4
+markdownify
+
+#### these are for web browser
+# selenium
+# webdriver_manager

@@ -81,7 +81,7 @@ async def openai_call_tools(res):
                 raise Exception(result['error'])
             results[-1]['content'] = json.dumps(result)
         except Exception as e:
-            results[-1]['content'] = f"Error calling tool (id:{task_id}): {str(e)}"
+            results[-1]['content'] = f"Error calling tool {tool_name}: {str(e)}"
     return results
 
 async def llm(messages, tools=[]):
@@ -165,8 +165,6 @@ if __name__ == "__main__":
     print("#### 🤖 Asking LLM about available tools...")
     response = asyncio.run(llm('Tell me your available tools.',tools=op_ts))
     print(f"🔹 Response:\n{response}\n")    
-    # Here are the core tools available for use:
-
     # 1. Fibonacci Calculator: Computes Fibonacci numbers (supports fast and slow modes).
     # 2. Prime Number Checker: Checks if a number is prime (basic/brute-force or smart/optimized).
     # 3. Palindrome Checker: Checks if a string is a palindrome (basic or smart modes, considering case/spaces).
@@ -177,8 +175,7 @@ if __name__ == "__main__":
     # 8. OpenAI ChatGPT Service: Interacts with OpenAI models for text, code, or multimodal generation.
     # 9. Smart Model Converter: Converts between different class models (for software/service architecture).
     # 10. FTP Uploader: Uploads files to FTP/SFTP servers, supports active/passive mode and base64 input.
-
-    # I can also use several of these at once if needed. If you want details about what a tool can do or how to use it, just ask!
+    # ...
 
     print("#### 🧮 Testing tool usage with Fibonacci calculation...")
     result = asyncio.run(one_query('Calculate Fibocci number of 43.',tools=op_ts))
@@ -190,6 +187,10 @@ if __name__ == "__main__":
 
     print("#### 🧮 Testing tool usage with Prime number check...")
     result = asyncio.run(one_query('Is 17 a prime number?',tools=op_ts))
+    print(f"🔹 Final result:\n{result}")
+
+    print("#### 🧮 Testing tool usage with Browse link check...")
+    result = asyncio.run(one_query('Show me page of apple in wiki with none-headless.',tools=op_ts))
     print(f"🔹 Final result:\n{result}")
 
                 
