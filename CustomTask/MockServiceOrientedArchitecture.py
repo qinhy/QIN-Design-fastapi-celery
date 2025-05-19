@@ -140,6 +140,9 @@ class ServiceOrientedArchitecture:
         @classmethod
         def examples(cls): return []
 
+        @classmethod
+        def description(cls): return 'empty'
+        
     class Action:
         def __init__(self, model, BasicApp:Any=None, level=None):
             outer_class_name:ServiceOrientedArchitecture = self.__class__.__qualname__.split('.')[0]

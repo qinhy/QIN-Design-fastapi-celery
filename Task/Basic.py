@@ -1086,6 +1086,9 @@ class ServiceOrientedArchitecture:
         @classmethod
         def examples(cls): return []
         
+        @classmethod
+        def description(cls): return 'empty'
+        
         def update_model_data(self,json_data:dict):
             if json_data is not None:
                 # Update all model components from prior model
