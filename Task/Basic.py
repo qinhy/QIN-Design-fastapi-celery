@@ -1083,6 +1083,17 @@ class ServiceOrientedArchitecture:
         ret:Optional[Return] = Return()
         logger: Logger = Logger()
 
+        def update_model_data(self,json_data:dict):
+            if json_data is not None:
+                # Update all model components from prior model
+                if 'param' in json_data:
+                    self.param = self.param.model_copy(update=json_data['param'])
+                if 'args' in json_data:
+                    self.args = self.args.model_copy(update=json_data['args'])
+                if 'ret' in json_data:
+                    self.ret = self.ret.model_copy(update=json_data['ret'])
+            return self
+
         @classmethod
         def examples(cls): return []
         
@@ -1134,18 +1145,7 @@ class ServiceOrientedArchitecture:
                 "parameters": mcp_tool['inputSchema'],
             },
         }
-
-        def update_model_data(self,json_data:dict):
-            if json_data is not None:
-                # Update all model components from prior model
-                if 'param' in json_data:
-                    self.param = self.param.model_copy(update=json_data['param'])
-                if 'args' in json_data:
-                    self.args = self.args.model_copy(update=json_data['args'])
-                if 'ret' in json_data:
-                    self.ret = self.ret.model_copy(update=json_data['ret'])
-            return self
-
+    
     class Action:
         def __init__(self, model,BasicApp:AppInterface,level=None):
             outer_class_name:ServiceOrientedArchitecture = self.__class__.__qualname__.split('.')[0]

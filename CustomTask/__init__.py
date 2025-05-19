@@ -9,6 +9,7 @@ from .SmartModelConverter import SmartModelConverter
 from .UploadToFTP import UploadToFTP
 from .HttpRequestTask import HttpRequestTask
 from .BrowseWebLink import BrowseWebLink
+from .EnhanceImage import EnhanceImage
 
 SmartModelConverter.Action.ACTION_REGISTRY = {
     'Fibonacci': Fibonacci,
