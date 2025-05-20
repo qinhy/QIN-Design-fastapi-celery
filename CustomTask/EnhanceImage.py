@@ -29,7 +29,7 @@ The adjusted image is saved to a new file and its path is returned.
             saturation: float = Field(1.0, description="Saturation factor (1.0 is original)")
 
         class Args(BaseModel):
-            path: str = Field(..., description="Path to the input image")
+            path: str = Field(..., description="Path (file path, URL, or base64) to the input image")
 
         class Return(BaseModel):
             path: str = Field(..., description="Path to the adjusted image")
@@ -60,11 +60,10 @@ The adjusted image is saved to a new file and its path is returned.
 
         def __call__(self, *args, **kwargs):
             try:
-                input_path = self.model.args.path
-                self.log_and_send(f"Loading image from {input_path}")
-                if not os.path.exists(input_path):
-                    raise FileNotFoundError(f"Image not found at path: {input_path}")
-                
+                self.log_and_send(f"Loading image")
+                input_path = self.model.args.path                
+                input_path = FileInputHelper.resolve_to_local_path(input_path)
+
                 img = Image.open(input_path)
 
                 # Apply adjustments
