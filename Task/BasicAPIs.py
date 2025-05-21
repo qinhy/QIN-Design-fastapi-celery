@@ -17,7 +17,6 @@ from fastapi.routing import APIRoute
 
 # Application imports
 from Task.Basic import AppInterface, ServiceOrientedArchitecture, SmartModelConverter, TaskModel
-from fastapi import Query
 
 # Common execution time parameter for API endpoints
 EXECUTION_TIME_PARAM = Query(
@@ -58,6 +57,7 @@ class BasicCeleryTask:
                  ACTION_REGISTRY = {}):
         
         self.BasicApp = BasicApp
+        self.BasicApp.parent = self
         self.celery_app = celery_app
         self.ACTION_REGISTRY: dict[str, ServiceOrientedArchitecture] = ACTION_REGISTRY
         self.pipelines = {}
@@ -391,7 +391,7 @@ class BasicCeleryTask:
         model_instance = class_type.Model(**action_data)            
         return model_instance, action_name, class_type
     
-    def _map_fields_between_models(self, action_data, previous_to_current_map):
+    def _map_fields_between_models(self, action_data, previous_to_current_map:dict):
         """Map specific fields from previous return to current args"""
         previous_ret_data = action_data['ret']
         current_args_data = {}
@@ -442,7 +442,7 @@ class BasicCeleryTask:
         import time, pytz, datetime
         z,dd,t = pytz.timezone(timezone_str), datetime.datetime, execution_time_str[:19]
         target = z.localize(dd.fromisoformat(t)) - dd.now(z)
-        sleep_seconds = max(0, target.total_seconds()) + offset
+        sleep_seconds = max(0, target.total_seconds()) + offset_seconds
                 
         if sleep_seconds > 0:
             print(f"Waiting for {sleep_seconds:.2f} seconds...")
@@ -469,6 +469,8 @@ class BasicCeleryTask:
         utc_now = datetime.datetime.now(datetime.timezone.utc)
         tz = pytz.timezone(timezone_str)
         local_now = utc_now.astimezone(tz)
+        if type(execution_time_str) != str:
+            execution_time_str = execution_time_str.default
 
         utc_execution_time = None
         local_time = None
@@ -567,7 +569,7 @@ class BasicCeleryTask:
         def handler(
             task_model: action_class.Model = Body(..., examples=examples),                    
             execution_time: str = self.EXECUTION_TIME_PARAM,
-            timezone: self.VALID_TIMEZONES = self.TIMEZONE_PARAM
+            timezone: BasicCeleryTask.VALID_TIMEZONES = self.TIMEZONE_PARAM
         ):
                             
             return self.api_perform_action(action_name, task_model.model_dump(),
@@ -787,7 +789,8 @@ class BasicCeleryTask:
         if not isinstance(timezone,str):
             timezone:str = timezone.default
 
-        utc_execution_time, local_time, (next_execution_time_str,timezone_str) = self.parse_execution_time(execution_time, timezone)
+        utc_execution_time, local_time, (next_execution_time_str,timezone_str
+        ) = self.parse_execution_time(execution_time, timezone)
         
         # Schedule the task
         # print('[api_perform_action]',name,data)

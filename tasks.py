@@ -64,12 +64,13 @@ class CeleryTask(BasicCeleryTask):
         def api_pipeline_handler(
                 in_model: first_in_class.Model=Body(..., examples=in_examples),
                 execution_time: str = self.EXECUTION_TIME_PARAM,
-                timezone: self.VALID_TIMEZONES = self.TIMEZONE_PARAM,
+                timezone: BasicCeleryTask.VALID_TIMEZONES = self.TIMEZONE_PARAM,
         )->dict:#last_out_class.Model:
             
             self.api_ok()
             
-            utc_execution_time, local_time, (next_execution_time_str,timezone_str) = self.parse_execution_time(execution_time, timezone)
+            utc_execution_time, local_time, (next_execution_time_str,timezone_str
+            ) = self.parse_execution_time(execution_time, timezone)
         
             # Get model data
             current_data = in_model.model_dump()
@@ -160,7 +161,8 @@ class CeleryTask(BasicCeleryTask):
         ) -> dict:
             self.api_ok()
 
-            utc_execution_time, local_time, (next_execution_time_str, timezone_str) = self.parse_execution_time(
+            utc_execution_time, local_time, (next_execution_time_str, timezone_str
+            ) = self.parse_execution_time(
                 execution_time, timezone
             )
 
