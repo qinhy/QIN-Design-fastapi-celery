@@ -190,7 +190,7 @@ if __name__ == "__main__":
     print(f"🔹 Final result:\n{result}")
 
     print("#### 🧮 Testing tool usage with Browse link check...")
-    result = asyncio.run(one_query('Show me page of apple in wiki with none-headless.',tools=op_ts))
+    result = asyncio.run(one_query('Show me "Qin" in wiki with none-headless.',tools=op_ts))
     print(f"🔹 Final result:\n{result}")
 
                 

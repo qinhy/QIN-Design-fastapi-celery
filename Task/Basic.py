@@ -1076,7 +1076,6 @@ class ServiceOrientedArchitecture:
                 for handler in self._logger.handlers[:]:
                     self._logger.removeHandler(handler)
 
-                
         version:Version
         param:Param = Param()
         args:Args = Args()
@@ -1099,13 +1098,18 @@ class ServiceOrientedArchitecture:
         
     @classmethod
     def description(cls): return 'empty'
-        
+
+    @classmethod
+    def schema(cls):
+        return cls.Model.model_json_schema()
+
     @classmethod
     def as_mcp_tool(cls):
         "https://modelcontextprotocol.io/docs/concepts/tools"
         "To be used in MCP tools"
-        param_schema = cls.Model.Param.schema()
-        args_schema = cls.Model.Args.schema()
+        param_schema = cls.Model.Param.model_json_schema()
+        args_schema = cls.Model.Args.model_json_schema()
+        ret_schema = cls.Model.Return.model_json_schema()
 
         # Determine if "param" and/or "args" should be required at the top level
         top_level_required = []
@@ -1125,6 +1129,12 @@ class ServiceOrientedArchitecture:
                 },
                 "required": top_level_required
             },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "ret": ret_schema,
+                },
+            },
             "annotations": {
                 "title": cls.__name__.replace("_", " "),
                 "readOnlyHint": True,
@@ -1143,6 +1153,7 @@ class ServiceOrientedArchitecture:
                 "name": mcp_tool['name'],
                 "description": mcp_tool['description'],
                 "parameters": mcp_tool['inputSchema'],
+                "returns": mcp_tool['outputSchema'],
             },
         }
     
