@@ -3,6 +3,19 @@ import json
 import redis.asyncio as redis
 from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from jose import JWTError, jwt
+from datetime import datetime, timedelta, timezone
+from io import BytesIO
+import json
+import uuid
+import pyotp
+import qrcode
+
+router = APIRouter()
+#######################################################################################
+class RedisModels:
+    USER_DB = USER_DB
 
 app = FastAPI()
 
