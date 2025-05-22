@@ -1,15 +1,12 @@
-from collections import defaultdict, deque
-import re
-import json
-
 # Standard library imports
 from threading import Thread
 import time
-from typing import Literal, Union, Any
+from typing import Literal, Union
 
 # FastAPI imports
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 # Application imports
@@ -22,7 +19,6 @@ from Task.Basic import (
     TaskModel
 )
 from Task.BasicAPIs import BasicCeleryTask
-from Task import MermaidGraph
 import CustomTask
 from config import *
 
@@ -49,7 +45,6 @@ class CeleryTask(BasicCeleryTask):
         self.router.post("/pipeline/add")(self.api_add_pipeline)
         self.router.post("/pipeline/config")(self.api_set_config_pipeline)
         self.router.get("/pipeline/config/{name}")(self.api_get_config_pipeline)
-        self.router.post("/pipeline/mermaid")(self.api_add_pipeline_from_mermaid)
 
     def create_api_pipeline_handler(self,name: str,pipeline: list[str]):        
         ACTION_REGISTRY:dict[str,ServiceOrientedArchitecture]=self.ACTION_REGISTRY
@@ -144,88 +139,6 @@ class CeleryTask(BasicCeleryTask):
                 next_schedule
             )
         return api_pipeline_handler        
-
-
-    def new_create_api_pipeline_handler(self, name: str, pipeline: list[str], pipeline_config: list[Any]):
-        ACTION_REGISTRY: dict[str, ServiceOrientedArchitecture] = self.ACTION_REGISTRY
-
-        first_service = ACTION_REGISTRY[pipeline[0]]
-        in_examples = None
-        if hasattr(first_service.Model, 'examples'):
-            in_examples = [{'args': e['args']} for e in first_service.Model.examples()]
-
-        def api_pipeline_handler(
-            in_model: first_service.Model = Body(..., examples=in_examples),
-            execution_time: str = self.EXECUTION_TIME_PARAM,
-            timezone: self.VALID_TIMEZONES = self.TIMEZONE_PARAM,
-        ) -> dict:
-            self.api_ok()
-
-            utc_execution_time, local_time, (next_execution_time_str, timezone_str
-            ) = self.parse_execution_time(
-                execution_time, timezone
-            )
-
-            # Get initial data
-            input_data = in_model.model_dump()
-            task_chain = self.celery_perform_simple_action.s(
-                input_data,
-                pipeline_config[0],  # config for first
-            ).set(queue=pipeline[0])
-
-            # Maintain data outputs by step
-            previous_task = task_chain
-
-            for i in range(1, len(pipeline)):
-                current_service = pipeline[i]
-                current_config = pipeline_config[2 * i]  # config for current step
-                incoming_mappings = pipeline_config[2 * i - 1]  # list of {"from", "map"}
-
-                # Prepare data placeholders (actual resolution inside Celery)
-                previous_datas = [{} for _ in incoming_mappings]
-                previous_to_current_map = [m["map"] for m in incoming_mappings]
-
-                task = self.celery_perform_multi_translate_action.signature(
-                        # previous_datas: list[dict],
-                        # action_name: str,previous_to_current_map: list[dict] = [],prior_data: dict = None,
-                    kwargs={
-                        'action_name': func_name,
-                        'previous_to_current_map': mapping,
-                        'prior_data': prior_model_data,
-                    }
-                )
-                # multi_input_task = self.celery_perform_multi_translate_action.s(
-                #     action_name=current_service,
-                #     previous_datas=previous_datas,  # placeholders, filled at runtime
-                #     previous_to_current_map=previous_to_current_map,
-                #     prior_data=current_config,
-                # ).set(queue=current_service)
-
-                task_chain = task_chain | multi_input_task
-                previous_task = multi_input_task
-
-            chain_result = task_chain.apply_async(eta=utc_execution_time)
-
-            # Collect task IDs
-            task_ids = []
-            current = chain_result
-            while current:
-                task_ids.append(current.task_id)
-                current = current.parent
-            task_ids.reverse()
-
-            self.BasicApp.set_task_status(chain_result.task_id, status="SENDED")
-            next_schedule = (next_execution_time_str, timezone_str) if next_execution_time_str else None
-            return TaskModel.create_task_response(
-                chain_result,
-                utc_execution_time,
-                local_time,
-                timezone,
-                next_schedule
-            )
-
-        return api_pipeline_handler
-
 
     def api_set_config_pipeline(self,
         name: str='FiboPrime',
@@ -338,40 +251,6 @@ class CeleryTask(BasicCeleryTask):
             "total_tasks": len(task_ids)
         }
 
-    def parse_mermaid_graph(self, graph_str: str) -> dict:
-        # Parse the Mermaid graph string
-        g = MermaidGraph(graph_str)
-        # pipeline_order= g.get_pipeline_order()
-        # pipeline_config = g.get_pipeline_config()
-        # pipeline_mappings = g.get_pipeline_mappings()
-        return {
-            "pipeline": g.get_pipeline_order(),
-            "config": g.get_pipeline_config(),
-            "mappings": g.get_pipeline_mappings(),
-            "services": g.get_pipeline_services(self.ACTION_REGISTRY),
-        }
-
-    def api_add_pipeline_from_mermaid(
-        self,
-        graph: str = Body(..., embed=True),
-        name: str = "MermaidPipeline"
-    ):
-        self.api_ok()
-        parsed = self.parse_mermaid_graph(graph)
-        return parsed
-
-        # pipeline = parsed["pipeline"]
-        # config = []
-        # for i in range(len(pipeline)):
-        #     config.append(parsed["config"][i])
-        #     # if i < len(parsed["mappings"]):
-        #     #     config.append(parsed["mappings"][i])  # insert mapping after model
-
-        # return parsed
-        # # Register the pipeline
-        # return self.api_add_pipeline(name=name, pipeline=pipeline) | \
-        #     self.api_set_config_pipeline(name=name, pipeline_config=config)
-
 ########################################################
 conf = AppConfig()
 print(conf.validate_backend().model_dump())
@@ -415,3 +294,8 @@ def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
 my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
 
 
+from CustomTask import TaskDAGRunner
+def my_mermaid_editor():
+    return HTMLResponse(content=TaskDAGRunner.MermaidEditorHtml)
+
+my_app.add_web_api(my_mermaid_editor,'get','/myapi/mermaideditor/').reload_routes()

@@ -3,12 +3,14 @@ import numpy as np
 from PIL import Image
 from typing import Optional
 from pydantic import BaseModel, Field
-from utils import FileInputHelper
 
 try:
     from Task.Basic import ServiceOrientedArchitecture
+    from .utils import FileInputHelper
 except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from utils import FileInputHelper
+
 
 
 class GrayscaleImage(ServiceOrientedArchitecture):

@@ -728,7 +728,8 @@ class SmartModelConverter(BaseModel):
         if self.api_key is None:
             self.api_key = os.environ.get('OPENAI_API_KEY')
             if not self.api_key:
-                raise ValueError("API key not found in environment variable 'OPENAI_API_KEY' and not provided")
+                self.api_key = 'OPENAI_API_KEY'
+                # raise ValueError("API key not found in environment variable 'OPENAI_API_KEY' and not provided")
             
     def build_conversion_prompt(
         self,

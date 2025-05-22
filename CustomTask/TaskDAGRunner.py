@@ -4,12 +4,65 @@ from celery.result import AsyncResult
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
 
-from Task.Basic import ServiceOrientedArchitecture
-from .utils import MermaidGraph
+try:
+    from Task.Basic import ServiceOrientedArchitecture
+    from .utils import MermaidGraph
+except:
+    from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from utils import MermaidGraph
 
+
+MermaidEditorHtml = """
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Mermaid Editor</title>
+</head>
+
+<body>
+    <textarea id="mermaid-input" style="width: 100%; height: 300px;"></textarea>
+    <div id="mermaid-output"></div>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>
+        const STORAGE_KEY = 'mermaid-diagram';
+        const mermaidInput = document.getElementById('mermaid-input');
+        const mermaidOutput = document.getElementById('mermaid-output');
+        mermaid.initialize({ startOnLoad: false });        // Load saved diagram from localStorage
+        const savedDiagram = localStorage.getItem(STORAGE_KEY);
+        if (savedDiagram) {
+            mermaidInput.value = savedDiagram;
+        } else {
+            mermaidInput.value = `
+graph LR
+    A[Start] --> B{Is it?}
+    B -- Yes --> C[OK]
+    B -- No --> D[KO]
+    C --> E[End]
+    D --> E`;
+        }
+        async function renderMermaid() {
+            const code = mermaidInput.value;
+            try {
+                const { svg } = await mermaid.render('generatedDiagram', code);
+                mermaidOutput.innerHTML = svg;
+            } catch (err) {
+                mermaidOutput.innerHTML = `<pre style="color:red;">${err.message}</pre>`;
+            }
+        }        // Save input to localStorage and re-render on change
+        mermaidInput.addEventListener('input', () => {
+            localStorage.setItem(STORAGE_KEY, mermaidInput.value);
+            renderMermaid();
+        });        // Initial render
+        renderMermaid();
+    </script>
+</body>
+
+</html>
+"""
 
 class TaskDAGRunner(ServiceOrientedArchitecture):
-
+    MermaidEditorHtml = MermaidEditorHtml
     @classmethod
     def description(cls):
         return "Executes tasks defined as nodes in a DAG using the structure of a Mermaid graph."
