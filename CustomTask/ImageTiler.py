@@ -14,6 +14,15 @@ except ImportError:
 
 
 class ImageTiler(ServiceOrientedArchitecture):
+    @classmethod
+    def description(cls):
+        return """
+Creates a tiled image from multiple source images.
+Supports configurable grid layout (rows and columns).
+Allows customization of output dimensions, format, and path.
+Can process images from URLs or local file paths.
+"""
+    
     class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):
         pass
 

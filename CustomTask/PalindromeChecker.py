@@ -7,6 +7,15 @@ except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
 
 class PalindromeChecker(ServiceOrientedArchitecture):
+    @classmethod
+    def description(cls):
+        return """
+Checks if a given string is a palindrome (reads the same forward and backward).
+Supports two checking modes:
+- basic: Uses simple string reversal
+- smart: Uses efficient two-pointer comparison and ignores case/spaces
+"""
+    
     class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):
         pass
 

@@ -9,6 +9,14 @@ except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
 
 class UploadToFTP(ServiceOrientedArchitecture):
+    @classmethod
+    def description(cls):
+        return """
+Uploads files to FTP servers.
+Supports both active and passive FTP modes.
+Can create files from base64-encoded content if they don't exist locally.
+"""
+    
     class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):
         pass
 

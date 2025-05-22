@@ -7,6 +7,14 @@ except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
 
 class CollatzSequence(ServiceOrientedArchitecture):
+    @classmethod
+    def description(cls):
+        return """
+Generates the Collatz sequence starting from a given number n.
+The sequence follows the rule: if n is even, divide by 2; if n is odd, multiply by 3 and add 1.
+Continues until reaching 1 or the maximum number of steps (if specified).
+"""
+    
     class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):
         pass
 

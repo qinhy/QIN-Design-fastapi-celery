@@ -1,14 +1,40 @@
-requests
-celery
-flower
-redis
+# Web Framework
 fastapi
+starlette
+uvicorn
+
+# Data Validation & Settings
 pydantic
 pydantic[email]
 pydantic-settings
-starlette
-pymongo
+
+# Task Queue & Message Broker
+celery
+flower
+redis
 pika
+
+# Database
+pymongo
+
+# Utilities
+requests
 itsdangerous
 pytz
-uvicorn
+typing
+pathlib
+urllib3
+
+# HTML/Text Processing
+beautifulsoup4
+markdownify
+
+# Image Processing
+pillow
+
+# Data Processing
+numpy
+
+#### these are for web browser
+# selenium
+# webdriver_manager

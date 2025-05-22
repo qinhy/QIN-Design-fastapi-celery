@@ -11,14 +11,16 @@ except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
 
 class SmartModelConverter(ServiceOrientedArchitecture):
-    """
-    A class for building and managing conversion functions between different
-    ServiceOrientedArchitecture classes using LLM.
-    """
-
+    @classmethod
+    def description(cls):
+        return """
+Converts between different ServiceOrientedArchitecture class models using LLM.
+Generates conversion functions between source and target classes.
+Supports customizable prompt templates for the conversion process.
+"""
     class Model(ServiceOrientedArchitecture.Model):
         class Param(BaseModel):
-            model: str = Field("gpt-4o-mini", description="The model to use for conversion.")
+            model: str = Field("gpt-4.1-nano", description="The model to use for conversion.")
             api_key: Optional[str] = Field(None, description="API key for authentication, if required.")
 
         class Args(BaseModel):
@@ -26,12 +28,12 @@ class SmartModelConverter(ServiceOrientedArchitecture):
             target_class_name: str = Field(None, description="The target class name for conversion.")
             prompt_template: str = Field(
                 (
-                    "Please complete the following code and only provide the implementation "
+                    "Please complete the following python code and only provide the implementation "
                     "of the ret to args converter function:\n\n"
-                    "```{from_class_name}.Model pydanctic schema\n"
+                    "```{from_class_name}.ret pydantic schema\n"
                     "{from_schema}\n"
                     "```\n\n"
-                    "```{to_class_name}.Model pydanctic schema\n"
+                    "```{to_class_name}.args pydantic schema\n"
                     "{to_schema}\n"
                     "```\n\n"
                     "```python\n"
@@ -166,6 +168,7 @@ class SmartModelConverter(ServiceOrientedArchitecture):
 
             self.log_and_send(f"Sending request to OpenAI API using model: {model}", self.Levels.INFO)
             try:
+                self.log_and_send(f"Post content : {json.dumps(data)}", self.Levels.DEBUG)
                 response = requests.post(url, headers=headers, data=json.dumps(data))
                 response.raise_for_status()
                 self.log_and_send("Received successful response from OpenAI API", self.Levels.INFO)

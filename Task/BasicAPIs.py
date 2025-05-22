@@ -17,7 +17,6 @@ from fastapi.routing import APIRoute
 
 # Application imports
 from Task.Basic import AppInterface, ServiceOrientedArchitecture, SmartModelConverter, TaskModel
-from fastapi import Query
 
 # Common execution time parameter for API endpoints
 EXECUTION_TIME_PARAM = Query(
@@ -58,6 +57,7 @@ class BasicCeleryTask:
                  ACTION_REGISTRY = {}):
         
         self.BasicApp = BasicApp
+        self.BasicApp.parent = self
         self.celery_app = celery_app
         self.ACTION_REGISTRY: dict[str, ServiceOrientedArchitecture] = ACTION_REGISTRY
         self.pipelines = {}
@@ -134,7 +134,7 @@ class BasicCeleryTask:
         """Setup Celery tasks and handlers"""
         self.celery_perform_simple_action = self._create_celery_perform_simple_action()
         self.celery_perform_translate_action = self._create_celery_perform_translate_action()
-
+        self.celery_perform_multi_translate_action = self._create_celery_perform_multi_translate_action()
         # Register task received handler
         @task_received.connect
         def on_task_received(*args, **kwargs):
@@ -197,34 +197,74 @@ class BasicCeleryTask:
         prior_data: dict = None,
     ) -> ServiceOrientedArchitecture.Model:
         """Execute an action with data translated from a previous action""" 
+        return self.perform_multi_translate_action(
+            task_id,
+            action_name,
+            [previous_data],
+            [previous_to_current_map],
+            prior_data,
+        )
         
-        if action_name not in self.ACTION_REGISTRY:
-            raise ValueError(f"Action '{action_name}' is not registered.")            
-        # Get the action class
-        class_type: type[ServiceOrientedArchitecture] = self.ACTION_REGISTRY[action_name]            
-        # Handle model creation based on pipeline context
-        model_instance = class_type.Model(**class_type.Model.examples().pop(0))  
+        # # Handle model creation based on pipeline context
+        # model_instance = self._prepare_model_example(action_name)
 
-        previous_model_instance, previous_name, _ = self._prepare_action(previous_data)
-        previous_data = previous_model_instance.model_dump()
+        # previous_model_instance, previous_name, _ = self._prepare_action(previous_data)
+        # previous_data = previous_model_instance.model_dump()
         
-        if isinstance(previous_to_current_map,dict):
-            action_data = self._map_fields_between_models(
-                previous_data, previous_to_current_map)
+        # if isinstance(previous_to_current_map,dict):
+        #     action_data = self._map_fields_between_models(
+        #         previous_data, previous_to_current_map)
             
-            # Create model with example data and update args
-            model_instance.args = model_instance.args.model_copy(update=action_data)
+        #     # Create model with example data and update args
+        #     model_instance.args = model_instance.args.model_copy(update=action_data)
         
-        elif not previous_to_current_map:
-            # Use smart conversion between models
-            model_instance = self._convert_between_models(
-                self.ACTION_REGISTRY[previous_name],
-                class_type,
-                previous_data
-            )
+        # elif not previous_to_current_map:
+        #     # Use smart conversion between models
+        #     model_instance = self._convert_between_models(
+        #         self.ACTION_REGISTRY[previous_name],
+        #         class_type,
+        #         previous_data
+        #     )
+
+        # return self.perform_simple_action(task_id, model_instance.model_dump(), prior_data)
+
+    def perform_multi_translate_action(
+        self,
+        task_id: str,
+        action_name: str,
+        previous_datas: list[dict],
+        previous_to_current_map: list[dict] = [],
+        prior_data: dict = None,
+    ) -> ServiceOrientedArchitecture.Model:
+        """Execute an action with data translated from multiple previous actions""" 
+
+        # Handle model creation based on pipeline context
+        model_instance = self._prepare_model_example(action_name)
+
+        for idx, previous_data in enumerate(previous_datas):
+            previous_model_instance, previous_name, _ = self._prepare_action(previous_data)
+            previous_data = previous_model_instance.model_dump()
+
+            if isinstance(previous_to_current_map, list) and len(previous_to_current_map) > idx:
+                # Use field mapping for this specific previous_data
+                action_data = self._map_fields_between_models(
+                    previous_data, previous_to_current_map[idx]
+                )
+                # Merge mapped data into model_instance.args
+                model_instance.args = model_instance.args.model_copy(update=action_data)
+
+            else:
+                # Use smart conversion between models
+                converted_model = self._convert_between_models(
+                    self.ACTION_REGISTRY[previous_name],
+                    self.ACTION_REGISTRY[action_name],
+                    previous_data
+                )
+                # Merge the converted model's args into the current model_instance
+                model_instance.args = model_instance.args.model_copy(update=converted_model.args.model_dump())
 
         return self.perform_simple_action(task_id, model_instance.model_dump(), prior_data)
-    
+
     def _create_celery_perform_simple_action(self):
         """Create the celery_perform_simple_action task"""
         @self.celery_app.task(bind=True)
@@ -238,22 +278,83 @@ class BasicCeleryTask:
         
         return celery_perform_simple_action
     
+    
     def _create_celery_perform_translate_action(self):
         """Create the celery_perform_translate_action task"""
         @self.celery_app.task(bind=True)
         def celery_perform_translate_action(
-            t: Task,
-            previous_data: dict,
-            action_name: str,
-            previous_to_current_map: dict = None,
-            prior_data: dict = None,
-        ) -> ServiceOrientedArchitecture.Model:
-            """Celery task wrapper for perform_translate_action"""
-            return self.perform_translate_action(t.request.id, action_name, previous_data, previous_to_current_map, prior_data)        
+                t: Task,
+                previous_data: dict,
+                action_name: str,
+                previous_to_current_map: dict = None,
+                prior_data: dict = None,
+            ) -> ServiceOrientedArchitecture.Model:
+                """Execute an action with data translated from a previous action""" 
+                return self.perform_multi_translate_action(
+                    t.request.id,
+                    action_name,
+                    [previous_data],
+                    [previous_to_current_map],
+                    prior_data,
+                )
         return celery_perform_translate_action
-    
+
+    # def _create_celery_perform_translate_action(self):
+    #     """Create the celery_perform_translate_action task"""
+    #     @self.celery_app.task(bind=True)
+    #     def celery_perform_translate_action(
+    #         t: Task,
+    #         previous_data: dict,
+    #         action_name: str,
+    #         previous_to_current_map: dict = None,
+    #         prior_data: dict = None,
+    #     ) -> ServiceOrientedArchitecture.Model:
+    #         """Celery task wrapper for perform_translate_action"""
+    #         return self.perform_translate_action(t.request.id, action_name, previous_data, previous_to_current_map, prior_data) 
+    #     return celery_perform_translate_action
+
+    def _create_celery_perform_multi_translate_action(self):
+        """Create the celery_perform_multi_translate_action task"""
+        @self.celery_app.task(bind=True)
+        def celery_perform_multi_translate_action(
+                t: Task,
+                previous_datas: list[dict],
+                action_name: str,
+                previous_to_current_map: list[dict] = [],
+                prior_data: dict = None,
+            ) -> ServiceOrientedArchitecture.Model:
+                """Execute an action with data translated from a previous action""" 
+                return self.perform_multi_translate_action(
+                    t.request.id,
+                    action_name,
+                    previous_datas,
+                    previous_to_current_map,
+                    prior_data,
+                )
+        return celery_perform_multi_translate_action
+
+    def _prepare_model_example(self, action_name: str):
+        """Prepare model examples for a given class type"""
+        
+        if action_name not in self.ACTION_REGISTRY:
+            raise ValueError(f"Action '{action_name}' is not registered.")
+            
+        # Get the action class
+        class_type: type[ServiceOrientedArchitecture] = self.ACTION_REGISTRY[action_name]
+
+        try:
+            # Create model instance
+            model_instance = class_type.Model()
+        except Exception as e:
+            try:
+                # Handle model creation based on pipeline context
+                model_instance = class_type.Model(**class_type.Model.examples().pop(0))
+            except Exception as e:
+                raise ValueError(f"Failed to create model instance for action '{action_name}', need to add examples.")
+        return model_instance
+
     def _prepare_action(self, json_data: dict | str):
-        """Prepare and validate action data"""
+        """Prepare and validate action data"""        
         # Validate input
         if json_data is None:
             raise ValueError("json_data cannot be None")
@@ -290,7 +391,7 @@ class BasicCeleryTask:
         model_instance = class_type.Model(**action_data)            
         return model_instance, action_name, class_type
     
-    def _map_fields_between_models(self, action_data, previous_to_current_map):
+    def _map_fields_between_models(self, action_data, previous_to_current_map:dict):
         """Map specific fields from previous return to current args"""
         previous_ret_data = action_data['ret']
         current_args_data = {}
@@ -341,7 +442,7 @@ class BasicCeleryTask:
         import time, pytz, datetime
         z,dd,t = pytz.timezone(timezone_str), datetime.datetime, execution_time_str[:19]
         target = z.localize(dd.fromisoformat(t)) - dd.now(z)
-        sleep_seconds = max(0, target.total_seconds()) + offset
+        sleep_seconds = max(0, target.total_seconds()) + offset_seconds
                 
         if sleep_seconds > 0:
             print(f"Waiting for {sleep_seconds:.2f} seconds...")
@@ -368,6 +469,8 @@ class BasicCeleryTask:
         utc_now = datetime.datetime.now(datetime.timezone.utc)
         tz = pytz.timezone(timezone_str)
         local_now = utc_now.astimezone(tz)
+        if type(execution_time_str) != str:
+            execution_time_str = execution_time_str.default
 
         utc_execution_time = None
         local_time = None
@@ -466,7 +569,7 @@ class BasicCeleryTask:
         def handler(
             task_model: action_class.Model = Body(..., examples=examples),                    
             execution_time: str = self.EXECUTION_TIME_PARAM,
-            timezone: self.VALID_TIMEZONES = self.TIMEZONE_PARAM
+            timezone: BasicCeleryTask.VALID_TIMEZONES = self.TIMEZONE_PARAM
         ):
                             
             return self.api_perform_action(action_name, task_model.model_dump(),
@@ -643,26 +746,32 @@ class BasicCeleryTask:
         return workers
 
     ############################# general function
-    def api_perform_action_list(self,):
-        """Returns a list of all available actions that can be performed."""
+    def api_perform_action_list(self,format:Literal['mcp','openai']='mcp'):
+        """Returns a mcp tool list of all available actions that can be performed."""
         self.api_ok()
-        available_actions = []
-        for k,v in self.ACTION_REGISTRY.items():
-            model_schema = {}
-            for kk,vv in zip(['param','args','ret'],[v.Model.Param,v.Model.Args,v.Model.Return]):
-                schema = vv.model_json_schema()
-                model_schema.update({
-                    kk: {
-                        key: {
-                            "type": value["type"],
-                            "description": value.get("description", "")
-                        }
-                        for key, value in schema["properties"].items() if 'type' in value
-                    },
-                    f"{kk}_required": schema.get("required", [])
-                })
-            available_actions.append({k:model_schema})
-        return {"available_actions": available_actions}
+        if format == 'mcp':
+            return [v.as_mcp_tool() for k,v in self.ACTION_REGISTRY.items()]
+        elif format == 'openai':
+            return [v.as_openai_tool() for k,v in self.ACTION_REGISTRY.items()]
+        else:
+            raise ValueError(f"Invalid format: {format}")
+        # available_actions = []
+        # for k,v in self.ACTION_REGISTRY.items():
+        #     model_schema = {}
+        #     for kk,vv in zip(['param','args','ret'],[v.Model.Param,v.Model.Args,v.Model.Return]):
+        #         schema = vv.model_json_schema()
+        #         model_schema.update({
+        #             kk: {
+        #                 key: {
+        #                     "type": value["type"],
+        #                     "description": value.get("description", "")
+        #                 }
+        #                 for key, value in schema["properties"].items() if 'type' in value
+        #             },
+        #             f"{kk}_required": schema.get("required", [])
+        #         })
+        #     available_actions.append({k:model_schema})
+        # return {"available_actions": available_actions}
     
     def api_perform_action(self,
         name: str, 
@@ -680,12 +789,17 @@ class BasicCeleryTask:
         if not isinstance(timezone,str):
             timezone:str = timezone.default
 
-        utc_execution_time, local_time, (next_execution_time_str,timezone_str) = self.parse_execution_time(execution_time, timezone)
+        utc_execution_time, local_time, (next_execution_time_str,timezone_str
+        ) = self.parse_execution_time(execution_time, timezone)
         
         # Schedule the task
+        # print('[api_perform_action]',name,data)
+        d = self._prepare_model_example(name).model_dump()
+        d.update(data)
+        # print('[api_perform_action]',data)
         task = self.celery_perform_simple_action.apply_async(
             # args=[data, prior_data,],
-            args=[data, None,],
+            args=[d, None,],
             eta=utc_execution_time)
         
         self.BasicApp.set_task_status(task.task_id,status='SENDED')

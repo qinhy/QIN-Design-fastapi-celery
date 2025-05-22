@@ -306,7 +306,7 @@ class TaskModel(BaseModel):
     # Scheduling metadata
     next_schedule: Optional[tuple[str, str]] = None    
     # Task relationships
-    children: Optional[list[list[list[str]]]] = None
+    children: Optional[list[str]] = None
 
 
     @classmethod
@@ -314,12 +314,14 @@ class TaskModel(BaseModel):
                    utc_execution_time: Optional[datetime],
                    local_time: Optional[datetime], 
                    timezone: Optional[str],
-                   next_schedule: Optional[tuple[str,str]]=None) -> dict:
+                   next_schedule: Optional[tuple[str,str]]=None,
+                   children: Optional[list[str]] = None) -> dict:
         return cls(task_id=task.task_id,
                 scheduled_for_the_timezone=local_time,
                 timezone=timezone if local_time is not None else None,
                 scheduled_for_utc=utc_execution_time,
                 next_schedule=next_schedule,
+                children=children,
         ).model_dump(exclude_none=True)
 
 class AppInterface(PubSubInterface):
@@ -726,7 +728,8 @@ class SmartModelConverter(BaseModel):
         if self.api_key is None:
             self.api_key = os.environ.get('OPENAI_API_KEY')
             if not self.api_key:
-                raise ValueError("API key not found in environment variable 'OPENAI_API_KEY' and not provided")
+                self.api_key = 'OPENAI_API_KEY'
+                # raise ValueError("API key not found in environment variable 'OPENAI_API_KEY' and not provided")
             
     def build_conversion_prompt(
         self,
@@ -990,6 +993,9 @@ class ServiceOrientedArchitecture:
                 INFO:str='INFO'
                 DEBUG:str='DEBUG'
                 
+                @staticmethod
+                def all():
+                    return ['ERROR','WARNING','INFO','DEBUG']
             name: str  = "service" # Logger name
             level: str = "INFO"  # Default log level
             logs:str = ''
@@ -1071,16 +1077,12 @@ class ServiceOrientedArchitecture:
                 for handler in self._logger.handlers[:]:
                     self._logger.removeHandler(handler)
 
-                
         version:Version
         param:Param = Param()
         args:Args = Args()
         ret:Optional[Return] = Return()
         logger: Logger = Logger()
 
-        @classmethod
-        def examples(cls): return []
-        
         def update_model_data(self,json_data:dict):
             if json_data is not None:
                 # Update all model components from prior model
@@ -1092,6 +1094,70 @@ class ServiceOrientedArchitecture:
                     self.ret = self.ret.model_copy(update=json_data['ret'])
             return self
 
+        @classmethod
+        def examples(cls): return []
+        
+    @classmethod
+    def description(cls): return 'empty'
+
+    @classmethod
+    def schema(cls):
+        return cls.Model.model_json_schema()
+
+    @classmethod
+    def as_mcp_tool(cls):
+        "https://modelcontextprotocol.io/docs/concepts/tools"
+        "To be used in MCP tools"
+        param_schema = cls.Model.Param.model_json_schema()
+        args_schema = cls.Model.Args.model_json_schema()
+        ret_schema = cls.Model.Return.model_json_schema()
+
+        # Determine if "param" and/or "args" should be required at the top level
+        top_level_required = []
+        if param_schema.get("required"):
+            top_level_required.append("param")
+        if args_schema.get("required"):
+            top_level_required.append("args")
+
+        return {
+            "name": cls.__name__,
+            "description": cls.description().strip(),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "param": param_schema,
+                    "args": args_schema,
+                },
+                "required": top_level_required
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "ret": ret_schema,
+                },
+            },
+            "annotations": {
+                "title": cls.__name__.replace("_", " "),
+                "readOnlyHint": True,
+                "destructiveHint": False,
+                "idempotentHint": True,
+                "openWorldHint": False
+            }
+        }
+
+    @classmethod
+    def as_openai_tool(cls):
+        mcp_tool = cls.as_mcp_tool()
+        return {
+            "type": "function",
+            "function": {
+                "name": mcp_tool['name'],
+                "description": mcp_tool['description'],
+                "parameters": mcp_tool['inputSchema'],
+                "returns": mcp_tool['outputSchema'],
+            },
+        }
+    
     class Action:
         def __init__(self, model,BasicApp:AppInterface,level=None):
             outer_class_name:ServiceOrientedArchitecture = self.__class__.__qualname__.split('.')[0]
@@ -1102,8 +1168,8 @@ class ServiceOrientedArchitecture:
             self.model = model
             self.BasicApp = BasicApp
             self.logger = self.model.logger
-            if level is None:level=ServiceOrientedArchitecture.Model.Logger.Levels.INFO
-            self.logger.level = level
+            if level is not None and level in ServiceOrientedArchitecture.Model.Logger.Levels.all():
+                self.logger.level = level
             self.logger.init(
                 name=f"{model.version.class_name}:{self.model.task_id}",action_obj=self)
             self.listen_data_of_task_uuids = []

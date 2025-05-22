@@ -8,6 +8,15 @@ except:
 
 
 class PrimeNumberChecker(ServiceOrientedArchitecture):
+    @classmethod
+    def description(cls):
+        return """
+Checks if a given number is prime.
+Supports two checking modes:
+- basic: Uses a simple brute-force approach
+- smart: Uses optimized algorithms for faster checking
+"""
+    
     class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):
         pass
 

@@ -1,12 +1,12 @@
 # Standard library imports
-import datetime
-import time
 from threading import Thread
-from typing import Literal
+import time
+from typing import Literal, Union
 
 # FastAPI imports
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 # Custom imports
@@ -25,14 +25,23 @@ from config import *
 
 TaskNames = [i for i in CustomTask.__dir__() if '_' not in i]
 TaskClass = [CustomTask.__dict__[i] for i in CustomTask.__dir__() if '_' not in i]
-TaskParentClass = [i.__bases__[0] if hasattr(i,'__bases__') else None for i in TaskClass]
+
+def get_first_non_object_base(cls):
+    m = list(cls.__mro__[::-1])+[None]
+    for i in range(len(m)):
+        if m[i] is object:
+            return m[i+1]
+    return None
+
+TaskParentClass = [get_first_non_object_base(cls) if isinstance(cls, type) else None for cls in TaskClass]
+
 ValidTask = ['ServiceOrientedArchitecture' in str(i) for i in TaskParentClass]
 ACTION_REGISTRY={k:v for k,v,i in zip(TaskNames,TaskClass,ValidTask) if i}
 
 class CeleryTask(BasicCeleryTask):
     def __init__(self, BasicApp, celery_app, root_fast_app:FastAPI,
                  ACTION_REGISTRY:dict[str,any]=ACTION_REGISTRY):
-        super().__init__(BasicApp, celery_app, root_fast_app, ACTION_REGISTRY)    
+        super().__init__(BasicApp, celery_app, root_fast_app, ACTION_REGISTRY)
 
         self.router.post("/pipeline/add")(self.api_add_pipeline)
         self.router.post("/pipeline/config")(self.api_set_config_pipeline)
@@ -43,19 +52,21 @@ class CeleryTask(BasicCeleryTask):
 
         first_in_class = ACTION_REGISTRY[pipeline[0]]
         last_out_class = ACTION_REGISTRY[pipeline[-1]]
-        in_examples = first_in_class.Model.examples() if hasattr(first_in_class.Model,'examples') else None
-        if in_examples:
-            in_examples = [{'args':i['args']} for i in in_examples]
+        in_examples = None
+        if hasattr(first_in_class.Model,'examples'):
+            in_examples = [{'args':i['args']} for i in 
+                                first_in_class.Model.examples()]
         
         def api_pipeline_handler(
                 in_model: first_in_class.Model=Body(..., examples=in_examples), # type: ignore
                 execution_time: str = self.EXECUTION_TIME_PARAM,
-                timezone: self.VALID_TIMEZONES = self.TIMEZONE_PARAM,
+                timezone: BasicCeleryTask.VALID_TIMEZONES = self.TIMEZONE_PARAM,
         )->dict:#last_out_class.Model:
             
             self.api_ok()
             
-            utc_execution_time, local_time, (next_execution_time_str,timezone_str) = self.parse_execution_time(execution_time, timezone)
+            utc_execution_time, local_time, (next_execution_time_str,timezone_str
+            ) = self.parse_execution_time(execution_time, timezone)
         
             # Get model data
             current_data = in_model.model_dump()
@@ -76,22 +87,10 @@ class CeleryTask(BasicCeleryTask):
             # Extract models and mappings from config
             pipeline_config_models = pipeline_config[::2]  # Every other item starting at 0
             pipeline_config_maps = pipeline_config[1::2]   # Every other item starting at 1
-                
-
+            
             # Initialize task chain with first action
-            # task_chain = self.perform_action.signature(
-            #     # args=[data, name, prior_model_data, previous_name,previous_to_current_map],
-            #     args=[
-            #         current_data,      # Input data
-            #         pipeline[0],       # First action name
-            #         pipeline_config_models[0],  # First model config
-            #         None,             # No previous action for first step
-            #         None              # No mapping for first step
-            #     ]
-            # )
-
-            # Initialize task chain with first action
-            task_chain = self.celery_perform_simple_action.signature(                
+            task_chain = self.celery_perform_simple_action.signature(      
+                 # args=[data, name, prior_model_data, previous_name,previous_to_current_map],          
                 args=[
                     current_data,
                     pipeline_config_models[0],
@@ -132,14 +131,14 @@ class CeleryTask(BasicCeleryTask):
 
             # Return task information            
             self.BasicApp.set_task_status(chain_result.task_id,status='SENDED')
-            if next_execution_time_str:
-                return TaskModel.create_task_response(
-                    chain_result, utc_execution_time, local_time, timezone,
-                    (next_execution_time_str,timezone_str))
-            else:
-                return TaskModel.create_task_response(
-                    chain_result, utc_execution_time, local_time, timezone, None)
-                    
+            next_schedule = (next_execution_time_str, timezone_str) if next_execution_time_str else None
+            return TaskModel.create_task_response(
+                chain_result, 
+                utc_execution_time, 
+                local_time, 
+                timezone,
+                next_schedule
+            )
         return api_pipeline_handler        
 
     def api_set_config_pipeline(self,
@@ -224,7 +223,34 @@ class CeleryTask(BasicCeleryTask):
         self.BasicApp.store().set('pipelines',self.pipelines)
         self.api_refresh_pipeline()
         return {"status": "created", "path": path, "method": method, "pipeline": pipeline}
+    
+    def api_delete_task_delay(self, task_ids: Union[str, list[str]], delay: int = 30):
+        self.api_ok()
+        
+        # Convert single task_id to list for consistent handling
+        if isinstance(task_ids, str):
+            task_ids = [task_ids]
 
+        def delete_tasks_delay(task_ids=task_ids, delay=delay):
+            print(f"deleting {len(task_ids)} tasks in {delay} seconds")
+            time.sleep(delay)
+            print("deleting tasks...")
+            
+            for task_id in task_ids:
+                try:
+                    self.BasicApp.delete_task_meta(task_id)
+                    print(f"task {task_id} deleted")
+                except Exception as e:
+                    print(f"failed to delete task {task_id}: {str(e)}")
+            
+            print(f"finished deleting {len(task_ids)} tasks")
+
+        Thread(target=delete_tasks_delay, args=()).start()
+        return {
+            "task_ids": task_ids, 
+            "delay": delay,
+            "total_tasks": len(task_ids)
+        }
 
 from CustomTask import BookService, MT5CopyLastRatesService
 class MT5CeleryTask(CeleryTask):
@@ -402,44 +428,8 @@ def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
 my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
 
 
-# def wait_until(t:str, tz='Asia/Tokyo', offset=-10):
-#     import time, pytz, datetime
-#     z,dd,t = pytz.timezone(tz), datetime.datetime, t[:19]
-#     target = z.localize(dd.fromisoformat(t)) - dd.now(z)
-#     time.sleep(max(0, target.total_seconds()) + offset)
+from CustomTask import TaskDAGRunner
+def my_mermaid_editor():
+    return HTMLResponse(content=TaskDAGRunner.MermaidEditorHtml)
 
-# def schedule_recurring_requests(
-#     url: str,
-#     headers: dict,
-#     data: dict,
-#     start_time: str = 'NOW',
-#     timezone: str = "Asia/Tokyo",
-#     initial_interval: str = "10 s"
-# ) -> None:
-#     import requests
-#     request_params = {
-#         "execution_time": f"{start_time}@every {initial_interval}",
-#         "timezone": timezone
-#     }
-    
-#     while True:
-#         try:
-#             response = requests.post(
-#                 url=url,
-#                 params=request_params,
-#                 headers=headers,
-#                 json=data
-#             )
-#             response.raise_for_status()
-#             next_execution_time, next_timezone = response.json()['next_schedule']
-#         except requests.RequestException as e:
-#             print(f"Error during request: {e}")
-#             break
-
-#         request_params.update({
-#             "execution_time": next_execution_time,
-#             "timezone": next_timezone
-#         })
-        
-#         print(f"Next execution: {next_execution_time} {next_timezone}")
-#         wait_until(next_execution_time, next_timezone, offset=-5)
+my_app.add_web_api(my_mermaid_editor,'get','/myapi/mermaideditor/').reload_routes()

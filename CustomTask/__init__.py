@@ -6,13 +6,20 @@ from .ChatGPTService import ChatGPTService, DeepseekService
 from .Downloader import Downloader
 from .BinaryRepresentation import BinaryRepresentation
 from .CollatzSequence import CollatzSequence
-from .SmartModelConverter import SmartModelConverter
 from .UploadToFTP import UploadToFTP
 from .MT5Book import BookService, MT5CopyLastRatesService
 from .MT5RatesDownloader import MT5RatesDownloader
 
-# Register all available actions
-SmartModelConverter.Action.ACTION_REGISTRY = {
+from .HttpRequestTask import HttpRequestTask
+from .BrowseWebLink import BrowseWebLink
+from .EnhanceImage import EnhanceImage
+from .AddNumbers import AddNumbers
+
+# for advanced users
+from .TaskDAGRunner import TaskDAGRunner
+from .SmartModelConverter import SmartModelConverter
+
+ACTION_REGISTRY = {
     'Fibonacci': Fibonacci,
     'PrimeNumberChecker': PrimeNumberChecker,
     'PalindromeChecker': PalindromeChecker,
@@ -21,8 +28,11 @@ SmartModelConverter.Action.ACTION_REGISTRY = {
     'Downloader': Downloader,
     'BinaryRepresentation': BinaryRepresentation,
     'CollatzSequence': CollatzSequence,
-    'BookService': BookService,
-    'MT5CopyLastRatesService': MT5CopyLastRatesService,
-    'MT5RatesDownloader': MT5RatesDownloader,
-    'UploadToFTP': UploadToFTP
+    'UploadToFTP': UploadToFTP,
+    'HttpRequestTask': HttpRequestTask,
+    'BrowseWebLink': BrowseWebLink,
+    'EnhanceImage': EnhanceImage,
+    'AddNumbers': AddNumbers,
 }
+SmartModelConverter.Action.ACTION_REGISTRY = ACTION_REGISTRY
+TaskDAGRunner.Action.ACTION_REGISTRY = ACTION_REGISTRY
