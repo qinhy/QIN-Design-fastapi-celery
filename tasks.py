@@ -299,3 +299,16 @@ def my_mermaid_editor():
     return HTMLResponse(content=TaskDAGRunner.MermaidEditorHtml)
 
 my_app.add_web_api(my_mermaid_editor,'get','/myapi/mermaideditor/').reload_routes()
+
+def my_gui():
+    try:
+        with open('./vue-gui.html', 'r') as f:
+            return HTMLResponse(content=f.read())
+    except FileNotFoundError:
+        try:
+            with open('../vue-gui.html', 'r') as f:
+                return HTMLResponse(content=f.read())
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="GUI template file not found")
+
+my_app.add_web_api(my_gui,'get','/myapi/gui/').reload_routes()

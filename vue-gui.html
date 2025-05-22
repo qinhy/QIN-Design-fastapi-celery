@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>One App</title>
+    <link rel="stylesheet" href="https://unpkg.com/primeicons@7.0.0/primeicons.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/primevue@4.0.0-rc.2/umd/primevue.min.js"></script>
+    <script src="https://unpkg.com/@primevue/themes@4.0.0-rc.2/umd/lara.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.6.1/github-markdown.min.css">
+    <style>
+        .markdown-body {
+            box-sizing: border-box;
+            min-width: 100px;
+            max-width: 980px;
+            margin: 0px 0px 0px;
+            padding: 15px;
+        }
+
+        .app-dark .markdown-body {
+            background-color: #18181B;
+            color: white;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100">
+    <div id="app">
+      <!-- App Header -->
+      <p class="text-xl font-bold text-center px-4 py-2">
+        App
+      </p>
+  
+      <!-- Tabbed Navigation -->
+      <p-tabs :value="activeTab" scrollable>
+        <p-tablist>
+          <p-tab v-for="(c, i) in TABS" :key="c" :value="`${c}`">{{ c }}</p-tab>
+        </p-tablist>
+  
+        <p-tabpanels>
+          <!-- Dashboard Tab -->
+          <p-tabpanel value="Dashboard">
+            <div>
+              <h2 class="text-xl font-bold mb-4">Dashboard</h2>
+  
+              <!-- Tasks Section -->
+              <div class="mb-6">
+
+                <div class="flex gap-2 items-center">
+                  <p-button label="List All Tasks" @click="fetchAndDisplayTasks"></p-button>
+                  <p-inputnumber v-model="page" :max="100" :min="1" :step="1"
+                    placeholder="Enter page number" showButtons 
+                    ></p-inputnumber>
+                  <p-inputnumber v-model="page_size" :max="1000" :min="10" :step="10"
+                    placeholder="Enter page size" showButtons 
+                    ></p-inputnumber>
+
+                </div>
+                
+                <p-datatable v-if="tasks.length > 0" :value="tasks" class="p-datatable-sm mb-2">
+                  <p-column field="task_id" header="Task ID"></p-column>
+                  <p-column field="status" header="Status"></p-column>
+                  <!-- <p-column field="result" header="Result"></p-column> -->
+                  <p-column field="date_done" header="Date Done"></p-column>
+                </p-datatable>
+                <p v-else class="text-gray-500">No tasks available.</p>
+              </div>
+  
+              <!-- Task Meta Controls -->
+              <div class="mb-6">
+                <p-select
+                  v-model="selectedTaskId"
+                  :options="taskOptions"
+                  placeholder="Select Task ID"
+                  class="mb-2 w-full"
+                ></p-select>
+                <div class="flex gap-2 mb-4">
+                  <p-button label="Check Task Meta" @click="() => checkTaskMeta(taskId)"></p-button>
+                  <p-button label="Stop Task" class="p-button-danger" @click="stopTask"></p-button>
+                </div>
+                <p-taskmeta :data="taskMeta"></p-taskmeta>
+              </div>
+  
+              <!-- Workers Section -->
+              <div class="mb-4">
+                <p-button label="Get Workers" class="mb-2" @click="fetchWorkers"></p-button>
+                <!-- Worker Information -->
+                <p-recursivejson class="bg-gray-100" :data="workersInfo" />
+              </div>
+            </div>
+          </p-tabpanel>
+  
+          <!-- Dynamic Task Tabs -->
+          <p-tabpanel v-for="(fn, i) in all_schema" :key="fn.name" :value="fn.name">
+            <div>
+              <h2 class="text-xl font-bold m-2">{{ fn.name }}</h2>
+              <p class="mb-2 whitespace-pre-line">{{ fn.description }}</p>
+              <h3 class="text-lg font-bold mt-4 mb-2">Parameters</h3>
+  
+              <!-- Dynamic Parameter Form -->
+              <form @submit.prevent="submitDynamicTask(fn, i)">
+                <template v-for="(fieldGroup, groupKey) in fn.parameters.properties">
+                  <div class="mb-2 font-bold">{{ groupKey }}</div>
+                  <div v-for="(field, fieldKey) in fieldGroup.properties" :key="fieldKey" class="mb-4 pl-4">
+                    <label class="block mb-1 font-medium">
+                      {{ field.title }} ({{ field.type }})
+                    </label>
+  
+                    <template v-if="field.enum">
+                      <p-select
+                        v-model="dynamicTasks[i][groupKey][fieldKey]"
+                        :options="field.enum"
+                        :placeholder="field.description || fieldKey"
+                        class="w-full"
+                      />
+                    </template>
+                    <template v-else-if="field.type === 'integer'">
+                      <p-inputnumber
+                        v-model="dynamicTasks[i][groupKey][fieldKey]"
+                        :placeholder="field.description || fieldKey"
+                        class="w-full"
+                      />
+                    </template>
+                    <template v-else>
+                      <p-inputtext
+                        v-model="dynamicTasks[i][groupKey][fieldKey]"
+                        :placeholder="field.description || fieldKey"
+                        class="w-full"
+                      />
+                    </template>
+                    <div class="text-xs text-gray-500">{{ field.description }}</div>
+                  </div>
+                </template>
+                <p-button label="Submit Task" type="submit" class="mt-2" :disabled="loading"></p-button>
+              </form>
+  
+              <!-- Task Submission Result -->
+              <div v-if="taskId" class="mt-4">
+                <h3 class="text-lg font-bold">Task Submitted</h3>
+                <p class="text-green-600">Task ID: {{ taskId }}</p>
+                <div class="mb-4 flex gap-2">
+                  <p-button label="Check Task Meta" @click="() => checkTaskMeta(taskId)"></p-button>
+                  <p-button label="Stop Task" class="p-button-danger" @click="() => stopTask(taskId)"></p-button>
+                </div>
+  
+                <!-- Task Meta Details -->            
+                <p-taskmeta :data="taskMeta"></p-taskmeta>
+  
+              <!-- Error Message -->
+              <div v-if="errorMessage" class="mt-4">
+                <h3 class="text-lg font-bold text-red-600">Error</h3>
+                <p>{{ errorMessage }}</p>
+              </div>
+            </div>
+          </p-tabpanel>
+        </p-tabpanels>
+      </p-tabs>
+    </div>
+  </body>
+  
+
+<script>
+    const { createApp, ref } = Vue;
+
+    // Minimal APIClient, only with the needed methods (no auth)
+    class APIClient {
+        constructor(baseURL = '') {
+            this.baseURL = baseURL;
+        }
+        async request(endpoint, method = "GET", body = null, isJSON = true) {
+            const options = { method, headers: {} };
+            if (isJSON) options.headers["Content-Type"] = "application/json";
+            if (body) options.body = isJSON ? JSON.stringify(body) : body;
+            const response = await fetch(`${this.baseURL}${endpoint}`, options);
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: "Unknown error" }));
+                throw new Error(error.detail || error.message || "Request failed");
+            }
+            return response.json();
+        }
+        async checkTaskMeta(task_id) { return await this.request(`/tasks/meta/${task_id}`); }
+        async stopTask(task_id) { return await this.request(`/tasks/stop/${task_id}`, "GET"); }
+        async fetchWorkers() { return await this.request('/workers/'); }
+        async getTasks(page = 1, page_size = 10) {
+            return await this.request(`/tasks?page=${page}&page_size=${page_size}`);
+        }
+        async getActions() { return await this.request('/action/list?format=openai'); }
+        async submitTask(func_name, inputs, taskMeta, taskId, errorMessage, loading) {
+            loading.value = true;
+            taskMeta.value = "";
+            func_name = func_name.toLowerCase();
+            try {
+                const response = await fetch(`/${func_name}/`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(inputs),
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    taskId.value = null;
+                    errorMessage.value = errorData.detail;
+                    loading.value = false;
+                    return;
+                }
+                const data = await response.json();
+                taskId.value = data.task_id;
+                errorMessage.value = null;
+            } catch (error) {
+                taskId.value = null;
+                errorMessage.value = error.message || JSON.stringify(error);
+            }
+            loading.value = false;
+        }
+
+    }
+
+    const app = createApp({
+        setup() {
+            const taskId = ref(null);
+            const errorMessage = ref(null);
+            const loading = ref(false);
+
+
+            // Tasks
+            const api = new APIClient();
+            const tasks = ref([]);
+            const taskOptions = ref([]);
+            const selectedTaskId = ref(null);
+            const taskMeta = ref("");
+            const workersInfo = ref("");
+            const page = ref(1);
+            const page_size = ref(10);
+
+            const fetchAndDisplayTasks = async (e) => {
+                const res = await api.getTasks(page.value, page_size.value);
+                tasks.value = res.tasks
+                taskOptions.value = tasks.value.map(v => v.task_id);
+            };
+            const fetchWorkers = async () => {
+                workersInfo.value = await api.fetchWorkers();
+            };
+            const checkTaskMeta = async (val = null) => {
+                if (!val) val = selectedTaskId.value;
+                taskMeta.value = await api.checkTaskMeta(val);
+                taskMeta.value.result = JSON.parse(taskMeta.value.result);
+            };
+            const stopTask = async (val = null) => {
+                if (!val) val = selectedTaskId.value;
+                api.stopTask(val);
+            };
+
+            // Tab logic
+            const activeTab = ref('Dashboard');
+            const TABS = ref(["Dashboard", "Fibonacci"]);
+
+            // Actions
+            const all_schema = ref({});
+            const dynamicTasks = ref([]); // indexed by tab
+
+            api.getActions().then((action_list) => {
+                action_list = action_list.map((v) => v[v.type])
+                all_schema.value = action_list;
+                console.log(action_list);
+                TABS.value = ["Dashboard", ...action_list.map((v) => v.name)];
+
+                dynamicTasks.value = action_list.map(fn => {
+                    // Init an object for all top-level parameter groups
+                    const paramGroups = {};
+                    for (const groupKey in fn.parameters.properties) {
+                        paramGroups[groupKey] = {};
+                        const group = fn.parameters.properties[groupKey];
+                        for (const fieldKey in group.properties) {
+                            // Set default value if available, otherwise empty/0
+                            paramGroups[groupKey][fieldKey] = group.properties[fieldKey].default ??
+                                (group.properties[fieldKey].type === "integer" ? 0 : "");
+                        }
+                    }
+                    return paramGroups;
+                });
+
+                console.log(dynamicTasks.value);
+            });
+
+            async function submitDynamicTask(fn, i) {
+                api.submitTask(fn.name.toLowerCase(), dynamicTasks.value[i],
+                    taskMeta, taskId, errorMessage, loading);
+            }
+
+            return {
+                page, page_size,
+                TABS, activeTab, api, all_schema,
+                dynamicTasks, submitDynamicTask,
+                tasks, taskOptions, selectedTaskId, taskMeta, workersInfo, fetchAndDisplayTasks, checkTaskMeta, stopTask, fetchWorkers,
+                taskId, errorMessage, loading,
+            };
+        }
+    });
+
+    app.use(PrimeVue.Config, {
+        theme: {
+            preset: PrimeVue.Themes.Lara,
+            options: { prefix: 'p', darkModeSelector: '.app-dark', cssLayer: false, }
+        }
+    });
+    app.use(PrimeVue.ToastService);
+
+    app.directive('ripple', PrimeVue.Ripple);
+
+    app.component('p-themeswitcher', PrimeVue.ThemeSwitcher);
+    app.component('p-autocomplete', PrimeVue.AutoComplete);
+    app.component('p-accordion', PrimeVue.Accordion);
+    app.component('p-accordionpanel', PrimeVue.AccordionPanel);
+    app.component('p-accordionheader', PrimeVue.AccordionHeader);
+    app.component('p-accordioncontent', PrimeVue.AccordionContent);
+    app.component('p-accordiontab', PrimeVue.AccordionTab);
+    app.component('p-animateonscroll', PrimeVue.AnimateOnScroll);
+    app.component('p-avatar', PrimeVue.Avatar);
+    app.component('p-avatargroup', PrimeVue.AvatarGroup);
+    app.component('p-badge', PrimeVue.Badge);
+    app.component('p-badgedirective', PrimeVue.BadgeDirective);
+    app.component('p-blockui', PrimeVue.BlockUI);
+    app.component('p-button', PrimeVue.Button);
+    app.component('p-buttongroup', PrimeVue.ButtonGroup);
+    app.component('p-breadcrumb', PrimeVue.Breadcrumb);
+    app.component('p-calendar', PrimeVue.Calendar);
+    app.component('p-card', PrimeVue.Card);
+    app.component('p-cascadeselect', PrimeVue.CascadeSelect);
+    app.component('p-carousel', PrimeVue.Carousel);
+    app.component('p-checkbox', PrimeVue.Checkbox);
+    app.component('p-chip', PrimeVue.Chip);
+    app.component('p-chips', PrimeVue.Chips);
+    app.component('p-colorpicker', PrimeVue.ColorPicker);
+    app.component('p-column', PrimeVue.Column);
+    app.component('p-columngroup', PrimeVue.ColumnGroup);
+    app.component('p-confirmdialog', PrimeVue.ConfirmDialog);
+    app.component('p-confirmpopup', PrimeVue.ConfirmPopup);
+    app.component('p-confirmationservice', PrimeVue.ConfirmationService);
+    app.component('p-contextmenu', PrimeVue.ContextMenu);
+    app.component('p-datatable', PrimeVue.DataTable);
+    app.component('p-dataview', PrimeVue.DataView);
+    app.component('p-datepicker', PrimeVue.DatePicker);
+    app.component('p-deferredcontent', PrimeVue.DeferredContent);
+    app.component('p-dialog', PrimeVue.Dialog);
+    app.component('p-dialogservice', PrimeVue.DialogService);
+    app.component('p-divider', PrimeVue.Divider);
+    app.component('p-dock', PrimeVue.Dock);
+    app.component('p-drawer', PrimeVue.Drawer);
+    app.component('p-dynamicdialog', PrimeVue.DynamicDialog);
+    app.component('p-editor', PrimeVue.Editor);
+    app.component('p-fieldset', PrimeVue.Fieldset);
+    app.component('p-fileupload', PrimeVue.FileUpload);
+    app.component('p-floatlabel', PrimeVue.FloatLabel);
+    app.component('p-focustrap', PrimeVue.FocusTrap);
+    app.component('p-galleria', PrimeVue.Galleria);
+    app.component('p-iconfield', PrimeVue.IconField);
+    app.component('p-inputicon', PrimeVue.InputIcon);
+    app.component('p-image', PrimeVue.Image);
+    app.component('p-inlinemessage', PrimeVue.InlineMessage);
+    app.component('p-inplace', PrimeVue.Inplace);
+    app.component('p-inputchips', PrimeVue.InputChips);
+    app.component('p-inputgroup', PrimeVue.InputGroup);
+    app.component('p-inputgroupaddon', PrimeVue.InputGroupAddon);
+    app.component('p-inputmask', PrimeVue.InputMask);
+    app.component('p-inputnumber', PrimeVue.InputNumber);
+    app.component('p-inputotp', PrimeVue.InputOtp);
+    app.component('p-inputswitch', PrimeVue.InputSwitch);
+    app.component('p-inputtext', PrimeVue.InputText);
+    app.component('p-knob', PrimeVue.Knob);
+    app.component('p-listbox', PrimeVue.Listbox);
+    app.component('p-megamenu', PrimeVue.MegaMenu);
+    app.component('p-menu', PrimeVue.Menu);
+    app.component('p-menubar', PrimeVue.Menubar);
+    app.component('p-message', PrimeVue.Message);
+    app.component('p-metergroup', PrimeVue.MeterGroup);
+    app.component('p-multiselect', PrimeVue.MultiSelect);
+    app.component('p-orderlist', PrimeVue.OrderList);
+    app.component('p-organizationchart', PrimeVue.OrganizationChart);
+    app.component('p-overlaybadge', PrimeVue.OverlayBadge);
+    app.component('p-overlaypanel', PrimeVue.OverlayPanel);
+    app.component('p-paginator', PrimeVue.Paginator);
+    app.component('p-panel', PrimeVue.Panel);
+    app.component('p-panelmenu', PrimeVue.PanelMenu);
+    app.component('p-password', PrimeVue.Password);
+    app.component('p-picklist', PrimeVue.PickList);
+    app.component('p-popover', PrimeVue.Popover);
+    app.component('p-progressbar', PrimeVue.ProgressBar);
+    app.component('p-progressspinner', PrimeVue.ProgressSpinner);
+    app.component('p-rating', PrimeVue.Rating);
+    app.component('p-radiobutton', PrimeVue.RadioButton);
+    app.component('p-ripple', PrimeVue.Ripple);
+    app.component('p-row', PrimeVue.Row);
+    app.component('p-scrollpanel', PrimeVue.ScrollPanel);
+    app.component('p-scrolltop', PrimeVue.ScrollTop);
+    app.component('p-select', PrimeVue.Select);
+    app.component('p-selectbutton', PrimeVue.SelectButton);
+    app.component('p-skeleton', PrimeVue.Skeleton);
+    app.component('p-slider', PrimeVue.Slider);
+    app.component('p-sidebar', PrimeVue.Sidebar);
+    app.component('p-speeddial', PrimeVue.SpeedDial);
+    app.component('p-splitbutton', PrimeVue.SplitButton);
+    app.component('p-splitter', PrimeVue.Splitter);
+    app.component('p-splitterpanel', PrimeVue.SplitterPanel);
+    app.component('p-stepper', PrimeVue.Stepper);
+    app.component('p-stepperpanel', PrimeVue.StepperPanel);
+    app.component('p-steps', PrimeVue.Steps);
+    app.component('p-styleclass', PrimeVue.StyleClass);
+    app.component('p-tabmenu', PrimeVue.TabMenu);
+    app.component('p-tabs', PrimeVue.Tabs);
+    app.component('p-tablist', PrimeVue.TabList);
+    app.component('p-tab', PrimeVue.Tab);
+    app.component('p-tabpanels', PrimeVue.TabPanels);
+    app.component('p-tabpanel', PrimeVue.TabPanel);
+    app.component('p-tabview', PrimeVue.TabView);
+    app.component('p-tag', PrimeVue.Tag);
+    app.component('p-terminal', PrimeVue.Terminal);
+    app.component('p-textarea', PrimeVue.Textarea);
+    app.component('p-tieredmenu', PrimeVue.TieredMenu);
+    app.component('p-timeline', PrimeVue.Timeline);
+    app.component('p-togglebutton', PrimeVue.ToggleButton);
+    app.component('p-toggleswitch', PrimeVue.ToggleSwitch);
+    app.component('p-tooltip', PrimeVue.Tooltip);
+    app.component('p-toast', PrimeVue.Toast);
+    app.component('p-toastservice', PrimeVue.ToastService);
+    app.component('p-toolbar', PrimeVue.Toolbar);
+    app.component('p-tree', PrimeVue.Tree);
+    app.component('p-treeselect', PrimeVue.TreeSelect);
+    app.component('p-treetable', PrimeVue.TreeTable);
+    app.component('p-virtualscroller', PrimeVue.VirtualScroller);
+    app.component('p-recursivejson', {
+        props: ['data', 'level'],
+        template: `
+    <ul v-if="typeof data === 'object' && data !== null" :style="{ paddingLeft: (level || 0) * 14 + 'px', borderLeft: level ? '2px solid #e5e7eb' : '' }">
+      <li v-for="(v, k) in data" :key="k">
+        <span style="font-weight:bold;">{{k}}:</span>
+        <p-recursivejson v-if="typeof v==='object' && v!==null" :data="v" :level="(level || 0)+1"/>
+        <span v-else style="color:#444;">{{v}}</span>
+      </li>
+    </ul>
+    <span v-else>{{ data }}</span>
+  `
+    });
+    app.component('p-taskmeta', {
+    props: ['data'],
+    template: `
+        <div>
+        <div v-if="data">
+            <div class="mb-2">
+            <span class="font-bold">Status:</span>
+            <span :class="{
+                'text-green-600': data.status === 'SUCCESS',
+                'text-red-600': data.status !== 'SUCCESS'
+            }">
+                {{ data.status }}
+            </span>
+            </div>
+            <div class="mb-2">
+            <span class="font-bold">Task ID:</span> {{ data.task_id }}
+            </div>
+            <div v-if="data.date_done" class="mb-2">
+            <span class="font-bold">Date Done:</span> {{ data.date_done }}
+            </div>
+            <div v-if="data.result" class="mb-2">
+            <span class="font-bold">Result:</span>
+            <p-recursivejson class="bg-gray-100" :data="data.result.ret" :level="1" />
+            </div>
+            <div v-if="data.traceback" class="mb-2 text-red-600">
+            <span class="font-bold">Traceback:</span>
+            <pre>{{ data.traceback }}</pre>
+            </div>
+            <div v-if="data.result && data.result.logger" class="mb-2">
+            <span class="font-bold">Logs:</span>
+            <pre class="bg-gray-100 rounded p-2 text-xs overflow-x-auto">{{ data.result.logger.logs }}</pre>
+            </div>
+        </div>
+        <div v-else>
+            <p class="text-red-500">No task meta available.</p>
+        </div>
+        </div>
+    `
+    });
+
+    app.mount('#app');
+</script>
+
+</html>
