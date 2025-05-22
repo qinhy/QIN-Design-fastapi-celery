@@ -19,13 +19,20 @@ class TaskDAGRunner(ServiceOrientedArchitecture):
 
     class Model(ServiceOrientedArchitecture.Model):
         class Param(BaseModel):
-            pass
+            str_customize_separator: str = Field(
+                default=",", description="Customize the separator used when joining multiple values for a field.")
 
         class Args(BaseModel):
             mermaid_graph_text: str = Field(..., description="Mermaid graph text defining the DAG")
 
         class Return(BaseModel):
-            results: Dict[str, Any] = {}
+            results: Dict[str, dict] = Field(
+                    default_factory=dict, description="Final results (decoded from json string) of the DAG execution")
+            execution_order: list = Field(
+                    default_factory=list, description="Topological execution order")
+            graph: Optional[dict] = Field(
+                    None, description="Original Mermaid graph string dict.")
+
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
             pass
@@ -80,7 +87,7 @@ graph TD
 
         def __init__(self, model: 'TaskDAGRunner.Model', BasicApp=None, level=None):
             super().__init__(model, BasicApp, level)
-            self.model = model
+            self.model:TaskDAGRunner.Model = model
             self.logger = self.model.logger
 
         def __call__(self) -> 'TaskDAGRunner.Model':
@@ -88,8 +95,8 @@ graph TD
             Parse the DAG, submit each task in topological order,
             and collect the final results.
             """
-            graph = MermaidGraph(self.model.args.mermaid_graph_text)
-            order = graph.get_pipeline_order()
+            self.model.ret.graph = graph = MermaidGraph(self.model.args.mermaid_graph_text)
+            self.model.ret.execution_order = order = graph.get_pipeline_order()
             configs, mappings = graph.get_pipeline_config()[::2], graph.get_pipeline_config()[1::2]
 
             # Build maps for quick lookup
@@ -131,136 +138,107 @@ graph TD
             """
             Merge the static config with any inputs from parent tasks.
             """
-            # Get parents of the current node from the graph structure
-            parents = graph.graph[node]["prev"]
-            # Start with a shallow copy of static config for the current node
             payload = dict(config)
+            parents = graph.graph[node]["prev"]
+            if not parents: return payload
 
-            if parents:
-                inputs = {}
-                parent_results = []
-                # For each mapping related to this node
-                for m in mapping_map.get(node, []):
-                    parent = m["from"]
-                    mapping = m.get("map")
-                    # Fetch parent result from cache, or retrieve and cache it if missing
-                    if parent not in cache:
-                        cache[parent] = self._fetch_result(task_ids[parent])
-                    parent_result = cache[parent]
-                    if mapping:
-                        # If there’s a field mapping, store for later mapping application
-                        parent_results.append((parent, parent_result, mapping))
-                    else:
-                        # If no mapping, merge parent result directly into inputs
-                        inputs.update(parent_result)
+            payload["args"] = inputs = {}
+            parent_results = self._collect_parent_results(
+                                    node, mapping_map, cache, task_ids)
 
-                ##################### all_mappings checking #####################
-                all_mappings = []
-                for parent_name, parent_result, mapping in parent_results: 
-                    for src, dst in mapping.items():
-                        all_mappings.append((f'{parent_name}:{src}', dst))
+            if not parent_results: return payload
 
-                # all_mappings: List of (parent:source, destination) pairs, e.g. [('ParentA:foo', 'z'), ...]
+            all_mappings = self._flatten_mappings(parent_results)
+            mapping_flag = self._determine_mapping_flag(all_mappings)
+            # print(f"Mapping flag: {mapping_flag}")
 
-                all_src = [src for src, dst in all_mappings]
-                all_dst = [dst for src, dst in all_mappings]
+            if mapping_flag == "many2many":
+                raise NotImplementedError(f"[NotImplementedError]: Multiple overlaps in both sources and destinations: {all_mappings}")
 
-                # Example scenarios:
-                # - one2one: [('ParentA:foo', 'x'), ('ParentB:bar', 'y')]
-                # - many2one: [('ParentA:foo', 'z'), ('ParentB:bar', 'z')
-                # - one2many: [('ParentA:foo', 'x'), ('ParentA:foo', 'y')
-                # - many2many: [('ParentA:foo', 'z'), ('ParentA:foo', 'y'), ('ParentB:bar', 'z')]
+            if mapping_flag == "many2one":
+                inputs.update(
+                    self._handle_many2one_mapping(node, parent_results, all_mappings))
+            else:
+                inputs.update(
+                    self._handle_one2one_or_one2many_mapping(parent_results))
 
-                if len(all_src) != len(set(all_src)) and len(all_dst) != len(set(all_dst)):
-                    flag = 'many2many'    # Multiple overlaps in both sources and destinations
-                    raise NotImplementedError(f"[NotImplementedError]: Multiple overlaps in both sources and destinations: {all_mappings}")
-                elif len(all_dst) != len(set(all_dst)):
-                    flag = 'many2one'     # Multiple sources map to the same destination
-                elif len(all_src) != len(set(all_src)):
-                    flag = 'one2many'     # One source maps to multiple destinations
-                else:
-                    flag = 'one2one'      # Pure 1:1 mapping
-
-                print(f"Mapping flag: {flag}")
-
-                ##################### apply mapping #####################
-                if flag == 'many2one':
-                    # Example: mapping [('ParentA:foo', 'z'), ('ParentB:bar', 'z')]
-                    # Both foo (from ParentA) and bar (from ParentB) map to 'z'
-                    the_one = all_dst[0]
-                    the_one_schema = self.get_args_schema(node)[the_one]
-
-                    if the_one_schema["type"] == "array":
-                        # Collect all source values into a list for 'z'
-                        element_type = the_one_schema["items"]["type"]
-                        inputs[the_one] = []
-                        for parent_name, parent_result, mapping in parent_results:
-                            for src, dst in mapping.items():
-                                if dst == the_one:
-                                    value = parent_result.get(src)
-                                    # Optionally, validate type here
-                                    if value is not None:
-                                        inputs[the_one].append(value)
-
-                        # Optionally: type check each element
-                        if element_type == "string":
-                            inputs[the_one] = [str(v) for v in inputs[the_one]]
-                        elif element_type == "integer":
-                            inputs[the_one] = [int(v) for v in inputs[the_one]]
-                        elif element_type == "number":
-                            inputs[the_one] = [float(v) for v in inputs[the_one]]
-                        else:
-                            raise NotImplementedError(f"[NotImplementedError]: Unsupported type '{the_one_schema['type']}' for field '{the_one}'.")
-
-                    elif the_one_schema["type"] == "string":
-                        # If schema expects a string but multiple values provided, join with separator
-                        values = []
-                        for parent_name, parent_result, mapping in parent_results:
-                            for src, dst in mapping.items():
-                                if dst == the_one:
-                                    value = parent_result.get(src)
-                                    if value is not None:
-                                        values.append(str(value))
-
-                        # Join values (customize separator as needed)
-                        inputs[the_one] = "".join(values)
-
-                    else:
-                        # Default behavior: last value wins (or raise error)
-                        for parent_name, parent_result, mapping in parent_results:
-                            for src, dst in mapping.items():
-                                if dst == the_one:
-                                    value = parent_result.get(src)
-                                    if value is not None:
-                                        inputs[the_one] = value
-                        print(f"Warning: 'many2one' mapping for field '{the_one}' with unsupported type '{the_one_schema['type']}', used last value.")
-
-                    payload["args"] = inputs
-
-                else:
-                    # For one2one and one2many mappings
-                    # Example: mapping [('ParentA:foo', 'x'), ('ParentB:bar', 'y')] (one2one)
-                    # Example: mapping [('ParentA:foo', 'x'), ('ParentA:foo', 'y')] (one2many)
-                    for parent_name, parent_result, mapping in parent_results:
-                        all_dst = [dst for src, dst in mapping.items()]
-
-                        # Map fields from parent result to our inputs dict using the mapping
-                        for src, dst in mapping.items():
-                            if dst in inputs:
-                                print(f"Warning: Overwriting input field '{dst}' with value from parent '{parent_name}'. Previous value: {inputs[dst]}, New value: {parent_result.get(src)}")
-                            if src not in parent_result:
-                                print(f"Warning: Source key '{src}' not found in parent result from '{parent_name}'.")
-                            else:
-                                inputs[dst] = parent_result[src]
-
-                        unused_fields = set(parent_result.keys()) - set(mapping.keys())
-                        if unused_fields:
-                            print(f"Unused fields from parent '{parent_name}': {unused_fields}")
-
-                    # Set the merged inputs as the "args" key in payload
-                    payload["args"] = inputs
-
+            payload["args"] = inputs
             return payload
+
+        def _collect_parent_results(self, node, mapping_map, cache, task_ids):
+            parent_results = []
+            # For each mapping related to this node
+            for m in mapping_map.get(node, []):
+                parent = m["from"]
+                mapping = m.get("map")
+                # Fetch parent result from cache, or retrieve and cache it if missing
+                if parent not in cache:
+                    cache[parent] = self._fetch_result(task_ids[parent])
+                parent_result:dict = cache[parent]
+                if mapping is None:
+                    mapping = {k:k for k in parent_result.keys()}
+                parent_results.append((parent, parent_result, mapping))
+            return parent_results
+
+        def _flatten_mappings(self, parent_results):
+            return [
+                (f"{parent}:{src}", dst)
+                for parent, _, mapping in parent_results
+                for src, dst in mapping.items()
+            ]
+
+        def _determine_mapping_flag(self, mappings):
+            srcs, dsts = zip(*mappings) if mappings else ([], [])
+            src_set, dst_set = set(srcs), set(dsts)
+
+            if len(srcs) != len(src_set) and len(dsts) != len(dst_set):
+                return "many2many"
+            elif len(dsts) != len(dst_set):
+                return "many2one"
+            elif len(srcs) != len(src_set):
+                return "one2many"
+            return "one2one"
+
+        def _handle_many2one_mapping(self, node, parent_results, all_mappings):
+            field = all_mappings[0][1]
+            schema = self.get_args_schema(node)[field]
+            values = []
+
+            for parent, result, mapping in parent_results:
+                for src, dst in mapping.items():
+                    if dst == field and (val := result.get(src)) is not None:
+                        values.append(val)
+
+            if schema["type"] == "array":
+                return {field: self._convert_array(values, schema["items"]["type"])}
+            elif schema["type"] == "string":
+                return {field: self.model.param.str_customize_separator.join(map(str, values))}
+            else:
+                print(f"Warning: 'many2one' mapping for field '{field}' with unsupported type '{schema['type']}', used last value.")
+                return {field: values[-1]} if values else {}
+
+        def _convert_array(self, values, element_type):
+            converters = {"string": str, "integer": int, "number": float}
+            converter = converters.get(element_type)
+            if not converter:
+                raise NotImplementedError(f"[NotImplementedError]: Unsupported array element type '{element_type}'")
+            return [converter(v) for v in values]
+
+        def _handle_one2one_or_one2many_mapping(self, parent_results):
+            inputs = {}
+            for parent, result, mapping in parent_results:
+                for src, dst in mapping.items():
+                    if dst in inputs:
+                        print(f"Warning: Overwriting input field '{dst}' from parent '{parent}'. Previous value: {inputs[dst]}, New value: {result.get(src)}")
+                    if src not in result:
+                        print(f"Warning: Source key '{src}' not found in parent result from '{parent}'.")
+                    else:
+                        inputs[dst] = result[src]
+
+                unused_fields = set(result.keys()) - set(mapping.keys())
+                if unused_fields:
+                    print(f"Unused fields from parent '{parent}': {unused_fields}")
+            return inputs
 
 
         def _submit(self, task_name: str, payload: Dict[str, Any]) -> str:
@@ -277,7 +255,7 @@ graph TD
             """
             deadline = time.time() + timeout
             result = AsyncResult(task_id)
-
+            time.sleep(0.5)
             while time.time() < deadline:
                 if result.state == "SUCCESS":
                     return result
