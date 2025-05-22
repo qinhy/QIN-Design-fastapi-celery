@@ -7,6 +7,15 @@ except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
 
 class Fibonacci(ServiceOrientedArchitecture):
+    @classmethod
+    def description(cls):
+        return """
+Computes the Fibonacci number at a given position n.
+Supports two computation modes:
+- fast: Uses iterative approach, more efficient
+- slow: Uses recursive approach, less efficient but demonstrates the mathematical concept
+"""
+
     class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):
         pass
 
@@ -19,7 +28,7 @@ class Fibonacci(ServiceOrientedArchitecture):
                 return self.mode == 'fast'
 
         class Args(BaseModel):
-            n: int = Field(1, description="The position of the Fibonacci number to compute")
+            n: int = Field(..., description="The position of the Fibonacci number to compute")
 
         class Return(BaseModel):
             n: int = Field(-1, description="The computed Fibonacci number at position n")
@@ -33,9 +42,10 @@ class Fibonacci(ServiceOrientedArchitecture):
         def examples():
             return [{ "param": {"mode": "fast"},"args": {"n": 13}},]
         
+            
         version:Version = Version()
         param:Param = Param()
-        args:Args = Args()
+        args:Args
         ret:Optional[Return] = Return()
         logger: Logger = Logger(name=Version().class_name)
 
@@ -99,3 +109,7 @@ class Fibonacci(ServiceOrientedArchitecture):
                         return x
                     return fib_recursive(x - 1) + fib_recursive(x - 2)
                 return fib_recursive(n)
+
+if __name__ == "__main__":
+    import json
+    print(json.dumps(Fibonacci.as_mcp_tool(), indent=4))

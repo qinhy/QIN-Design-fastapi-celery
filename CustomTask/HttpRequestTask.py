@@ -9,6 +9,14 @@ except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
 
 class HttpRequestTask(ServiceOrientedArchitecture):
+    @classmethod
+    def description(cls):
+        return """
+Performs HTTP requests to specified URLs.
+Supports GET and POST methods.
+Returns the status code and content of the response.
+"""
+    
     class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):
         pass
 

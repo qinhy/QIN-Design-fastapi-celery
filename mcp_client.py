@@ -52,7 +52,6 @@ async def test_tool():
     if not task_id:
         print("❌ Failed to retrieve task_id.")
         return
-
     # Wait for the result
     result = await wait_for_completion(task_id)
     del result['logger']

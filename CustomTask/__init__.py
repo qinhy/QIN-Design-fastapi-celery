@@ -5,11 +5,17 @@ from .ChatGPTService import ChatGPTService, DeepseekService
 from .Downloader import Downloader
 from .BinaryRepresentation import BinaryRepresentation
 from .CollatzSequence import CollatzSequence
-from .SmartModelConverter import SmartModelConverter
 from .UploadToFTP import UploadToFTP
 from .HttpRequestTask import HttpRequestTask
+from .BrowseWebLink import BrowseWebLink
+from .EnhanceImage import EnhanceImage
+from .AddNumbers import AddNumbers
 
-SmartModelConverter.Action.ACTION_REGISTRY = {
+# for advanced users
+from .TaskDAGRunner import TaskDAGRunner
+from .SmartModelConverter import SmartModelConverter
+
+ACTION_REGISTRY = {
     'Fibonacci': Fibonacci,
     'PrimeNumberChecker': PrimeNumberChecker,
     'PalindromeChecker': PalindromeChecker,
@@ -18,4 +24,11 @@ SmartModelConverter.Action.ACTION_REGISTRY = {
     'Downloader': Downloader,
     'BinaryRepresentation': BinaryRepresentation,
     'CollatzSequence': CollatzSequence,
+    'UploadToFTP': UploadToFTP,
+    'HttpRequestTask': HttpRequestTask,
+    'BrowseWebLink': BrowseWebLink,
+    'EnhanceImage': EnhanceImage,
+    'AddNumbers': AddNumbers,
 }
+SmartModelConverter.Action.ACTION_REGISTRY = ACTION_REGISTRY
+TaskDAGRunner.Action.ACTION_REGISTRY = ACTION_REGISTRY

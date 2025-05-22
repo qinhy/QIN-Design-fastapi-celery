@@ -67,6 +67,14 @@ class PromptBuilder:
 
 
 class ChatGPTService(ServiceOrientedArchitecture):
+    @classmethod
+    def description(cls):
+        return """
+Provides an interface to interact with ChatGPT and other OpenAI models.
+Supports text generation, completion, and multimodal capabilities.
+Allows customization of model parameters and handles API communication.
+"""
+    
     class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):
         pass
 
@@ -284,6 +292,11 @@ class ChatGPTService(ServiceOrientedArchitecture):
             # self.send_data_to_task({level: message})
 
 class DeepseekService(ChatGPTService):
+    @classmethod
+    def description(cls):
+        return """
+Provides an interface to interact with deepseek models.
+"""
     class Levels(ChatGPTService.Levels):
         pass
 
@@ -292,12 +305,23 @@ class DeepseekService(ChatGPTService):
             model: str = Field("deepseek-reasoner", description="Deepseek model to use")
             base_url: str = Field("https://api.deepseek.com/v1/chat/completions", description="Deepseek API endpoint")
 
+        class Args(ChatGPTService.Model.Args):
+            pass
+
         class Return(BaseModel):
             response: str = Field("", description="The assistant's final response")
             reasoning: Optional[str] = Field(None, description="The model's internal reasoning process")
 
+        class Logger(ChatGPTService.Model.Logger):
+            pass
+        class Version(ChatGPTService.Model.Version):
+            pass
+
+        version:Version = Version()
         param: Param = Param()
+        args: Args = Args()
         ret: Optional[Return] = Return()
+        logger: Logger = Logger(name=Version().class_name)
 
     class Action(ChatGPTService.Action):
         def __init__(self, model, BasicApp, level=None):
@@ -436,7 +460,7 @@ def test_chatgpt_service_with_image():
 
     # Create service model
     model = ChatGPTService.Model()
-    model.param.model = "gpt-4o"  # Make sure to use a vision-capable model
+    model.param.model = "gpt-4.1-nano"  # Make sure to use a vision-capable model
     model.param.api_key = os.environ.get('OPENAI_API_KEY')
     model.param.stream = False
     model.param.max_tokens = 100

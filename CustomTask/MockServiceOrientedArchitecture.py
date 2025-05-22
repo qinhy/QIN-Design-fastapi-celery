@@ -140,6 +140,54 @@ class ServiceOrientedArchitecture:
         @classmethod
         def examples(cls): return []
 
+    @classmethod
+    def description(cls): return 'empty'
+    
+    @classmethod
+    def as_mcp_tool(cls):
+        "https://modelcontextprotocol.io/docs/concepts/tools"
+        "To be used in MCP tools"
+        param_schema = cls.Model.Param.schema()
+        args_schema = cls.Model.Args.schema()
+
+        # Determine if "param" and/or "args" should be required at the top level
+        top_level_required = []
+        if param_schema.get("required"):
+            top_level_required.append("param")
+        if args_schema.get("required"):
+            top_level_required.append("args")
+
+        return {
+            "name": cls.__name__,
+            "description": cls.description().strip(),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "param": param_schema,
+                    "args": args_schema,
+                },
+                "required": top_level_required
+            },
+            "annotations": {
+                "title": cls.__name__.replace("_", " "),
+                "readOnlyHint": True,
+                "destructiveHint": False,
+                "idempotentHint": True,
+                "openWorldHint": False
+            }
+        }
+
+    @classmethod
+    def as_openai_tool(cls):
+        mcp_tool = cls.as_mcp_tool()
+        return {
+            "type": "function",
+            "function": {
+                "name": mcp_tool['name'],
+                "description": mcp_tool['description'],
+                "parameters": mcp_tool['inputSchema'],
+            },
+        }
     class Action:
         def __init__(self, model, BasicApp:Any=None, level=None):
             outer_class_name:ServiceOrientedArchitecture = self.__class__.__qualname__.split('.')[0]

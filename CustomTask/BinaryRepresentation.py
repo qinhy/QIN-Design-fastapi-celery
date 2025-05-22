@@ -7,6 +7,14 @@ except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
 
 class BinaryRepresentation(ServiceOrientedArchitecture):
+    @classmethod
+    def description(cls):
+        return """
+Converts an integer to its binary representation.
+Supports optional bit length specification for padding with leading zeros.
+Returns the binary representation as a list of bits.
+"""
+    
     class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):
         pass
 

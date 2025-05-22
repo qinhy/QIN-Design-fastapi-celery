@@ -728,7 +728,8 @@ class SmartModelConverter(BaseModel):
         if self.api_key is None:
             self.api_key = os.environ.get('OPENAI_API_KEY')
             if not self.api_key:
-                raise ValueError("API key not found in environment variable 'OPENAI_API_KEY' and not provided")
+                self.api_key = 'OPENAI_API_KEY'
+                # raise ValueError("API key not found in environment variable 'OPENAI_API_KEY' and not provided")
             
     def build_conversion_prompt(
         self,
@@ -1076,16 +1077,12 @@ class ServiceOrientedArchitecture:
                 for handler in self._logger.handlers[:]:
                     self._logger.removeHandler(handler)
 
-                
         version:Version
         param:Param = Param()
         args:Args = Args()
         ret:Optional[Return] = Return()
         logger: Logger = Logger()
 
-        @classmethod
-        def examples(cls): return []
-        
         def update_model_data(self,json_data:dict):
             if json_data is not None:
                 # Update all model components from prior model
@@ -1097,6 +1094,70 @@ class ServiceOrientedArchitecture:
                     self.ret = self.ret.model_copy(update=json_data['ret'])
             return self
 
+        @classmethod
+        def examples(cls): return []
+        
+    @classmethod
+    def description(cls): return 'empty'
+
+    @classmethod
+    def schema(cls):
+        return cls.Model.model_json_schema()
+
+    @classmethod
+    def as_mcp_tool(cls):
+        "https://modelcontextprotocol.io/docs/concepts/tools"
+        "To be used in MCP tools"
+        param_schema = cls.Model.Param.model_json_schema()
+        args_schema = cls.Model.Args.model_json_schema()
+        ret_schema = cls.Model.Return.model_json_schema()
+
+        # Determine if "param" and/or "args" should be required at the top level
+        top_level_required = []
+        if param_schema.get("required"):
+            top_level_required.append("param")
+        if args_schema.get("required"):
+            top_level_required.append("args")
+
+        return {
+            "name": cls.__name__,
+            "description": cls.description().strip(),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "param": param_schema,
+                    "args": args_schema,
+                },
+                "required": top_level_required
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "ret": ret_schema,
+                },
+            },
+            "annotations": {
+                "title": cls.__name__.replace("_", " "),
+                "readOnlyHint": True,
+                "destructiveHint": False,
+                "idempotentHint": True,
+                "openWorldHint": False
+            }
+        }
+
+    @classmethod
+    def as_openai_tool(cls):
+        mcp_tool = cls.as_mcp_tool()
+        return {
+            "type": "function",
+            "function": {
+                "name": mcp_tool['name'],
+                "description": mcp_tool['description'],
+                "parameters": mcp_tool['inputSchema'],
+                "returns": mcp_tool['outputSchema'],
+            },
+        }
+    
     class Action:
         def __init__(self, model,BasicApp:AppInterface,level=None):
             outer_class_name:ServiceOrientedArchitecture = self.__class__.__qualname__.split('.')[0]

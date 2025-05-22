@@ -6,6 +6,7 @@ from typing import Literal, Union
 # FastAPI imports
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 # Application imports
@@ -23,14 +24,23 @@ from config import *
 
 TaskNames = [i for i in CustomTask.__dir__() if '_' not in i]
 TaskClass = [CustomTask.__dict__[i] for i in CustomTask.__dir__() if '_' not in i]
-TaskParentClass = [i.__bases__[0] if hasattr(i,'__bases__') else None for i in TaskClass]
+
+def get_first_non_object_base(cls):
+    m = list(cls.__mro__[::-1])+[None]
+    for i in range(len(m)):
+        if m[i] is object:
+            return m[i+1]
+    return None
+
+TaskParentClass = [get_first_non_object_base(cls) if isinstance(cls, type) else None for cls in TaskClass]
+
 ValidTask = ['ServiceOrientedArchitecture' in str(i) for i in TaskParentClass]
 ACTION_REGISTRY={k:v for k,v,i in zip(TaskNames,TaskClass,ValidTask) if i}
 
 class CeleryTask(BasicCeleryTask):
     def __init__(self, BasicApp, celery_app, root_fast_app:FastAPI,
                  ACTION_REGISTRY:dict[str,any]=ACTION_REGISTRY):
-        super().__init__(BasicApp, celery_app, root_fast_app, ACTION_REGISTRY)    
+        super().__init__(BasicApp, celery_app, root_fast_app, ACTION_REGISTRY)
 
         self.router.post("/pipeline/add")(self.api_add_pipeline)
         self.router.post("/pipeline/config")(self.api_set_config_pipeline)
@@ -41,19 +51,21 @@ class CeleryTask(BasicCeleryTask):
 
         first_in_class = ACTION_REGISTRY[pipeline[0]]
         last_out_class = ACTION_REGISTRY[pipeline[-1]]
-        in_examples = first_in_class.Model.examples() if hasattr(first_in_class.Model,'examples') else None
-        if in_examples:
-            in_examples = [{'args':i['args']} for i in in_examples]
+        in_examples = None
+        if hasattr(first_in_class.Model,'examples'):
+            in_examples = [{'args':i['args']} for i in 
+                                first_in_class.Model.examples()]
         
         def api_pipeline_handler(
                 in_model: first_in_class.Model=Body(..., examples=in_examples),
                 execution_time: str = self.EXECUTION_TIME_PARAM,
-                timezone: self.VALID_TIMEZONES = self.TIMEZONE_PARAM,
+                timezone: BasicCeleryTask.VALID_TIMEZONES = self.TIMEZONE_PARAM,
         )->dict:#last_out_class.Model:
             
             self.api_ok()
             
-            utc_execution_time, local_time, (next_execution_time_str,timezone_str) = self.parse_execution_time(execution_time, timezone)
+            utc_execution_time, local_time, (next_execution_time_str,timezone_str
+            ) = self.parse_execution_time(execution_time, timezone)
         
             # Get model data
             current_data = in_model.model_dump()
@@ -239,7 +251,6 @@ class CeleryTask(BasicCeleryTask):
             "total_tasks": len(task_ids)
         }
 
-
 ########################################################
 conf = AppConfig()
 print(conf.validate_backend().model_dump())
@@ -281,6 +292,12 @@ def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
     return my_app.api_perform_action('Fibonacci', m.model_dump(),0)
 
 my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
+
+from CustomTask import TaskDAGRunner
+def my_mermaid_editor():
+    return HTMLResponse(content=TaskDAGRunner.MermaidEditorHtml)
+
+my_app.add_web_api(my_mermaid_editor,'get','/myapi/mermaideditor/').reload_routes()
 
 
 from fastapi_mcp import FastApiMCP
