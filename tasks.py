@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 # Application imports
+from Redis.RedistREST import RedisRoutes
 from Task.Basic import (
     ServiceOrientedArchitecture,
     AppInterface, 
@@ -269,6 +270,7 @@ api.add_middleware(SessionMiddleware,
 
 if conf.app_backend=='redis':
     BasicApp:AppInterface = RedisApp(conf.redis.url)
+    api.include_router(RedisRoutes(conf.redis.url).router,tags=['redis'])
     
 elif conf.app_backend=='file':
     BasicApp:AppInterface = FileSystemApp(conf.file.url)
