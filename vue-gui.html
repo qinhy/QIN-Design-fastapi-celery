@@ -265,10 +265,16 @@
                 // if (!val) val = selectedTaskId.value;
                 // taskMeta.value = await api.checkTaskMeta(val);
                 // taskMeta.value.result = JSON.parse(taskMeta.value.result);
-                taskMeta.value = data;
-                eval(decode_func.value);
-                taskMeta.value.result = decode_func(taskMeta.value.result);
-                taskMeta.value.result = JSON.parse(taskMeta.value.result);
+                if(typeof data === "string" || data instanceof String){
+                  taskMeta.value = await api.checkTaskMeta(data);
+                  taskMeta.value.result = JSON.parse(taskMeta.value.result);
+                }
+                else{                  
+                  taskMeta.value = data;
+                  eval(decode_func.value);
+                  taskMeta.value.result = decode_func(taskMeta.value.result);
+                  taskMeta.value.result = JSON.parse(taskMeta.value.result);
+                }
             };
             const stopTask = async (val = null) => {
                 if (!val) val = selectedTaskId.value;
