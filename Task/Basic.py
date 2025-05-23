@@ -345,7 +345,6 @@ class AppInterface(PubSubInterface):
         
     def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False):
         return self.subscribe(task_id,data_callback,eternal)
-    
     def _decompress_str(self, compressed_b64: Optional[str]) -> str:
         if compressed_b64 is None:
             raise ValueError("Decompression failed: input is None.")
@@ -370,7 +369,48 @@ class AppInterface(PubSubInterface):
             raise ValueError(f"Decompression failed: UTF-8 decoding error: {e}") from e
 
         return result
-    
+
+    def _js_decompress_str(self) -> str:
+        """Returns JavaScript implementation of _decompress_str function"""
+        return """
+function decode_func(compressedB64) {
+    if (compressedB64 === null || compressedB64 === undefined) {
+        throw new Error("Decompression failed: input is None.");
+    }
+    if (typeof compressedB64 !== 'string') {
+        throw new Error(`Decompression failed: expected a string, got ${typeof compressedB64}.`);
+    }
+    if (compressedB64.trim() === "") {
+        throw new Error("Decompression failed: input string is empty.");
+    }
+
+    try {
+        // Convert base64 to binary
+        const compressedData = atob(compressedB64);
+        
+        // Convert binary string to Uint8Array for pako
+        const compressedArray = new Uint8Array(compressedData.length);
+        for (let i = 0; i < compressedData.length; i++) {
+            compressedArray[i] = compressedData.charCodeAt(i);
+        }
+
+        // Decompress using pako (zlib implementation)
+        const decompressedArray = pako.inflate(compressedArray);
+        
+        // Convert Uint8Array to string
+        const decoder = new TextDecoder('utf-8');
+        return decoder.decode(decompressedArray);
+    } catch (e) {
+        if (e.message.includes('atob')) {
+            throw new Error(`Decompression failed: base64 decoding error: ${e.message}`);
+        } else if (e.message.includes('inflate')) {
+            throw new Error(`Decompression failed: zlib decompression error: ${e.message}`);
+        } else {
+            throw new Error(`Decompression failed: UTF-8 decoding error: ${e.message}`);
+        }
+    }
+}
+"""
     def _compress_str(self, content: Optional[str]) -> str:
         if content is None:
             raise ValueError("Compression failed: input is None.")
@@ -1005,6 +1045,7 @@ class ServiceOrientedArchitecture:
             
             def init(self, name: str = None,
                     action_obj: 'ServiceOrientedArchitecture.Action' = None):
+                
                 if name is None:
                     name = self.name
                 self.name = name
@@ -1022,7 +1063,8 @@ class ServiceOrientedArchitecture:
 
                 # Formatter for log messages
                 formatter = logging.Formatter(
-                    '%(asctime)s [%(name)s:%(levelname)s] %(message)s')
+                    # '%(asctime)s [%(name)s:%(levelname)s] %(message)s')
+                    '[%(asctime)s %(levelname)s] %(message)s')
 
                 # In-Memory Handler
                 memory_handler = logging.StreamHandler(self._log_buffer)

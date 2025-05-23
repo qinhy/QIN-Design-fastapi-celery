@@ -164,7 +164,7 @@ class BasicCeleryTask:
         
         if res is None:
             raise HTTPException(status_code=404, detail="Task not found")
-            
+
         if 'result' in res:
             res['result'] = self.task_result_decode_as_jsonStr(res['result'])
             
@@ -679,9 +679,14 @@ class BasicCeleryTask:
         # Update local pipelines dictionary
         self.pipelines = server_pipelines
 
-    def api_list_tasks(self,page:int=1, page_size:int=10):
+
+    def api_list_tasks(self,page:int=1, page_size:int=10, decode_func:str=None):
         self.api_ok()
-        return self.BasicApp.get_tasks_list(page,page_size)
+        res = self.BasicApp.get_tasks_list(page,page_size)
+        decode_func = decode_func.lower() if decode_func else None
+        if decode_func == 'js' or decode_func == 'javascript':
+            res['decode_func'] = self.BasicApp._js_decompress_str()
+        return res
 
     def api_task_meta_delete(self,task_id: str):
         self.api_ok()
