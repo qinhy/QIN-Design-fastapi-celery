@@ -5,8 +5,10 @@ import requests
 
 try:
     from Task.Basic import ServiceOrientedArchitecture
+    from .utils import FileInputHelper
 except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from utils import FileInputHelper
 
 class HttpRequestTask(ServiceOrientedArchitecture):
     @classmethod

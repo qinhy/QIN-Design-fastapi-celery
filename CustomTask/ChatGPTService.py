@@ -11,8 +11,10 @@ from pathlib import Path
 
 try:
     from Task.Basic import ServiceOrientedArchitecture
+    from .utils import FileInputHelper
 except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from utils import FileInputHelper
 
 
 class PromptBuilder:
@@ -41,7 +43,7 @@ class PromptBuilder:
         if not mime_type or not mime_type.startswith("image/"):
             raise ValueError(f"Invalid image type for: {image_path}")
 
-        with open(image_path, "rb") as img_file:
+        with FileInputHelper.open(image_path, "rb") as img_file:
             b64_image = base64.b64encode(img_file.read()).decode("utf-8")
 
         self.messages.append({

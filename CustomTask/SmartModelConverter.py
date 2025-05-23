@@ -7,8 +7,10 @@ import re
 
 try:
     from Task.Basic import ServiceOrientedArchitecture
+    from .utils import FileInputHelper
 except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from utils import FileInputHelper
 
 class SmartModelConverter(ServiceOrientedArchitecture):
     @classmethod

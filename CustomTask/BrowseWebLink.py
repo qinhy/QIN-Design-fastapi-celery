@@ -15,8 +15,10 @@ from markdownify import markdownify as md
 
 try:
     from Task.Basic import ServiceOrientedArchitecture
+    from .utils import FileInputHelper
 except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from utils import FileInputHelper
 
 class SeleniumDriverManager:
     _driver = None
@@ -104,7 +106,7 @@ class BrowseWebLink(ServiceOrientedArchitecture):
                         folder = Path(self.model.version.class_name)
                         folder.mkdir(exist_ok=True)
                         filename = folder / f'link_{self.date()}.txt'
-                        with open(filename, 'w', encoding='utf-8', errors='ignore') as f:
+                        with FileInputHelper.open(filename, 'w', encoding='utf-8', errors='ignore') as f:
                             f.write(result_text)
                         self.model.ret.result = f"Saved information to {filename}"
                     else:

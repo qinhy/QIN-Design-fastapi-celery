@@ -3,8 +3,10 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 try:
     from Task.Basic import ServiceOrientedArchitecture
+    from .utils import FileInputHelper
 except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from utils import FileInputHelper
 
 class PalindromeChecker(ServiceOrientedArchitecture):
     @classmethod

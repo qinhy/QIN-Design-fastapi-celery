@@ -10,6 +10,7 @@ from .HttpRequestTask import HttpRequestTask
 from .BrowseWebLink import BrowseWebLink
 from .EnhanceImage import EnhanceImage
 from .AddNumbers import AddNumbers
+from .FSSpecShell import FSSpecShell
 
 # for advanced users
 from .TaskDAGRunner import TaskDAGRunner
@@ -29,6 +30,7 @@ ACTION_REGISTRY = {
     'BrowseWebLink': BrowseWebLink,
     'EnhanceImage': EnhanceImage,
     'AddNumbers': AddNumbers,
+    'FSSpecShell': FSSpecShell,
 }
 SmartModelConverter.Action.ACTION_REGISTRY = ACTION_REGISTRY
 TaskDAGRunner.Action.ACTION_REGISTRY = ACTION_REGISTRY

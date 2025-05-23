@@ -4,17 +4,17 @@ import sys
 import requests
 
 
-# def read_env_file(file_path='.env'):
-#     env_vars = {}
-#     with open(file_path, 'r') as f:
-#         for line in f:
-#             line = line.strip()
-#             if line and not line.startswith('#'):
-#                 if '=' in line:
-#                     key, value = line.split('=', 1)
-#                     env_vars[key.strip()] = value.strip().strip('"').strip("'")
-#     return env_vars
-# os.environ.update(read_env_file())
+def read_env_file(file_path='.env'):
+    env_vars = {}
+    with open(file_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#'):
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    env_vars[key.strip()] = value.strip().strip('"').strip("'")
+    return env_vars
+os.environ.update(read_env_file())
 
 def find_advanced_config(possible_paths=None):
     # Define common paths where advanced.config might be located
@@ -212,6 +212,18 @@ class CeleryConfig(BaseSettings):
         env_file = '.env'
         extra = 'ignore'
 
+class FileSystem(BaseSettings):
+    # FILE_SYSTEM=hrc8XBGOvgZ1WgpQxCBO7nEcT54fNmYHvzoUtXHfnCiilx/c0BzyBAFjrLbtQfbEJubOIMrx1bhunwGzkbwl+UoL2OUzk+IpxFjMHPwzYirSlggSLNs26MkQU0XVXtC7R+s6yFc6mFlnQX9F6M4zd8QiGiTtux9zBNd6g5NHJpHyEbnAwokWOlGpxLi5UyYow9DYztgDcB4Zbb0jGl2urtwKVY5JBW0MNbPgUt8ANK+cBstgoeV7G5q4flB4CIk2EjtrDzKyMe/BLAoyW0zhXHZG96DIO3FPBPnEbzAjNFZxICMkVO9yvDXO46Ga0AtlT1wf44hVESz6H1VMxDjVbA==
+    # FILE_SYSTEM_TYPE=file
+# Options: file(local), ftp, s3, http, gcs, etc.
+    # FILE_SYSTEM_BASE_PATH=/data
+    file_system: str = Field(default='',  alias='FILE_SYSTEM')
+    file_system_type: str = Field(default='file',  alias='FILE_SYSTEM_TYPE')
+    file_system_base_path: str = Field(default='/data',  alias='FILE_SYSTEM_BASE_PATH')
+    class Config:
+        env_file = '.env'
+        extra = 'ignore'
+
 # Main AppConfig
 class AppConfig(BaseSettings):
     app_backend: str = Field(default='redis',  alias='APP_BACK_END')
@@ -227,6 +239,9 @@ class AppConfig(BaseSettings):
     redis: RedisConfig = RedisConfig()
     file: FileConfig = FileConfig()
     celery: CeleryConfig = CeleryConfig()
+
+    rsa_private_key: str = Field(default='null',  alias='RSA_PRIVATE_KEY')
+    fs : FileSystem = FileSystem()
 
     class Config:
         env_file = '.env'

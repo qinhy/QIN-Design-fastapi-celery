@@ -7,8 +7,10 @@ from pydantic import BaseModel, Field
 import redis
 try:
     from Task.Basic import ServiceOrientedArchitecture
+    from .utils import FileInputHelper
 except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from utils import FileInputHelper
 
 class Downloader(ServiceOrientedArchitecture):
     @classmethod
@@ -177,7 +179,7 @@ Optionally uploads downloaded files to Redis and removes local copies.
             """Store a file in Redis."""
             self.log_and_send(f"Uploading file to Redis ({redis_key}) via {redis_url}")
             r = redis.from_url(redis_url)
-            with open(file_path, "rb") as f:
+            with FileInputHelper.open(file_path, "rb") as f:
                 data = f.read()
                 r.set(redis_key, data)
             self.send_data_to_task({"INFO": f"File uploaded to Redis with key: {redis_key}"})

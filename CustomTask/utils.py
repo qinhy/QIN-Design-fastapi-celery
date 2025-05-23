@@ -5,9 +5,103 @@ import re
 import tempfile
 from collections import defaultdict, deque
 from typing import Any, Dict, List
+import fsspec
 import requests
+import os
+import fsspec
+from typing import Tuple, Optional
+
+try:
+    from .rjson import load_RSAs
+except:
+    from rjson import load_RSAs
 
 class FileInputHelper:
+    """Helper class for handling file system operations."""    
+    @staticmethod
+    def read_rjson(content: str) -> dict:
+        try:
+            return load_RSAs(content,os.getenv("RSA_PRIVATE_KEY"))
+        except:
+            return None
+
+    def get_fsspec_from_env_and_path(path: Optional[str] = None) -> Tuple[fsspec.AbstractFileSystem, str]:
+        """
+        Load FILE_SYSTEM configuration from environment and build filesystem + full path.
+        Supports S3, FTP, or fallback to local.
+        """
+        # Default fallback to local file system
+        fs_type = os.getenv("FILE_SYSTEM_TYPE", "file")
+        base_path = os.getenv("FILE_SYSTEM_BASE_PATH", "./")
+        fs = fsspec.filesystem(fs_type)
+        full_path = os.path.join(base_path, path or "")
+
+        data = FileInputHelper.read_rjson(os.getenv("FILE_SYSTEM"))
+        if data is not None:
+            fs_type = data.get("type", "").lower()
+            
+            if fs_type == "s3":
+                # {
+                # "type": "s3",
+                # "bucket": "my-sample-bucket",
+                # "key": "data/sample.txt",
+                # "aws_access_key_id": "YOUR_AWS_ACCESS_KEY_ID",
+                # "aws_secret_access_key": "YOUR_AWS_SECRET_ACCESS_KEY",
+                # "aws_session_token": "YOUR_AWS_SESSION_TOKEN",  // optional
+                # "region": "us-west-2"  // optional
+                # }
+                bucket = data.get("bucket")
+                key = data.get("key") or path
+                aws_key = data.get("aws_access_key_id")
+                aws_secret = data.get("aws_secret_access_key")
+                aws_token = data.get("aws_session_token", None)
+                region = data.get("region", None)
+
+                fs_kwargs = {
+                    "key": aws_key,
+                    "secret": aws_secret,
+                }
+                if aws_token:
+                    fs_kwargs["token"] = aws_token
+                if region:
+                    fs_kwargs["client_kwargs"] = {"region_name": region}
+
+                fs = fsspec.filesystem("s3", **fs_kwargs)
+                full_path = f"s3://{bucket}/{key.lstrip('/')}"
+                return fs, full_path
+
+            elif fs_type == "ftp":
+                # {
+                # "type": "ftp",
+                # "host": "ftp.example.com",
+                # "path": "/files/data.txt",
+                # "port": 21,
+                # "username": "user",          // optional
+                # "password": "secret"         // optional
+                # }
+                host = data.get("host")
+                remote_path = data.get("path") or path
+                port = data.get("port", 21)
+                username = data.get("username", None)
+                password = data.get("password", None)
+
+                fs_kwargs = {"host": host, "port": port}
+                if username:
+                    fs_kwargs["username"] = username
+                if password:
+                    fs_kwargs["password"] = password
+
+                fs = fsspec.filesystem("ftp", **fs_kwargs)
+                full_path = f"ftp://{host}/{remote_path.lstrip('/')}"
+                return fs, full_path
+
+        return fs, full_path
+
+    @staticmethod
+    def open(filename: str, mode: str = "r") -> fsspec.core.OpenFile:
+        fs, full_path = FileInputHelper.get_fsspec_from_env_and_path(filename)
+        return fs.open(full_path, mode)
+    
     @staticmethod
     def resolve_to_local_path(source: str, default_ext: str = ".bin") -> str:
         """
@@ -232,7 +326,6 @@ class MermaidGraph:
             mappings.append(incoming)
 
         return mappings
-
 
 if __name__ == "__main__":
     g = MermaidGraph(
