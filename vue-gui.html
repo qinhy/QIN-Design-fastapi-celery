@@ -76,43 +76,10 @@
 
                 <p v-else class="text-gray-500">No tasks available.</p>
             </div>
-              <!-- <div class="mb-6">
-
-                <div class="flex gap-2 items-center">
-                  <p-button label="List All Tasks" @click="fetchAndDisplayTasks"></p-button>
-                  <p-inputnumber v-model="page" :max="100" :min="1" :step="1"
-                    placeholder="Enter page number" showButtons 
-                    ></p-inputnumber>
-                  <p-inputnumber v-model="page_size" :max="1000" :min="10" :step="10"
-                    placeholder="Enter page size" showButtons 
-                    ></p-inputnumber>
-                </div>
-                
-                <p-datatable v-if="tasks.length > 0" :value="tasks" class="p-datatable-sm mb-2">
-                  <p-column field="task_id" header="Task ID"></p-column>
-                  <p-column field="status" header="Status"></p-column>
-                  <p-column field="date_done" header="Date Done"></p-column>
-                </p-datatable>
-                <p v-else class="text-gray-500">No tasks available.</p>
-                
-              </div> -->
   
               <!-- Task Meta Controls -->
               <p-taskmeta :data="taskMeta"></p-taskmeta>
-              <!-- <div class="mb-6">
-                <p-select
-                  v-model="selectedTaskId"
-                  :options="taskOptions"
-                  placeholder="Select Task ID"
-                  class="mb-2 w-full"
-                ></p-select>
-                <div class="flex gap-2 mb-4">
-                  <p-button label="Check Task Meta" @click="() => checkTaskMeta(taskId)"></p-button>
-                  <p-button label="Stop Task" class="p-button-danger" @click="stopTask"></p-button>
-                </div>
-                <p-taskmeta :data="taskMeta"></p-taskmeta>
-              </div> -->
-  
+              
               <!-- Workers Section -->
               <div class="mb-4">
                 <p-button label="Get Workers" class="mb-2" @click="fetchWorkers"></p-button>
