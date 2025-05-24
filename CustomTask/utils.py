@@ -12,16 +12,16 @@ import fsspec
 from typing import Tuple, Optional
 
 try:
-    from .rjson import load_RSAs
+    from .rjson import load_rJSONs
 except:
-    from rjson import load_RSAs
+    from rjson import load_rJSONs
 
 class FileInputHelper:
     """Helper class for handling file system operations."""    
     @staticmethod
     def read_rjson(content: str) -> dict:
         try:
-            return load_RSAs(content,os.getenv("RSA_PRIVATE_KEY"))
+            return load_rJSONs(content,os.getenv("RSA_PRIVATE_KEY"))
         except:
             return None
 

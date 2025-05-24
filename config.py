@@ -213,7 +213,7 @@ class CeleryConfig(BaseSettings):
         extra = 'ignore'
 
 class FileSystem(BaseSettings):
-    # FILE_SYSTEM=hrc8XBGOvgZ1WgpQxCBO7nEcT54fNmYHvzoUtXHfnCiilx/c0BzyBAFjrLbtQfbEJubOIMrx1bhunwGzkbwl+UoL2OUzk+IpxFjMHPwzYirSlggSLNs26MkQU0XVXtC7R+s6yFc6mFlnQX9F6M4zd8QiGiTtux9zBNd6g5NHJpHyEbnAwokWOlGpxLi5UyYow9DYztgDcB4Zbb0jGl2urtwKVY5JBW0MNbPgUt8ANK+cBstgoeV7G5q4flB4CIk2EjtrDzKyMe/BLAoyW0zhXHZG96DIO3FPBPnEbzAjNFZxICMkVO9yvDXO46Ga0AtlT1wf44hVESz6H1VMxDjVbA==
+    # FILE_SYSTEM=cKlWiNyz43oS2CB2YkwjH0IjI8J96LCIBLWWKnwRnlExhMrjxfuGwh6m4imbrlY0wsZK1oQFSjnOBqXomvweIXQ4OwcanH4j/V44wmNUzGbKnSSUbzu9c3EzJ5fNatFBVpVi14tukz0nLq7J76qQM+UeuNnEwxCpqPXOqnHv5UbaFBMTM0SBrO3OtR/VNtqHt9Or/WiHTMN40sLoZqWUYuQ2BYNJ29pmPAwBTLr/JIHyogVLLiWEsClAoi9liOJnsmlMMs9nMdSH8ML6vZ83hU0otrckEO2aHUKtr/E8IdLaDRTCyU1r4pAlsjGXaK/qOpamofsts38dsqXUN2VuzQ==
     # FILE_SYSTEM_TYPE=file
 # Options: file(local), ftp, s3, http, gcs, etc.
     # FILE_SYSTEM_BASE_PATH=/data
