@@ -531,12 +531,11 @@ class BasicCeleryTask:
         def handler(
             task_model: action_class.Model = Body(..., examples=examples),                    
             execution_time: str = self.EXECUTION_TIME_PARAM,
-            timezone: BasicCeleryTask.VALID_TIMEZONES = self.TIMEZONE_PARAM
-        ):
-                            
+            timezone: BasicCeleryTask.VALID_TIMEZONES = self.TIMEZONE_PARAM,
+            request:Request=None):
             return self.api_perform_action(action_name, task_model.model_dump(),
                                             execution_time=execution_time,
-                                            timezone=timezone)
+                                            timezone=timezone,request=request)
         return handler
     
     def _reload_routes(self, root_fast_app:FastAPI):            
@@ -742,6 +741,7 @@ class BasicCeleryTask:
         data: dict,                        
         execution_time: str = EXECUTION_TIME_PARAM,
         timezone: VALID_TIMEZONES = TIMEZONE_PARAM,
+        request:Request=None,
     ):
         
         """API endpoint to execute a generic action asynchronously with optional delay."""
@@ -760,7 +760,22 @@ class BasicCeleryTask:
         # Schedule the task
         d = self._prepare_model_example(name).model_dump()
         d.update(data)
+
+        if hasattr(request.state,'user'):
+            d['param']['user'] = request.state.user.model_dump_json_dict()
         
+            del d['param']['user']['rank']
+            del d['param']['user']['create_time']
+            del d['param']['user']['update_time']
+            del d['param']['user']['status']
+            del d['param']['user']['metadata']
+            del d['param']['user']['auto_del']
+            
+            d['param']['user']['username'] = ""
+            d['param']['user']['full_name'] = ""
+            d['param']['user']['salt'] = ""
+            d['param']['user']['hashed_password'] = ""
+
         # task = self.celery_perform_simple_action.apply_async(
         task = self.celery_actions[name.lower()].apply_async(        
             # args=[data, prior_data,],

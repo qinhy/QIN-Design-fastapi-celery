@@ -4,7 +4,7 @@ import time
 from typing import Literal, Union
 
 # FastAPI imports
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
@@ -20,6 +20,8 @@ from Task.Basic import (
 )
 from Task.BasicAPIs import BasicCeleryTask
 import CustomTask
+from Task.UserAPIs import AuthService, OAuthRoutes
+from Task.UserModel import UsersStore, text2hash2base64Str
 from config import *
 
 TaskNames = [i for i in CustomTask.__dir__() if '_' not in i]
@@ -254,41 +256,52 @@ class CeleryTask(BasicCeleryTask):
 ########################################################
 conf = AppConfig()
 print(conf.validate_backend().model_dump())
-api = FastAPI()
 
+if conf.app_backend=='redis':
+    BasicApp:AppInterface = RedisApp(conf.redis.url)
+    USER_DB = UsersStore()
+    USER_DB.redis_backend(redis_URL=conf.redis.url)
+    
+# elif conf.app_backend=='file':
+#     BasicApp:AppInterface = FileSystemApp(conf.file.url)
+    
+elif conf.app_backend=='mongodbrabbitmq':
+    BasicApp:AppInterface = RabbitmqMongoApp(conf.rabbitmq.url,
+                            conf.rabbitmq.user,conf.rabbitmq.password,
+                            conf.mongo.url,conf.mongo.db,conf.celery.meta_table,
+                            conf.celery.broker)
+    USER_DB = UsersStore()
+    USER_DB.mongo_backend(conf.mongo.url)
+else:
+    raise ValueError(f'no back end of {conf.app_backend}')
+
+auth_service = AuthService(USER_DB)
+celery_app = BasicApp.get_celery_app()
+
+api = FastAPI(dependencies=[Depends(auth_service.get_current_user)])
 api.add_middleware(
     CORSMiddleware,
     allow_origins=['*',],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
-)
+    allow_headers=["*"],)
 api.add_middleware(SessionMiddleware,
                     secret_key=conf.secret_key, max_age=conf.session_duration)
-
-
-if conf.app_backend=='redis':
-    BasicApp:AppInterface = RedisApp(conf.redis.url)
-    
-elif conf.app_backend=='file':
-    BasicApp:AppInterface = FileSystemApp(conf.file.url)
-    
-elif conf.app_backend=='mongodbrabbitmq':
-    BasicApp:AppInterface = RabbitmqMongoApp(conf.rabbitmq.url,conf.rabbitmq.user,conf.rabbitmq.password,
-                                             conf.mongo.url,conf.mongo.db,conf.celery.meta_table,
-                                             conf.celery.broker)
-else:
-    raise ValueError(f'no back end of {conf.app_backend}')
-
-celery_app = BasicApp.get_celery_app()
 my_app = CeleryTask(BasicApp,celery_app,api)
+
+## add auth api
+auth_router = OAuthRoutes(auth_service)
+auth_service.add_new_user(username='root',password='root',
+        full_name='root',email='root@root.com',role='root')
+
+api.include_router(auth_router.router, prefix="/auth", tags=["users"])
 
 ## add original api
 from CustomTask import Fibonacci
 def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
     m = Fibonacci.Model()
-    m.param.mode = mode
-    m.args.n = n
+    m.param = Fibonacci.Model.Param(mode=mode)
+    m.args = Fibonacci.Model.Args(n=n)
     return my_app.api_perform_action('Fibonacci', m.model_dump(),0)
 
 my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()

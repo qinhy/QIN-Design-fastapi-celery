@@ -22,8 +22,7 @@ import pymongo.errors
 import redis
 from pydantic import BaseModel, Field, PrivateAttr
 
-from Task.UserModel import User
-
+from .UserModel import User
 
 try:
     from ..Storages import EventDispatcherController, PythonDictStorage

@@ -1,4 +1,5 @@
 
+from datetime import datetime
 import os
 import uuid
 import base64
@@ -7,33 +8,11 @@ from enum import Enum
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field, SecretStr, EmailStr, field_validator
 
+try:
+    from ..Storages.BasicModel import BasicStore, Controller4Basic, Model4Basic
+except Exception as e:
+    from Storages.BasicModel import BasicStore, Controller4Basic, Model4Basic
 
-def text2hash2base32Str(text:str):
-    hash_uuid = hashlib.sha256(text.encode()).digest()
-    return base64.b32encode(hash_uuid).decode('utf-8').strip('=')
-
-def text2hash2base64Str(text:str,salt:bytes = b'',ite:int = 10**6):
-    return base64.b64encode(hashlib.pbkdf2_hmac('sha256', text.encode(), salt, ite, dklen=16)).decode()
-
-def text2hash(text:str,salt:bytes = b'',ite:int = 10**6):
-    return hashlib.pbkdf2_hmac('sha256', text.encode(), salt, ite, dklen=16)
-
-def text2hash2uuid(text:str,salt:bytes = b'',ite:int = 10**6):
-    return str(uuid.UUID(bytes=text2hash(text,salt,ite)))
-
-def remove_hyphen(uuid:str):
-    return uuid.replace('-', '')
-
-def restore_hyphen(uuid:str):
-    if len(uuid) != 32:
-        raise ValueError("Invalid UUID format")
-    return f'{uuid[:8]}-{uuid[8:12]}-{uuid[12:16]}-{uuid[16:20]}-{uuid[20:]}'
-
-def format_email(email: str) -> str:
-    return email.lower().strip()
-
-
-# --- Enum for Roles ---
 class FileSystem(BaseModel):
     """
     Remote File System configuration, designed for use with fsspec-compatible backends.
@@ -220,6 +199,31 @@ class FileSystem(BaseModel):
                 uri += f"/{rel_path}"
             return uri
 
+def text2hash2base32Str(text: str) -> str:
+    hash_uuid = hashlib.sha256(text.encode()).digest()
+    return base64.b32encode(hash_uuid).decode('utf-8').rstrip('=')
+
+def text2hash2base64Str(text: str, salt_bytes: bytes = b'', ite: int = 10**6) -> str:
+    hashed = hashlib.pbkdf2_hmac('sha256', text.encode(), salt_bytes, ite, dklen=16)
+    return base64.b64encode(hashed).decode()
+
+def text2hash(text: str, salt_bytes: bytes = b'', ite: int = 10**6) -> bytes:
+    return hashlib.pbkdf2_hmac('sha256', text.encode(), salt_bytes, ite, dklen=16)
+
+def text2hash2uuid(text: str, salt_bytes: bytes = b'', ite: int = 10**6) -> str:
+    return str(uuid.UUID(bytes=text2hash(text, salt_bytes, ite)))
+
+def remove_hyphen(uuid_str: str) -> str:
+    return uuid_str.replace('-', '')
+
+def restore_hyphen(uuid_str: str) -> str:
+    if len(uuid_str) != 32:
+        raise ValueError("Invalid UUID format")
+    return f'{uuid_str[:8]}-{uuid_str[8:12]}-{uuid_str[12:16]}-{uuid_str[16:20]}-{uuid_str[20:]}'
+
+def format_email(email: str) -> str:
+    return email.lower().strip()
+
 class UserRole(str, Enum):
     root = 'root'
     admin = 'admin'
@@ -258,7 +262,7 @@ class User(BaseModel):
         description="Indicates whether the user's account is disabled.",
     )
 
-    salt: str = Field(default=None,example="dGhpc2lzYXNhbHRzYW1wbGU=",
+    salt: str = Field(...,example="dGhpc2lzYXNhbHRzYW1wbGU=",
         description="Base64-encoded per-user salt used for password hashing.",
     )
 
@@ -267,6 +271,9 @@ class User(BaseModel):
     class Config:
         validate_assignment = True
         extra = 'forbid'
+    
+    def decode_salt(self):
+        pass
 
     # --- Field Validators ---
     @field_validator('username', 'full_name', mode='before')
@@ -281,8 +288,7 @@ class User(BaseModel):
 
     # --- Password Management ---
     @classmethod
-    def create_with_password(cls, **kwargs):
-        password = kwargs.pop("password")
+    def create_with_password(cls, password, **kwargs):
         salt = base64.b64encode(os.urandom(16)).decode()
         hashed = cls.hash_password(password, salt)
         return cls(hashed_password=hashed, salt=salt, **kwargs)
@@ -293,12 +299,15 @@ class User(BaseModel):
         return text2hash2base64Str(password, salt_bytes)
 
     def verify_password(self, password: str) -> bool:
+        print(password)
         salt_bytes = base64.b64decode(self.salt.encode())
+        print(salt_bytes)
         return self.hashed_password == text2hash2base64Str(password, salt_bytes)
 
     # --- ID Generation ---
     @staticmethod
     def generate_user_id(email: str) -> str:
+        email = format_email(email)
         """Generate a unique user ID based on email."""
         return f"User:{text2hash2uuid(email.lower())}"
 
@@ -326,4 +335,144 @@ class User(BaseModel):
             exclude.update(sensitive_fields)            
         return super().model_dump(*args, exclude=exclude, **kwargs)
 
+class Controller4User:
+    class AbstractObjController(Controller4Basic.AbstractObjController):
+        pass
+    class UserController(AbstractObjController):
+        def __init__(self, store, model):
+            self.model:Model4User.User = model
+            self._store:UsersStore = store
 
+        def set_password(self,password):
+            self.update(hashed_password=text2hash2base64Str(password))
+
+        def set_name(self,):
+            pass
+
+        def set_role(self,):
+            pass
+
+        def get_licenses(self,):
+            pass
+
+        def add_license(self,):
+            pass
+
+        def delete_license(self,):
+            pass
+
+        def get_appusages(self,):
+            pass
+
+        def add_appusage(self,):
+            pass
+
+        def delete_appusage(self,):
+            pass
+        
+    class AppController(AbstractObjController):
+        def __init__(self, store, model):
+            self.model:Model4User.App = model
+            self._store:UsersStore = store
+
+        def delete(self):
+            pass
+    class LicenseController(AbstractObjController):
+        def __init__(self, store, model):
+            self.model:Model4User.License = model
+            self._store:UsersStore = store
+
+        def delete(self):
+            pass
+
+    class AppUsageController(AbstractObjController):
+        def __init__(self, store, model):
+            self.model:Model4User.AppUsage = model
+            self._store:UsersStore = store
+
+        def delete(self):
+            pass
+
+class Model4User:
+    class AbstractObj(Model4Basic.AbstractObj):
+        pass
+  
+    class User(AbstractObj,User):
+        
+        def gen_new_id(self) -> str:
+            return self.generate_user_id(self.email)
+
+        _controller: Controller4User.UserController = None
+        def get_controller(self)->Controller4User.UserController: return self._controller
+        def init_controller(self,store):self._controller = Controller4User.UserController(store,self)
+
+    class App(AbstractObj):
+        parent_App_id:str
+        running_cost:int = 0
+        major_name:str = None
+        minor_name:str = None
+        
+        _controller: Controller4User.AppController = None
+        def get_controller(self)->Controller4User.AppController: return self._controller
+        def init_controller(self,store):self._controller = Controller4User.AppController(store,self)
+
+    class License(AbstractObj):
+        user_id:str
+        access_token:str = None
+        bought_at:datetime = None
+        expiration_date:datetime = None
+        running_time:int = 0
+        max_running_time:int = 0
+        
+        _controller: Controller4User.LicenseController = None
+        def get_controller(self)->Controller4User.LicenseController: return self._controller
+        def init_controller(self,store):self._controller = Controller4User.LicenseController(store,self)
+
+    class AppUsage(AbstractObj):
+        user_id:str
+        App_id:str
+        license_id:str
+        start_time:datetime = None
+        end_time:datetime = None
+        running_time_cost:int = 0
+        
+        _controller: Controller4User.AppUsageController = None
+        def get_controller(self)->Controller4User.AppUsageController: return self._controller
+        def init_controller(self,store):self._controller = Controller4User.AppUsageController(store,self)
+
+class UsersStore(BasicStore):
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.tmp_user_uuids = {}
+    
+    def _get_class(self, id: str, modelclass=Model4User):
+        return super()._get_class(id, modelclass)
+
+    def add_new_user(self, username:str,password:str,full_name:str,
+            email:str,role:str='user',rank:list=[0], metadata={}) -> Model4User.User:
+        tmp = Model4User.User.create_with_password(
+                    username=username,
+                    role=role,
+                    full_name=full_name,
+                    password=password,
+                    email=email,
+                    rank=rank,
+                    metadata=metadata)
+                    
+        if self.exists(tmp.gen_new_id()):
+            return None
+            raise ValueError('user already exists!')
+        return self.add_new_obj(tmp)
+    
+    # def add_new_app(self, major_name:str,minor_name:str,running_cost:int=0,parent_App_id:str=None) -> Model4User.App:
+    #     return self.add_new_obj(Model4User.App(major_name=major_name,minor_name=minor_name,
+    #                                        running_cost=running_cost,parent_App_id=parent_App_id))
+        
+    def find_all_users(self)->list[Model4User.User]:
+        return self.find_all('User:*')
+    
+    def find_user_by_email(self,email)->Model4User.User:
+        self.tmp_user_uuids[email] = self.tmp_user_uuids.get(email,Model4User.User.generate_user_id(email))
+        return self.find(self.tmp_user_uuids[email])
+    
