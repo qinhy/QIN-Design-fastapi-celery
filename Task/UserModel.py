@@ -81,7 +81,7 @@ class FileSystem(BaseModel):
 
     class Config:
         extra = "allow"
-        schema_extra = {
+        json_schema_extra = {
             "examples": [
                 {
                     "summary": "Amazon S3 Example",
