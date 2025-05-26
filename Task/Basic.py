@@ -990,7 +990,9 @@ class SmartModelConverter(BaseModel):
 
         out_model_instance.args = out_model_instance.Args(**updated_args)
         return out_model_instance, conversion_func
-        
+
+class User(BaseModel):
+    pass
 
 class ServiceOrientedArchitecture:
     BasicApp:AppInterface = None
