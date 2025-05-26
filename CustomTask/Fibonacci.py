@@ -23,7 +23,7 @@ Supports two computation modes:
 
     class Model(ServiceOrientedArchitecture.Model):
         
-        class Param(ServiceOrientedArchitecture.Model.param):
+        class Param(ServiceOrientedArchitecture.Model.Param):
             mode: Literal['fast', 'slow'] = Field("fast", description="Execution mode, either 'fast' or 'slow'")
 
             def is_fast(self):

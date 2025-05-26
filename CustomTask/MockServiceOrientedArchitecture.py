@@ -6,6 +6,13 @@ from pydantic import BaseModel, Field, PrivateAttr
 from contextlib import contextmanager
 import celery.states
 
+try:
+    from Task.UserModel import User
+    from .utils import FileInputHelper
+except:
+    from UserModel import User
+    from utils import FileInputHelper
+
 class ServiceOrientedArchitecture:
     BasicApp:Any = None
 
@@ -33,7 +40,8 @@ class ServiceOrientedArchitecture:
                 return f'_v{self.major}{self.minor}{self.patch}_'
 
         class Param(BaseModel):
-            pass
+            user: Optional[User] = Field(None, description="User object")
+            
         class Args(BaseModel):
             pass
         class Return(BaseModel):

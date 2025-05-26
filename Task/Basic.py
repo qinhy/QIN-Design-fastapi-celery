@@ -22,6 +22,8 @@ import pymongo.errors
 import redis
 from pydantic import BaseModel, Field, PrivateAttr
 
+from Task.UserModel import User
+
 
 try:
     from ..Storages import EventDispatcherController, PythonDictStorage
@@ -991,9 +993,6 @@ class SmartModelConverter(BaseModel):
         out_model_instance.args = out_model_instance.Args(**updated_args)
         return out_model_instance, conversion_func
 
-class User(BaseModel):
-    pass
-
 class ServiceOrientedArchitecture:
     BasicApp:AppInterface = None
 
@@ -1022,9 +1021,11 @@ class ServiceOrientedArchitecture:
                 return f'_v{self.major}{self.minor}{self.patch}_'
 
         class Param(BaseModel):
-            pass
+            user: Optional[User] = Field(None, description="User object")
+            
         class Args(BaseModel):
             pass
+
         class Return(BaseModel):
             pass
 
