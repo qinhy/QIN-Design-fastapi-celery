@@ -156,58 +156,113 @@
 <script>
   const { createApp, ref } = Vue;
 
-
-  // Minimal APIClient, only with the needed methods (no auth)
-  class APIClient {
-    constructor(baseURL = '') {
-      this.baseURL = baseURL;
-    }
-    async request(endpoint, method = "GET", body = null, isJSON = true) {
-      const options = { method, headers: {} };
-      if (isJSON) options.headers["Content-Type"] = "application/json";
-      if (body) options.body = isJSON ? JSON.stringify(body) : body;
-      const response = await fetch(`${this.baseURL}${endpoint}`, options);
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: "Unknown error" }));
-        throw new Error(error.detail || error.message || "Request failed");
-      }
-      return response.json();
-    }
-    async checkTaskMeta(task_id) { return await this.request(`/tasks/meta/${task_id}`); }
-    async stopTask(task_id) { return await this.request(`/tasks/stop/${task_id}`, "GET"); }
-    async fetchWorkers() { return await this.request('/workers/'); }
-    async getTasks(page = 1, page_size = 10) {
-      return await this.request(`/tasks?page=${page}&page_size=${page_size}&decode_func=js`);
-    }
-    async getActions() { return await this.request('/action/list?format=openai'); }
-    async submitTask(func_name, inputs, taskMeta, taskId, errorMessage, loading) {
-      loading.value = true;
-      taskMeta.value = "";
-      func_name = func_name.toLowerCase();
-      try {
-        const response = await fetch(`/${func_name}/`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(inputs),
-        });
-        if (!response.ok) {
-          const errorData = await response.json();
-          taskId.value = null;
-          errorMessage.value = errorData.detail;
-          loading.value = false;
-          return;
+    // Minimal APIClient, only with the needed methods (no auth)
+    class APIClient {
+        constructor(baseURL = '') {
+            this.baseURL = baseURL;
         }
-        const data = await response.json();
-        taskId.value = data.task_id;
-        errorMessage.value = null;
-      } catch (error) {
-        taskId.value = null;
-        errorMessage.value = error.message || JSON.stringify(error);
-      }
-      loading.value = false;
+        async request(endpoint, method = "GET", body = null, isJSON = true) {
+            const options = { method, headers: {} };
+            if (isJSON) options.headers["Content-Type"] = "application/json";
+            if (body) options.body = isJSON ? JSON.stringify(body) : body;
+            const response = await fetch(`${this.baseURL}${endpoint}`, options);
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: "Unknown error" }));
+                throw new Error(error.detail || error.message || "Request failed");
+            }
+            return response.json();
+        }
+
+        ///////////////////////// tasks
+        async checkTaskMeta(task_id) { return await this.request(`/tasks/meta/${task_id}`); }
+        async stopTask(task_id) { return await this.request(`/tasks/stop/${task_id}`, "GET"); }
+        async fetchWorkers() { return await this.request('/workers/'); }
+        async getTasks(page = 1, page_size = 10) {
+            return await this.request(`/tasks?page=${page}&page_size=${page_size}&decode_func=js`);
+        }
+        async getActions() { return await this.request('/action/list?format=openai'); }
+        async submitTask(func_name, inputs, taskMeta, taskId, errorMessage, loading) {
+            loading.value = true;
+            taskMeta.value = "";
+            func_name = func_name.toLowerCase();
+            try {
+                const response = await fetch(`/${func_name}/`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(inputs),
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    taskId.value = null;
+                    errorMessage.value = errorData.detail;
+                    loading.value = false;
+                    return;
+                }
+                const data = await response.json();
+                taskId.value = data.task_id;
+                errorMessage.value = null;
+            } catch (error) {
+                taskId.value = null;
+                errorMessage.value = error.message || JSON.stringify(error);
+            }
+            loading.value = false;
+        }
+        
+        ///////////////////////// oauth
+        // Register User
+        async registerUser(data) { return this.request("/register", "POST", data); }
+        // Get Token (Login)
+        async getToken(email, password) {
+            const formData = `username=${email}&password=${password}`;
+            const response = await this.request("/token", "POST", formData, false);
+            this.setAuthToken(response.access_token); // Save token for future requests
+            return response;
+        }
+        // Edit User Info
+        async editUserInfo(data) { return this.request("/auth/edit", "POST", data); }
+        // Remove Account
+        async removeAccount(data) { return this.request("/auth/remove", "POST", data); }
+        // Get Current User Info
+        async getCurrentUser() { return this.request("/auth/me"); }
+        // Read Session
+        async readSession() { return this.request("/auth/session"); }
+        // Get OTP QR Code
+        async getOtpQr() {
+            const response = await fetch(`/auth/${this.baseURL}/otp/qr`, {
+                headers: this.getHeaders(),
+            });
+            if (!response.ok) throw new Error("Failed to fetch OTP QR code");
+            return response.blob();
+        }
+        // Get Login QR Code
+        async getLoginQr(uid = null) {
+            const endpoint = uid ? `/qr/${uid}` : "/qr";
+            const response = await fetch(`/auth/${this.baseURL}${endpoint}`, {
+                headers: this.getHeaders(),
+            });
+            if (!response.ok) throw new Error("Failed to fetch Login QR code");
+            return response.blob();
+        }
+        // Login with QR Code
+        async loginWithQr(uid) { return this.request(`/qr/login/${uid}`, "GET"); }
+        // Get OTP Token
+        async getOtpToken(email, code) { return this.request(`/otp/login/${email}/${code}`, "GET"); }
+        // Read Icon
+        async getIcon(iconName) {
+            const response = await fetch(`/auth/${this.baseURL}/icon/${iconName}`, {
+                headers: this.getHeaders(),
+            });
+            if (!response.ok) throw new Error("Failed to fetch icon");
+            return response.blob();
+        }
+        // Logout
+        async logout() {
+            const response = await this.request("/auth/logout", "GET");
+            this.authToken = null; // Clear the token on logout
+        }
     }
 
-  }
+
 
   const app = createApp({
     setup() {
