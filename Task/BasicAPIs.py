@@ -54,6 +54,7 @@ class BasicCeleryTask:
                  BasicApp: AppInterface,
                  celery_app,
                  root_fast_app: FastAPI,
+                 dependencies: list = [],
                  ACTION_REGISTRY = {}):
         
         self.BasicApp = BasicApp
@@ -62,6 +63,7 @@ class BasicCeleryTask:
         self.ACTION_REGISTRY: dict[str, ServiceOrientedArchitecture] = ACTION_REGISTRY
         self.pipelines = {}
         self.root_fast_app = root_fast_app
+        self.dependencies = dependencies
         self.load_code_snippet()
 
         # Initialize API router
@@ -97,27 +99,25 @@ class BasicCeleryTask:
     
     def _register_api_endpoints(self):
         """Register all API endpoints"""
-        self.router.get("/tasks/")(self.api_list_tasks)
-        self.router.get("/tasks/meta/{task_id}")(self.api_task_meta)
-        self.router.get("/tasks/meta/delete/{task_id}")(self.api_task_meta_delete)
-        self.router.get("/tasks/stop/{task_id}")(self.api_task_stop)
-        self.router.get("/tasks/sub/{task_id}")(self.api_listen_data_of_task)
-        self.router.get("/workers/")(self.api_get_workers)
-        self.router.get("/action/list")(self.api_perform_action_list)
-        self.router.post("/action/{name}")(self.api_perform_action)
-        
-        # Pipeline management endpoints
-        self.router.get("/pipeline/list")(self.api_list_pipelines)
-        # self.router.post("/pipeline/add")(self.api_add_pipeline)
-        self.router.get("/pipeline/refresh")(self.api_refresh_pipeline)
-        self.router.delete("/pipeline/delete")(self.api_delete_pipeline)
+        self.add_web_api(self.api_list_tasks,"get","/tasks/",deps=True)
+        self.add_web_api(self.api_task_meta,"get","/tasks/meta/{task_id}",deps=True)
+        self.add_web_api(self.api_task_meta_delete,"get","/tasks/meta/delete/{task_id}",deps=True)
+        self.add_web_api(self.api_task_stop,"get","/tasks/stop/{task_id}",deps=True)
+        self.add_web_api(self.api_listen_data_of_task,"get","/tasks/sub/{task_id}",deps=True)
+        self.add_web_api(self.api_get_workers,"get","/workers/",deps=True)
+        self.add_web_api(self.api_perform_action_list,"get","/action/list",deps=True)
+        self.add_web_api(self.api_perform_action,"post","/action/{name}",deps=True)
+        self.add_web_api(self.api_list_pipelines,"get","/pipeline/list",deps=True)
+        # self.add_web_api(self.api_add_pipeline,"post","/pipeline/add",deps=True)
+        self.add_web_api(self.api_refresh_pipeline,"get","/pipeline/refresh",deps=True)
+        self.add_web_api(self.api_delete_pipeline,"delete","/pipeline/delete",deps=True)
     
     def _register_action_endpoints(self):
         """Auto-generate endpoints for each action"""
         for action_name, action_class in self.ACTION_REGISTRY.items():
             self.add_web_api(
                 self._make_api_action_handler(action_name, action_class),
-                'post', f"/{action_name.lower()}/")
+                'post', f"/{action_name.lower()}/",deps=True)
             
     def task_result_normalize_to_jsonStr(self, res):
         """Convert task result to a JSON string format."""
@@ -557,7 +557,7 @@ class BasicCeleryTask:
         self._reload_routes(self.root_fast_app)
         self.root_fast_app.include_router(self.router, prefix="", tags=["Tasks"])
     
-    def add_web_api(self, func, method: str = 'post', endpoint: str = '/'):
+    def add_web_api(self, func, method: str = 'post', endpoint: str = '/', deps=False):        
         method = method.lower().strip()
         allowed_methods = {
             'get':    self.router.get,
@@ -573,8 +573,11 @@ class BasicCeleryTask:
             raise ValueError(
                 f"Method '{method}' is not allowed. "
                 f"Supported methods: {', '.join(allowed_methods)}")
-
-        allowed_methods[method](endpoint)(func)
+        if deps:
+            allowed_methods[method](endpoint,
+                    dependencies = self.dependencies)(func)
+        else:
+            allowed_methods[method](endpoint)(func)        
         return self
     
     def delete_pipeline(self, name: str):

@@ -41,12 +41,13 @@ ACTION_REGISTRY={k:v for k,v,i in zip(TaskNames,TaskClass,ValidTask) if i}
 
 class CeleryTask(BasicCeleryTask):
     def __init__(self, BasicApp, celery_app, root_fast_app:FastAPI,
+                 dependencies: list = [],
                  ACTION_REGISTRY:dict[str,any]=ACTION_REGISTRY):
-        super().__init__(BasicApp, celery_app, root_fast_app, ACTION_REGISTRY)
-
-        self.router.post("/pipeline/add")(self.api_add_pipeline)
-        self.router.post("/pipeline/config")(self.api_set_config_pipeline)
-        self.router.get("/pipeline/config/{name}")(self.api_get_config_pipeline)
+        super().__init__(BasicApp, celery_app, root_fast_app, dependencies, ACTION_REGISTRY)
+        
+        self.add_web_api(self.api_add_pipeline, "post", "/pipeline/add", deps=True)
+        self.add_web_api(self.api_set_config_pipeline, "post", "/pipeline/config", deps=True)
+        self.add_web_api(self.api_get_config_pipeline, "get", "/pipeline/config/{name}", deps=True)
 
     def create_api_pipeline_handler(self,name: str,pipeline: list[str]):        
         ACTION_REGISTRY:dict[str,ServiceOrientedArchitecture]=self.ACTION_REGISTRY
@@ -278,7 +279,7 @@ else:
 auth_service = AuthService(USER_DB)
 celery_app = BasicApp.get_celery_app()
 
-api = FastAPI(dependencies=[Depends(auth_service.get_current_user)])
+api = FastAPI()
 api.add_middleware(
     CORSMiddleware,
     allow_origins=['*',],
@@ -287,13 +288,14 @@ api.add_middleware(
     allow_headers=["*"],)
 api.add_middleware(SessionMiddleware,
                     secret_key=conf.secret_key, max_age=conf.session_duration)
-my_app = CeleryTask(BasicApp,celery_app,api)
+
+my_app = CeleryTask(BasicApp,celery_app,api,
+                dependencies=[Depends(auth_service.get_current_user)])
 
 ## add auth api
 auth_router = OAuthRoutes(auth_service)
 auth_service.add_new_user(username='root',password='root',
         full_name='root',email='root@root.com',role='root')
-
 api.include_router(auth_router.router, prefix="/auth", tags=["users"])
 
 ## add original api
@@ -306,22 +308,22 @@ def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
 
 my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
 
-
 from CustomTask import TaskDAGRunner
 def my_mermaid_editor():
     return HTMLResponse(content=TaskDAGRunner.MermaidEditorHtml)
 
 my_app.add_web_api(my_mermaid_editor,'get','/myapi/mermaideditor/').reload_routes()
 
-def my_gui():
-    try:
-        with open('./vue-gui.html', 'r') as f:
-            return HTMLResponse(content=f.read())
-    except FileNotFoundError:
+def html_file(file='vue-gui.html'):
+    for  f in [f'./{file}',f'../{file}']:
         try:
-            with open('../vue-gui.html', 'r') as f:
+            with open(f, 'r') as f:
                 return HTMLResponse(content=f.read())
         except FileNotFoundError:
-            raise HTTPException(status_code=404, detail="GUI template file not found")
+                pass    
+    raise HTTPException(status_code=404, detail="html template file not found")
 
-my_app.add_web_api(my_gui,'get','/myapi/gui/').reload_routes()
+my_app.add_web_api(lambda:html_file(),'get','/myapi/gui/').reload_routes()
+
+
+
