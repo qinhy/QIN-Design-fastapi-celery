@@ -1,6 +1,5 @@
 import threading
 from typing import Literal, Optional, Union, List
-import fsspec
 from pydantic import BaseModel, Field
 
 try:
@@ -10,7 +9,6 @@ try:
 except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
     from utils import FileInputHelper
-    from UserModel import User,FileSystem
 
 class FSSpecShell(ServiceOrientedArchitecture):
     @classmethod
@@ -62,11 +60,11 @@ Performs filesystem operations using `fsspec`, simulating basic shell commands:
             super().__init__(model, BasicApp, level)
             self.model: FSSpecShell.Model = self.model
             self.user:User = self.model.param.user
-            
-            if self.user:
+            self.fs_config = FileSystem()
+
+            if self.user and self.user.file_system:
                 self.fs_config = self.user.file_system
-            else:
-                self.fs_config = FileSystem()
+                
 
         def __call__(self, *args, **kwargs):
             with self.listen_stop_flag() as stop_flag:
@@ -77,7 +75,7 @@ Performs filesystem operations using `fsspec`, simulating basic shell commands:
                 path = self.model.args.path
 
                 try:
-                    fs, full_path = self.get_fs_and_path(path)
+                    fs, full_path = self.fs_config.get_fs_and_path(path)
                     result = None
 
                     if command == 'ls':
@@ -102,18 +100,6 @@ Performs filesystem operations using `fsspec`, simulating basic shell commands:
 
                 return self.model
 
-        def get_fs_and_path(self, path):
-            """
-            Build fsspec filesystem and full path from model configuration and input path.
-            """
-            # Assume self.model.fs_config is a FileSystem model as defined earlier
-            fs_config = self.fs_config
-            fs_kwargs = fs_config.fsspec_kwargs()
-            fs = fsspec.filesystem(fs_config.protocol, **fs_kwargs)
-            # Build the full path
-            full_path = fs_config.get_fsspec_full_path(path)
-            return fs, full_path
-        
         def to_stop(self):
             self.log_and_send("Stop flag triggered. Aborting command.", FSSpecShell.Levels.WARNING)
             self.model.ret.result = "Command stopped."

@@ -111,6 +111,7 @@
             <div>
                 <p-button severity="danger" @click="()=>{api.logout()}" class="border p-2 rounded w-full mb-2 top-1">Logout</p-button>
                 <h2 class="text-xl font-bold mb-4">Edit User Info</h2>
+
                 <form @submit.prevent="editUserInfo">
                     <!-- UUID (Disabled) -->
                     <p-inputtext v-model="editForm.uuid" disabled placeholder="UUID"
@@ -125,12 +126,11 @@
                         class="border p-2 rounded w-full mb-2"></p-inputtext>
 
                     <!-- New Password -->
-                    <p-inputtext v-model="editForm.new_password" placeholder="New Password"
-                        class="border p-2 rounded w-full mb-2"></p-inputtext>
+                    <p-password v-model="editForm.new_password" placeholder="New Password"
+                        class="border p-2 rounded w-full mb-2"></p-password>
 
                     <!-- Confirm Password -->
-                    <p-inputtext v-model="editForm.password" placeholder="Confirm Password" type="password"
-                        required class="border p-2 rounded w-full mb-2"></p-inputtext>
+                    <p-password v-model="editForm.password" placeholder="Confirm Password" type="password" class="border p-2 rounded w-full mb-2"></p-password>
 
                     <!-- Save Changes Button -->
                     <p-button type="submit" :disabled="loading" class="w-full">
@@ -139,13 +139,53 @@
                     </p-button>
 
                     <p-button severity="danger" class="border p-2 rounded w-full mb-2 top-1">Remove Account</p-button>
-                    
                 </form>
+
                 <h2 class="text-xl font-bold mb-4">OTP QR</h2>
                 <img :src="otpQr" alt="OTP QR Code" class="mb-4" />
 
+                <!-- File System Configuration Form -->
+                <h2 class="text-xl font-bold mt-6 mb-4">File System Configuration</h2>
+                <form @submit.prevent="saveFileSystemConfig">
+                    <!-- Protocol -->
+                    <p-inputtext v-model="fileSystem.protocol" placeholder="Protocol (e.g., s3, gcs, ftp)" required
+                        class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+                    <!-- Host -->
+                    <p-inputtext v-model="fileSystem.host" placeholder="Host (e.g., s3.amazonaws.com)"
+                        class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+                    <!-- Port -->
+                    <p-inputnumber v-model="fileSystem.port" placeholder="Port (e.g., 443)" :min="0" :max="65535"
+                        class="border p-2 rounded w-full mb-2"></p-inputnumber>
+
+                    <!-- Username -->
+                    <p-inputtext v-model="fileSystem.username" placeholder="Username of File System" class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+                    <!-- Password -->
+                    <p-password id='fspw' v-model="fileSystem.password" placeholder="Password of File System" class="border p-2 rounded w-full mb-2"></p-password>
+
+                    <!-- Bucket -->
+                    <p-inputtext v-model="fileSystem.bucket" placeholder="Bucket (e.g., my-data-bucket)"
+                        class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+                    <!-- Root Path -->
+                    <p-inputtext v-model="fileSystem.root_path" placeholder="Root Path (e.g., folder/subfolder)"
+                        class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+                    <!-- Options (JSON) -->
+                    <p-inputtextarea v-model="fileSystem.options" placeholder='Options (JSON), e.g., {"anon": false}'
+                        rows="4" autoResize class="border p-2 rounded w-full mb-2"></p-inputtextarea>
+
+                    <!-- Save Button -->
+                    <p-button type="submit" :disabled="loading" class="w-full">
+                        <span v-if="loading" class="pi pi-spinner animate-spin"></span>
+                        <span v-else>Save File System Config</span>
+                    </p-button>
+                </form>
             </div>
         </p-tabpanel>
+
         
         <!-- Dashboard Tab -->
         <p-tabpanel value="Dashboard">
@@ -337,6 +377,7 @@
         // Edit User Info
         async editUserInfo(data) { 
           data = {
+            file_system: data.file_system,
             full_name: data.full_name,
             new_password: data.new_password,
             is_remove: data.is_remove?true:false,
@@ -487,15 +528,28 @@
       }
 
       // OAuth      
-      const editForm = ref({ uuid: "", email: "", full_name: "", new_password: "", removeAccount: false, password: "", });
+      const editForm = ref({ uuid:null, email:null, full_name:null, file_system:null,
+            new_password:null, removeAccount: false, password:null, });
       const loginForm = ref({ username: '', password: '', otp: '', });
       const useOtp = ref(false);
       const passwordVisible = ref(false);
-      const otpQr = ref('/favicon.ico');
+      const otpQr = ref('/favicon.ico');      
+      const fileSystem = ref({
+          protocol: 'file',
+          host: '',
+          port: null,
+          username: '',
+          password: '',
+          bucket: '',
+          root_path: '',
+          options: '{}'  // Stored as JSON string for gui
+      });
+
 
       const getUserdata = async () => {
         const data = await api.getCurrentUser();
         editForm.value = data;
+        fileSystem.value = data.file_system;
         activeTab.value = 'Profile';
         await reflesh_tabs();
         otpQr.value = '/auth/otp/qr';
@@ -527,6 +581,12 @@
           loading.value = false;
         }
       }
+
+      const saveFileSystemConfig = async() => {
+        editForm.value.file_system = {...fileSystem.value};
+        editForm.value.file_system.options = JSON.parse(fileSystem.value.options);
+        await editUserInfo();
+      };
 
       const registerForm = ref({ username: '', full_name: '', email: '', password: '', invite_code: '', });
       const registerUser = async () => {
@@ -581,7 +641,11 @@
                 registerUser,
                 loginUser,
                 editUserInfo,
-                otpQr
+                otpQr,
+
+                //
+                saveFileSystemConfig,
+                fileSystem,
       };
     }
   });

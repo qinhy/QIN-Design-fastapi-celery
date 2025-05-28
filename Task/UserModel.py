@@ -1,17 +1,16 @@
 
 from datetime import datetime
 import os
+from pathlib import Path
 import uuid
 import base64
 import hashlib
 from enum import Enum
 from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field, SecretStr, EmailStr, field_validator
+import fsspec
+from pydantic import BaseModel, Field, EmailStr, field_validator
 
-try:
-    from ..Storages.BasicModel import BasicStore, Controller4Basic, Model4Basic
-except Exception as e:
-    from Storages.BasicModel import BasicStore, Controller4Basic, Model4Basic
+
 
 class FileSystem(BaseModel):
     """
@@ -37,7 +36,7 @@ class FileSystem(BaseModel):
         description="Username or access key for authentication.",
         example="myuser"
     )
-    password: Optional[SecretStr] = Field(
+    password: Optional[str] = Field(
         default=None,
         description="Password or secret access key for authentication.",
         example="mysecret"
@@ -137,7 +136,7 @@ class FileSystem(BaseModel):
             # Some backends expect 'username', others 'user'—user should adjust if needed
             kwargs["username"] = self.username
         if self.password is not None:
-            kwargs["password"] = self.password.get_secret_value()
+            kwargs["password"] = self.password
         if self.bucket is not None:
             # Some protocols expect 'bucket' as a top-level argument, e.g. s3fs
             kwargs["bucket"] = self.bucket
@@ -150,55 +149,72 @@ class FileSystem(BaseModel):
         """
         Build the full URI/path for the file on this remote file system, handling common protocols.
         """
+        if path is None:
+            path = Path(".")  # Default to current directory
+
+        # Remove leading slashes (both / and \) to make it relative
+        normalized = path.lstrip("/\\")
+        path = Path(normalized) if normalized else Path(".")
+    
         protocol = self.protocol.lower()
-        # Build the relative path inside the bucket/root
-        parts = []
-        if self.root_path:
-            parts.append(self.root_path.strip("/"))
-        if path:
-            parts.append(path.lstrip("/"))
-        rel_path = "/".join(parts)
+        root_path = Path(self.root_path or "")
+        rel_path:Path = root_path / path
+
+        # Path part (converted to posix) for URIs
+        path_str = rel_path.as_posix()
 
         if protocol in {"s3", "s3a", "gs", "gcs"}:
             if not self.bucket:
-                raise ValueError("Bucket must be specified for protocol '%s'" % protocol)
-            # e.g., s3://my-bucket/optional/prefix/file.txt
-            return f"{protocol}://{self.bucket}/{rel_path}"
+                raise ValueError(f"Bucket must be specified for protocol '{protocol}'")
+            # e.g., s3://my-bucket/path/to/file
+            return f"{protocol}://{self.bucket}/{path_str}"
+
         elif protocol == "ftp":
             if not self.host:
                 raise ValueError("Host must be specified for FTP protocol.")
-            # e.g., ftp://ftp.example.com/folder/file.txt
-            return f"ftp://{self.host}/{rel_path}"
+            return f"{protocol}://{self.host}/{path_str}"
+
         elif protocol == "sftp":
             if not self.host:
                 raise ValueError("Host must be specified for SFTP protocol.")
-            # e.g., sftp://user@host:port/folder/file.txt
             user_part = f"{self.username}@" if self.username else ""
             port_part = f":{self.port}" if self.port else ""
-            return f"sftp://{user_part}{self.host}{port_part}/{rel_path}"
+            return f"{protocol}://{user_part}{self.host}{port_part}/{path_str}"
+
         elif protocol in {"webdav", "http", "https"}:
             if not self.host:
                 raise ValueError("Host must be specified for WebDAV/HTTP protocol.")
             port_part = f":{self.port}" if self.port else ""
-            # e.g., webdav://host[:port]/folder/file.txt
-            return f"{protocol}://{self.host}{port_part}/{rel_path}"
+            return f"{protocol}://{self.host}{port_part}/{path_str}"
+
         elif protocol == "file":
-            # Local filesystem, just join paths
-            import os
-            base = self.root_path or ""
-            if path:
-                return os.path.join(base, path)
-            return base
+            # Local filesystem, resolve to absolute path
+            return str(rel_path)
+
         else:
-            # Fallback: protocol://host[:port]/bucket/root_path/path
+            # Fallback: protocol://host[:port]/bucket/path
             host = self.host or ""
             port_part = f":{self.port}" if self.port else ""
             bucket_part = f"/{self.bucket}" if self.bucket else ""
-            uri = f"{protocol}://{host}{port_part}{bucket_part}"
-            if rel_path:
-                uri += f"/{rel_path}"
-            return uri
+            return f"{protocol}://{host}{port_part}{bucket_part}/{path_str}"
 
+    def get_fs_and_path(self, path):
+        """
+        Build fsspec filesystem and full path from model configuration and input path.
+        """
+        fs_kwargs = self.fsspec_kwargs()
+        fs:fsspec.AbstractFileSystem = fsspec.filesystem(self.protocol, **fs_kwargs)
+        # Build the full path
+        full_path:str = self.get_fsspec_full_path(path)
+        return fs, full_path
+
+####################################################################
+# a = FileSystem()
+# a.root_path = 'D://DL'
+# print(a.get_fsspec_full_path('/xv_sdk'))
+# exit()
+####################################################################
+#         
 def text2hash2base32Str(text: str) -> str:
     hash_uuid = hashlib.sha256(text.encode()).digest()
     return base64.b32encode(hash_uuid).decode('utf-8').rstrip('=')
@@ -250,7 +266,7 @@ class User(BaseModel):
         description="The hashed password of the user, stored securely.",
     )
 
-    file_system : FileSystem = Field(FileSystem(),
+    file_system : Optional[FileSystem] = Field(None,
         description="Remote File System configuration, designed for use with fsspec-compatible backends.",
     )
 
@@ -334,6 +350,11 @@ class User(BaseModel):
             exclude = set(exclude)
             exclude.update(sensitive_fields)            
         return super().model_dump(*args, exclude=exclude, **kwargs)
+
+try:
+    from ..Storages.BasicModel import BasicStore, Controller4Basic, Model4Basic
+except Exception as e:
+    from Storages.BasicModel import BasicStore, Controller4Basic, Model4Basic
 
 class Controller4User:
     class AbstractObjController(Controller4Basic.AbstractObjController):

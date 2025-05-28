@@ -1,5 +1,6 @@
 import os
-from .UserModel import Model4User, text2hash2base32Str, UsersStore
+from typing import Optional
+from .UserModel import FileSystem, Model4User, text2hash2base32Str, UsersStore
 
 APP_INVITE_CODE = os.getenv('APP_INVITE_CODE', '123')  # Replace with appropriate default
 APP_SECRET_KEY = os.getenv('APP_SECRET_KEY', 'super_secret_key')  # Caution: replace with a strong key in production
@@ -24,12 +25,22 @@ import qrcode
 class UserModels:    
     class User(Model4User.User):
         pass
-        # username:str
+        # username: str
         # full_name: str
-        # role:str = 'user'
-        # hashed_password:str # text2hash2base64Str(password),
-        # email:str
-        # disabled: bool=False
+        # email: EmailStr
+        # hashed_password: str
+        # file_system : 
+                # protocol: str
+                # host: Optional[str]
+                # port: Optional[int]
+                # username: Optional[str]
+                # password: Optional[str]
+                # bucket: Optional[str]
+                # root_path: Optional[str]
+                # options: Optional[Dict[str, Any]]
+        # role: UserRole
+        # disabled: bool
+        # salt: str
 
     class RegisterRequest(BaseModel):
         username: str
@@ -41,10 +52,11 @@ class UserModels:
     class EditUserRequest(BaseModel):
         # username: str
         # email: str
-        full_name: str
-        new_password: str
-        is_remove: bool
-        password: str
+        file_system: Optional[FileSystem] = None
+        full_name: Optional[str] = None
+        new_password: Optional[str] = None
+        is_remove: bool = False
+        password: Optional[str] = None
 
     class PayloadModel(BaseModel):
         role:str = 'user'
@@ -219,18 +231,25 @@ class OAuthRoutes:
     def edit_user_info(self, edit_request: UserModels.EditUserRequest,
                        request: Request):
         current_user = self.get_current_user_from_request(request)
-
-        if not current_user.verify_password(edit_request.password):
-            raise HTTPException(status_code=400, detail="Incorrect password")
+        hash_password_fn = UserModels.User.hash_password
 
         try:
+            print(edit_request.model_dump())
             new_password = edit_request.new_password or edit_request.password
-            current_user.get_controller().update(
-                full_name=edit_request.full_name,
-                hashed_password=UserModels.User.hash_password(
-                                new_password,current_user.salt),
-            )
-            return {"status": "success", "message": "User info updated successfully"}
+            ups = {}
+            if edit_request.full_name:
+                ups['full_name'] = edit_request.full_name
+            if edit_request.file_system:
+                ups['file_system'] = json.loads(edit_request.file_system.model_dump_json())
+            if new_password and edit_request.password:
+                if not current_user.verify_password(edit_request.password):
+                    raise HTTPException(status_code=400, detail="Incorrect password")
+                ups['hashed_password'] = hash_password_fn(new_password,current_user.salt)
+            print(ups)
+            if ups:
+                current_user.get_controller().update(**ups)
+                return {"status": "success", "message": "User info updated successfully"}
+            return {"status": "success", "message": "User info not changes"}
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to update user info: {e}")
 
