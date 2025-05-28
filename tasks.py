@@ -21,7 +21,7 @@ from Task.Basic import (
 from Task.BasicAPIs import BasicCeleryTask
 import CustomTask
 from Task.UserAPIs import AuthService, OAuthRoutes
-from Task.UserModel import UsersStore, text2hash2base64Str
+from Task.UserModel import UsersStore
 from config import *
 
 TaskNames = [i for i in CustomTask.__dir__() if '_' not in i]
@@ -256,22 +256,22 @@ class CeleryTask(BasicCeleryTask):
 
 ########################################################
 conf = AppConfig()
+USER_DB = UsersStore()
 print(conf.validate_backend().model_dump())
 
 if conf.app_backend=='redis':
     BasicApp:AppInterface = RedisApp(conf.redis.url)
-    USER_DB = UsersStore()
     USER_DB.redis_backend(redis_URL=conf.redis.url)
     
-# elif conf.app_backend=='file':
-#     BasicApp:AppInterface = FileSystemApp(conf.file.url)
+elif conf.app_backend=='file':
+    BasicApp:AppInterface = FileSystemApp(conf.file.url)
+    USER_DB.file_backend(conf.file.url)
     
 elif conf.app_backend=='mongodbrabbitmq':
     BasicApp:AppInterface = RabbitmqMongoApp(conf.rabbitmq.url,
                             conf.rabbitmq.user,conf.rabbitmq.password,
                             conf.mongo.url,conf.mongo.db,conf.celery.meta_table,
                             conf.celery.broker)
-    USER_DB = UsersStore()
     USER_DB.mongo_backend(conf.mongo.url)
 else:
     raise ValueError(f'no back end of {conf.app_backend}')
