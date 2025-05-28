@@ -7,9 +7,14 @@
   <title>One App</title>
   <link rel="stylesheet" href="https://unpkg.com/primeicons@7.0.0/primeicons.css">
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-  <script src="https://unpkg.com/primevue@4.0.0-rc.2/umd/primevue.min.js"></script>
-  <script src="https://unpkg.com/@primevue/themes@4.0.0-rc.2/umd/lara.min.js"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://unpkg.com/primevue"></script>
+
+  <script src="https://unpkg.com/@primevue/themes/umd/aura.min.js"></script>
+  <!-- <script src="https://unpkg.com/@primevue/themes/umd/material.min.js"></script> -->
+  <!-- <script src="https://unpkg.com/@primevue/themes/umd/nora.min.js"></script> -->
+  <!-- <script src="https://unpkg.com/@primevue/themes/umd/lara.min.js"></script> -->
+
   <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
   <link rel="stylesheet"
@@ -30,12 +35,12 @@
   </style>
 </head>
 
-<body class="bg-gray-100">
-  <div id="app">
+<body class="bg-gray-100">  
+
+  <div id="app">    
+    <p-toast style="width: 80%;"></p-toast>
     <!-- App Header -->
-    <p class="text-xl font-bold text-center px-4 py-2">
-      App
-    </p>
+    <p class="text-xl font-bold text-center px-4 py-2">App</p>
 
     <!-- Tabbed Navigation -->
     <p-tabs :value="activeTab" scrollable>
@@ -43,7 +48,105 @@
         <p-tab v-for="(c, i) in TABS" :key="c" :value="`${c}`">{{ c }}</p-tab>
       </p-tablist>
 
-      <p-tabpanels>
+        <p-tabpanels>
+          <p-tabpanel value="Register">
+            <div class="mt-5">
+                <h2 class="text-xl font-bold">Register</h2>
+                <form @submit.prevent="registerUser">
+                    <p-inputtext v-model="registerForm.username" placeholder="Username" type="text" required
+                        class="border p-2 rounded w-full mb-2"></p-inputtext>
+                    <p-inputtext v-model="registerForm.full_name" placeholder="Full Name" type="text" required
+                        class="border p-2 rounded w-full mb-2"></p-inputtext>
+                    <p-inputtext v-model="registerForm.email" placeholder="Email" type="email" required
+                        class="border p-2 rounded w-full mb-2"></p-inputtext>
+                    <p-inputtext v-model="registerForm.password" placeholder="Password" type="password" required
+                        class="border p-2 rounded w-full mb-2"></p-inputtext>
+                    <p-inputtext v-model="registerForm.invite_code" placeholder="Invite code" type="invite"
+                        required class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+                    <p-button @click="registerUser" type="submit" :disabled="loading"
+                        class="bg-blue-500 text-white px-4 py-2 rounded w-full">
+                        <span v-if="loading" class="pi pi-spinner animate-spin"></span>
+                        <span v-else>Register</span>
+                    </p-button>
+
+                </form>
+            </div>
+        </p-tabpanel>
+
+        <p-tabpanel value="Login">
+            <div>
+                <h2 class="text-xl font-bold mb-4">Login</h2>
+                <form @submit.prevent="loginUser">
+                    <p-inputtext v-model="loginForm.username" placeholder="Email" type="text" required
+                        class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+                    <p-inputtext v-if="!useOtp" v-model="loginForm.password" placeholder="Password"
+                        :type="passwordVisible ? 'text' : 'password'" required
+                        class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+                    <p-inputtext v-if="useOtp" v-model="loginForm.otp" placeholder="OTP" type="number" required
+                        class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+
+                    <p-button icon="pi pi-eye" class="mb-2"
+                        @click="()=>passwordVisible=!passwordVisible"></p-button>
+                    <p-toggleswitch v-model="useOtp" label="Login with OTP"></p-toggleswitch>
+                    <span class="font-medium">Login with OTP</span>
+
+                    <p-button type="submit" :disabled="loading"
+                        class="bg-blue-500 text-white px-4 py-2 rounded w-full">
+                        <span v-if="loading" class="pi pi-spinner animate-spin"></span>
+                        <span v-else>Login</span>
+                    </p-button>
+
+                    <p class="text-center mt-4">Don't have an account?
+                        <a class="text-blue-500 underline" @click="()=>activeTab='Register'">Register here</a>
+                    </p>
+                </form>
+            </div>
+        </p-tabpanel>
+
+        <p-tabpanel value="Profile">
+            <div>
+                <p-button severity="danger" @click="()=>{api.logout()}" class="border p-2 rounded w-full mb-2 top-1">Logout</p-button>
+                <h2 class="text-xl font-bold mb-4">Edit User Info</h2>
+                <form @submit.prevent="editUserInfo">
+                    <!-- UUID (Disabled) -->
+                    <p-inputtext v-model="editForm.uuid" disabled placeholder="UUID"
+                        class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+                    <!-- Email (Disabled) -->
+                    <p-inputtext v-model="editForm.email" disabled placeholder="Email"
+                        class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+                    <!-- Full Name -->
+                    <p-inputtext v-model="editForm.full_name" placeholder="Full Name" required
+                        class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+                    <!-- New Password -->
+                    <p-inputtext v-model="editForm.new_password" placeholder="New Password"
+                        class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+                    <!-- Confirm Password -->
+                    <p-inputtext v-model="editForm.password" placeholder="Confirm Password" type="password"
+                        required class="border p-2 rounded w-full mb-2"></p-inputtext>
+
+                    <!-- Save Changes Button -->
+                    <p-button type="submit" :disabled="loading" class="w-full">
+                        <span v-if="loading" class="pi pi-spinner animate-spin"></span>
+                        <span v-else>Save Changes</span>
+                    </p-button>
+
+                    <p-button severity="danger" class="border p-2 rounded w-full mb-2 top-1">Remove Account</p-button>
+                    
+                </form>
+                <h2 class="text-xl font-bold mb-4">OTP QR</h2>
+                <img :src="otpQr" alt="OTP QR Code" class="mb-4" />
+
+            </div>
+        </p-tabpanel>
+        
         <!-- Dashboard Tab -->
         <p-tabpanel value="Dashboard">
           <div>
@@ -123,7 +226,10 @@
                 </div>
               </template>
               <hr>
-              <p-button label="Submit Task" type="submit" class="mt-2" :disabled="loading"></p-button>
+              <p-button type="submit" class="mt-2" :disabled="loading">          
+                  <span v-if="loading" class="pi pi-spinner animate-spin"></span>
+                  <span v-else>Submit Task</span>
+              </p-button>
             </form>
 
             <!-- Task Submission Result -->
@@ -147,9 +253,9 @@
         </p-tabpanel>
       </p-tabpanels>
     </p-tabs>
+    
   </div>
 
-  <p-toast />
 </body>
 
 
@@ -160,15 +266,24 @@
     class APIClient {
         constructor(baseURL = '') {
             this.baseURL = baseURL;
+            this.authToken = null;
         }
-        async request(endpoint, method = "GET", body = null, isJSON = true) {
+
+        // Helper to set authentication token
+        setAuthToken(token) {this.authToken = token;}
+        
+        async request(endpoint, method = "GET", body = null,
+                      isJSON = true, isURLencoded=false) {
             const options = { method, headers: {} };
             if (isJSON) options.headers["Content-Type"] = "application/json";
+            if (isURLencoded) options.headers["Content-Type"] = "application/x-www-form-urlencoded";
             if (body) options.body = isJSON ? JSON.stringify(body) : body;
             const response = await fetch(`${this.baseURL}${endpoint}`, options);
             if (!response.ok) {
                 const error = await response.json().catch(() => ({ message: "Unknown error" }));
-                throw new Error(error.detail || error.message || "Request failed");
+                var content = error.detail || error.message || "Request failed";
+                content = JSON.stringify(content);
+                throw new Error(content);
             }
             return response.json();
         }
@@ -210,16 +325,25 @@
         
         ///////////////////////// oauth
         // Register User
-        async registerUser(data) { return this.request("/register", "POST", data); }
+        async registerUser(data) { return this.request("/auth/register", "POST", data); }
         // Get Token (Login)
         async getToken(email, password) {
             const formData = `username=${email}&password=${password}`;
-            const response = await this.request("/token", "POST", formData, false);
+            const response = await this.request("/auth/token", "POST", formData, false, true);
+            console.log(response);
             this.setAuthToken(response.access_token); // Save token for future requests
             return response;
         }
         // Edit User Info
-        async editUserInfo(data) { return this.request("/auth/edit", "POST", data); }
+        async editUserInfo(data) { 
+          data = {
+            full_name: data.full_name,
+            new_password: data.new_password,
+            is_remove: data.is_remove?true:false,
+            password: data.password
+          };          
+          return this.request("/auth/edit", "POST", data); }
+
         // Remove Account
         async removeAccount(data) { return this.request("/auth/remove", "POST", data); }
         // Get Current User Info
@@ -228,18 +352,14 @@
         async readSession() { return this.request("/auth/session"); }
         // Get OTP QR Code
         async getOtpQr() {
-            const response = await fetch(`/auth/${this.baseURL}/otp/qr`, {
-                headers: this.getHeaders(),
-            });
+            const response = await fetch(`/auth/otp/qr`);
             if (!response.ok) throw new Error("Failed to fetch OTP QR code");
             return response.blob();
         }
         // Get Login QR Code
         async getLoginQr(uid = null) {
             const endpoint = uid ? `/qr/${uid}` : "/qr";
-            const response = await fetch(`/auth/${this.baseURL}${endpoint}`, {
-                headers: this.getHeaders(),
-            });
+            const response = await fetch(`/auth/${endpoint}`);
             if (!response.ok) throw new Error("Failed to fetch Login QR code");
             return response.blob();
         }
@@ -249,9 +369,7 @@
         async getOtpToken(email, code) { return this.request(`/otp/login/${email}/${code}`, "GET"); }
         // Read Icon
         async getIcon(iconName) {
-            const response = await fetch(`/auth/${this.baseURL}/icon/${iconName}`, {
-                headers: this.getHeaders(),
-            });
+            const response = await fetch(`/auth/icon/${iconName}`);
             if (!response.ok) throw new Error("Failed to fetch icon");
             return response.blob();
         }
@@ -259,6 +377,7 @@
         async logout() {
             const response = await this.request("/auth/logout", "GET");
             this.authToken = null; // Clear the token on logout
+            window.location.reload(); // Refresh the whole page after logout
         }
     }
 
@@ -297,7 +416,7 @@
         tasks.value = res.tasks
         const current_page = res.page;
         if (page.value != current_page) {
-          showError(`No such page, set page to ${current_page}`)
+          showInfo(`No such page, set page to ${current_page}`)
           page.value = current_page;
         }
         taskOptions.value = tasks.value.map(v => v.task_id);
@@ -329,20 +448,22 @@
       };
 
       // Tab logic
-      const activeTab = ref('Dashboard');
-      const TABS = ref(["Dashboard", "Fibonacci"]);
+      const activeTab = ref('Login');
+      const TABS = ref(["Register","Login"]);
 
       // Actions
       const all_schema = ref({});
       const dynamicTasks = ref([]); // indexed by tab
+      const reflesh_tabs = async () => {        
+        const action_list = await api.getActions();
+        const mapped_actions = action_list.map((v) => v[v.type]);
+        all_schema.value = mapped_actions;
+        console.log(mapped_actions);
+        
+        TABS.value = ["Profile","Dashboard", ...mapped_actions.map((v) => v.name)];
+        activeTab.value = TABS.value[0];
 
-      api.getActions().then((action_list) => {
-        action_list = action_list.map((v) => v[v.type])
-        all_schema.value = action_list;
-        console.log(action_list);
-        TABS.value = ["Dashboard", ...action_list.map((v) => v.name)];
-
-        dynamicTasks.value = action_list.map(fn => {
+        dynamicTasks.value = mapped_actions.map(fn => {
           // Init an object for all top-level parameter groups
           const paramGroups = {};
           for (const groupKey in fn.parameters.properties) {
@@ -356,9 +477,8 @@
           }
           return paramGroups;
         });
-
         console.log(dynamicTasks.value);
-      });
+      };
 
       async function submitDynamicTask(fn, i) {
         console.log(dynamicTasks.value[i]);
@@ -366,12 +486,102 @@
           taskMeta, taskId, errorMessage, loading);
       }
 
+      // OAuth      
+      const editForm = ref({ uuid: "", email: "", full_name: "", new_password: "", removeAccount: false, password: "", });
+      const loginForm = ref({ username: '', password: '', otp: '', });
+      const useOtp = ref(false);
+      const passwordVisible = ref(false);
+      const otpQr = ref('/favicon.ico');
+
+      const getUserdata = async () => {
+        const data = await api.getCurrentUser();
+        editForm.value = data;
+        activeTab.value = 'Profile';
+        await reflesh_tabs();
+        otpQr.value = '/auth/otp/qr';
+      }
+      const loginUser = async () => {
+          loading.value = true;
+          try {
+            await api.getToken(loginForm.value.username, loginForm.value.password); 
+            await getUserdata(); 
+          } catch (error) {
+            showError('login failed');
+          }
+          finally{
+            loading.value = false;
+          }
+      }
+      getUserdata();
+
+      const editUserInfo = async () => {
+        loading.value = true;
+        try {
+          await api.editUserInfo(editForm.value);
+          showInfo(`edit user info successfully.`);
+        } catch (error) {
+          console.log(error)
+          showError(error.message);
+        }
+        finally{
+          loading.value = false;
+        }
+      }
+
+      const registerForm = ref({ username: '', full_name: '', email: '', password: '', invite_code: '', });
+      const registerUser = async () => {
+          loading.value = true;
+          try {
+              await api.registerUser(registerForm.value);
+              showInfo(`register user successfully.`);   
+          } catch (error) {
+              showError('register failed');
+          }
+          finally{
+              loading.value = false;
+          }
+      }
       return {
-        page, page_size,
-        TABS, activeTab, api, all_schema,
-        dynamicTasks, submitDynamicTask,
-        tasks, taskOptions, selectedTaskId, taskMeta, workersInfo, fetchAndDisplayTasks, checkTaskMeta, stopTask, fetchWorkers,
-        taskId, errorMessage, loading,
+                // Pagination
+                page,
+                page_size,
+
+                // Navigation and Schema
+                TABS,
+                activeTab,
+                api,
+                all_schema,
+
+                // Dynamic Task Management
+                dynamicTasks,
+                submitDynamicTask,
+
+                // Task Related
+                tasks,
+                taskOptions,
+                selectedTaskId,
+                taskMeta,
+                workersInfo,
+                fetchAndDisplayTasks,
+                checkTaskMeta,
+                stopTask,
+                fetchWorkers,
+
+                // Task Status
+                taskId,
+                errorMessage,
+                loading,
+
+                // User Forms and Authentication
+                editForm,
+                loginForm,
+                useOtp,
+                passwordVisible,
+                registerForm,
+                registerUser,
+                loginUser,
+                editUserInfo,
+                otpQr
       };
     }
   });
@@ -380,7 +590,11 @@
 
     app.use(PrimeVue.Config, {
       theme: {
-        preset: PrimeVue.Themes.Lara,
+        // preset: PrimeVue.Themes.Aura,
+        // preset: PrimeVue.Themes.Material,
+        // preset: PrimeVue.Themes.Lara,
+        // preset: PrimeVue.Themes.Nora,
+        preset: PrimeVue.Themes.Aura,
         options: { prefix: 'p', darkModeSelector: '.app-dark', cssLayer: false, }
       }
     });

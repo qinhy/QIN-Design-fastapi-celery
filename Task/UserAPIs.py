@@ -49,8 +49,8 @@ class UserModels:
 
     class EditUserRequest(BaseModel):
         # username: str
-        full_name: str
         # email: str
+        full_name: str
         new_password: str
         is_remove: bool
         password: str
@@ -220,31 +220,34 @@ class OAuthRoutes:
         return data
 
     def get_current_user_from_request(self, request: Request):
-        user = getattr(request.state, "user", None)
-        if not user:
-            user = self.auth_service.get_current_user(request)
-        return user
+        if hasattr(request,'state') and hasattr(request.state,'user'):
+            return request.state.user
+        else:
+            return self.auth_service.get_current_user(request)
 
-    def edit_user_info(self, request: UserModels.EditUserRequest):
+    def edit_user_info(self, edit_request: UserModels.EditUserRequest,
+                       request: Request):
         current_user = self.get_current_user_from_request(request)
 
-        if not current_user.verify_password(request.password):
+        if not current_user.verify_password(edit_request.password):
             raise HTTPException(status_code=400, detail="Incorrect password")
 
         try:
-            new_password = request.new_password or request.password
+            new_password = edit_request.new_password or edit_request.password
             current_user.get_controller().update(
-                full_name=request.full_name,
-                hashed_password=UserModels.User.hash_password(new_password),
+                full_name=edit_request.full_name,
+                hashed_password=UserModels.User.hash_password(
+                                new_password,current_user.salt),
             )
             return {"status": "success", "message": "User info updated successfully"}
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to update user info: {e}")
 
-    def remove_account(self, request: UserModels.EditUserRequest):
+    def remove_account(self, edit_request: UserModels.EditUserRequest,
+                       request: Request):
         current_user = self.get_current_user_from_request(request)
 
-        if not current_user.verify_password(request.password):
+        if not current_user.verify_password(edit_request.password):
             raise HTTPException(status_code=400, detail="Incorrect password")
 
         try:
@@ -315,7 +318,8 @@ class OAuthRoutes:
         request.session.update(data)        
         return data
 
-    def read_icon(self, icon_name: str, current_user: UserModels.User = Depends(AuthService.get_current_payload)):
+    def read_icon(self, icon_name: str, request: Request):
+        current_user = self.get_current_user_from_request(request)
         return FileResponse(os.path.join(os.path.dirname(__file__), 'data', 'icon', icon_name))
 
     def logout(self, request: Request):

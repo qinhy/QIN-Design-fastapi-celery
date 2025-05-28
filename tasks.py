@@ -6,7 +6,7 @@ from typing import Literal, Union
 # FastAPI imports
 from fastapi import Body, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 # Application imports
@@ -321,9 +321,19 @@ def html_file(file='vue-gui.html'):
                 return HTMLResponse(content=f.read())
         except FileNotFoundError:
                 pass    
-    raise HTTPException(status_code=404, detail="html template file not found")
+    raise HTTPException(status_code=404, detail="file not found")
 
-my_app.add_web_api(lambda:html_file(),'get','/myapi/gui/').reload_routes()
+def get_file(file='vue-gui.html'):
+    for  f in [f'./{file}',f'../{file}']:
+        try:
+            with open(f, 'r') as ff:pass
+            return FileResponse(f)
+        except FileNotFoundError:
+                pass
+    raise HTTPException(status_code=404, detail="file not found")
+
+my_app.add_web_api(lambda:get_file(),'get','/myapi/gui/').reload_routes()
+my_app.add_web_api(lambda:get_file('icon.png'),'get','/favicon.ico').reload_routes()
 
 
 
