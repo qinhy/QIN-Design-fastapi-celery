@@ -314,15 +314,6 @@ def my_mermaid_editor():
 
 my_app.add_web_api(my_mermaid_editor,'get','/myapi/mermaideditor/').reload_routes()
 
-def html_file(file='vue-gui.html'):
-    for  f in [f'./{file}',f'../{file}']:
-        try:
-            with open(f, 'r') as f:
-                return HTMLResponse(content=f.read())
-        except FileNotFoundError:
-                pass    
-    raise HTTPException(status_code=404, detail="file not found")
-
 def get_file(file='vue-gui.html'):
     for  f in [f'./{file}',f'../{file}']:
         try:
