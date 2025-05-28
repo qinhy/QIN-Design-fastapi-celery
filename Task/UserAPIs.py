@@ -1,31 +1,22 @@
 import os
-from .UserModel import Model4User, text2hash2base32Str, text2hash2base64Str, UsersStore
+from .UserModel import Model4User, text2hash2base32Str, UsersStore
 
 APP_INVITE_CODE = os.getenv('APP_INVITE_CODE', '123')  # Replace with appropriate default
 APP_SECRET_KEY = os.getenv('APP_SECRET_KEY', 'super_secret_key')  # Caution: replace with a strong key in production
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', 30))
 
-APP_BACK_END = os.getenv('APP_BACK_END', 'redis')  # Defaulting to a common local endpoint
-MONGO_URL = os.getenv('MONGO_URL', 'mongodb://localhost:27017')
-REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-if APP_BACK_END=='mongodbrabbitmq':
-    USER_DB = UsersStore()
-    USER_DB.mongo_backend(MONGO_URL)
-if APP_BACK_END=='redis':
-    USER_DB = UsersStore()
-    USER_DB.redis_backend(redis_URL=REDIS_URL)
 
 
-from pydantic import BaseModel, EmailStr, Field
-from fastapi.security import OAuth2PasswordRequestForm
-from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, RedirectResponse
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 import json
 import uuid
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.security import OAuth2PasswordRequestForm
+from jose import JWTError, jwt
+from pydantic import BaseModel, EmailStr, Field
 import pyotp
 import qrcode
 
