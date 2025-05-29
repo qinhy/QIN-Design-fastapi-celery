@@ -126,11 +126,11 @@
                         class="border p-2 rounded w-full mb-2"></p-inputtext>
 
                     <!-- New Password -->
-                    <p-password v-model="editForm.new_password" placeholder="New Password"
+                    <p-password toggleMask v-model="editForm.new_password" placeholder="New Password"
                         class="border p-2 rounded w-full mb-2"></p-password>
 
                     <!-- Confirm Password -->
-                    <p-password v-model="editForm.password" placeholder="Confirm Password" type="password" class="border p-2 rounded w-full mb-2"></p-password>
+                    <p-password toggleMask v-model="editForm.password" placeholder="Confirm Password" type="password" class="border p-2 rounded w-full mb-2"></p-password>
 
                     <!-- Save Changes Button -->
                     <p-button type="submit" :disabled="loading" class="w-full">
@@ -163,7 +163,7 @@
                     <p-inputtext v-model="fileSystem.username" placeholder="Username of File System" class="border p-2 rounded w-full mb-2"></p-inputtext>
 
                     <!-- Password -->
-                    <p-password id='fspw' v-model="fileSystem.password" placeholder="Password of File System" class="border p-2 rounded w-full mb-2"></p-password>
+                    <p-password toggleMask id='fspw' v-model="fileSystem.password" placeholder="Password of File System" class="border p-2 rounded w-full mb-2"></p-password>
 
                     <!-- Bucket -->
                     <p-inputtext v-model="fileSystem.bucket" placeholder="Bucket (e.g., my-data-bucket)"
@@ -174,8 +174,8 @@
                         class="border p-2 rounded w-full mb-2"></p-inputtext>
 
                     <!-- Options (JSON) -->
-                    <p-inputtextarea v-model="fileSystem.options" placeholder='Options (JSON), e.g., {"anon": false}'
-                        rows="4" autoResize class="border p-2 rounded w-full mb-2"></p-inputtextarea>
+                    <p-textarea v-model="fileSystem.options" placeholder='Options (JSON), e.g., {"anon": false}'
+                        rows="4" autoResize class="border p-2 rounded w-full mb-2"></p-textarea>
 
                     <!-- Save Button -->
                     <p-button type="submit" :disabled="loading" class="w-full">
@@ -291,6 +291,7 @@
               </div>
             </div>
         </p-tabpanel>
+        
       </p-tabpanels>
     </p-tabs>
     
@@ -549,7 +550,7 @@
       const getUserdata = async () => {
         const data = await api.getCurrentUser();
         editForm.value = data;
-        fileSystem.value = data.file_system;
+        if(data.file_system)fileSystem.value = data.file_system;
         activeTab.value = 'Profile';
         await reflesh_tabs();
         otpQr.value = '/auth/otp/qr';
@@ -584,7 +585,11 @@
 
       const saveFileSystemConfig = async() => {
         editForm.value.file_system = {...fileSystem.value};
-        editForm.value.file_system.options = JSON.parse(fileSystem.value.options);
+        try {
+          editForm.value.file_system.options = JSON.parse(fileSystem.value.options); 
+        } catch (error) {
+          editForm.value.file_system.options = {};
+        }
         await editUserInfo();
       };
 

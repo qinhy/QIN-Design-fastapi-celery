@@ -234,7 +234,6 @@ class OAuthRoutes:
         hash_password_fn = UserModels.User.hash_password
 
         try:
-            print(edit_request.model_dump())
             new_password = edit_request.new_password or edit_request.password
             ups = {}
             if edit_request.full_name:
@@ -245,7 +244,6 @@ class OAuthRoutes:
                 if not current_user.verify_password(edit_request.password):
                     raise HTTPException(status_code=400, detail="Incorrect password")
                 ups['hashed_password'] = hash_password_fn(new_password,current_user.salt)
-            print(ups)
             if ups:
                 current_user.get_controller().update(**ups)
                 return {"status": "success", "message": "User info updated successfully"}

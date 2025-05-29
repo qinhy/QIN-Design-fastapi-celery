@@ -315,9 +315,7 @@ class User(BaseModel):
         return text2hash2base64Str(password, salt_bytes)
 
     def verify_password(self, password: str) -> bool:
-        print(password)
         salt_bytes = base64.b64decode(self.salt.encode())
-        print(salt_bytes)
         return self.hashed_password == text2hash2base64Str(password, salt_bytes)
 
     # --- ID Generation ---
