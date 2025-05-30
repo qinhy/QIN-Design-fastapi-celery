@@ -253,10 +253,17 @@
                       <p-select v-model="dynamicTasks[i][groupKey][fieldKey]" :options="field.enum"
                         :placeholder="field.description || fieldKey" class="w-full" />
                     </template>
+
                     <template v-else-if="(field.anyOf?field.anyOf[0].type:field.type) === 'integer'">
                       <p-inputnumber v-model="dynamicTasks[i][groupKey][fieldKey]"
                         :placeholder="field.description || fieldKey" class="w-full" />
                     </template>
+
+                    <template v-else-if="field.title.toLowerCase().includes('text')">
+                      <p-textarea v-model="dynamicTasks[i][groupKey][fieldKey]"
+                        :placeholder="field.description || fieldKey" class="w-full" />
+                    </template>
+
                     <template v-else>
                       <p-inputtext v-model="dynamicTasks[i][groupKey][fieldKey]"
                         :placeholder="field.description || fieldKey" class="w-full" />
@@ -549,6 +556,7 @@
 
       const getUserdata = async () => {
         const data = await api.getCurrentUser();
+        console.log(data);
         editForm.value = data;
         if(data.file_system)fileSystem.value = data.file_system;
         activeTab.value = 'Profile';

@@ -155,8 +155,8 @@ class Model4Basic:
 class BasicStore(SingletonKeyValueStorage):
     MODEL_CLASS_GROUP = Model4Basic
     
-    def __init__(self, version_controll=False) -> None:
-        super().__init__(version_controll)
+    def __init__(self, version_controll=False, encryptor = None):
+        super().__init__(version_controll, encryptor)
         self.python_backend()
 
     def _get_class(self, id: str, modelclass=MODEL_CLASS_GROUP):

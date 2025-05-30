@@ -1,5 +1,6 @@
 
 from datetime import datetime
+import json
 import os
 from pathlib import Path
 import uuid
@@ -56,6 +57,9 @@ class FileSystem(BaseModel):
         description="Additional configuration options (passed directly to fsspec).",
         example={"anon": False}
     )
+
+    _fs:Any=None
+    _full_path:Any=None
 
     class Config:
         extra = "allow"
@@ -198,15 +202,31 @@ class FileSystem(BaseModel):
             bucket_part = f"/{self.bucket}" if self.bucket else ""
             return f"{protocol}://{host}{port_part}{bucket_part}/{path_str}"
 
-    def get_fs_and_path(self, path):
+    def get_fs_and_path(self, path)->tuple[fsspec.AbstractFileSystem,str]:
         """
         Build fsspec filesystem and full path from model configuration and input path.
         """
-        fs_kwargs = self.fsspec_kwargs()
-        fs:fsspec.AbstractFileSystem = fsspec.filesystem(self.protocol, **fs_kwargs)
         # Build the full path
         full_path:str = self.get_fsspec_full_path(path)
-        return fs, full_path
+        if self._fs is None:
+            fs_kwargs = self.fsspec_kwargs()
+            fs:fsspec.AbstractFileSystem = fsspec.filesystem(self.protocol, **fs_kwargs)
+            self._fs = fs
+        return self._fs, full_path
+
+    def ls(self, path, detail=False):
+        fs, full_path = self.get_fs_and_path(path)
+        return fs.ls( full_path, detail=detail)
+
+    def makedirs(self, path, exist_ok=True):
+        fs, full_path = self.get_fs_and_path(path)
+        return fs.makedirs(full_path, exist_ok=exist_ok)
+        
+    def rm(self, path, recursive=True):
+        fs, full_path = self.get_fs_and_path(path)
+        return fs.rm( full_path, recursive=recursive)
+
+        
 
 ####################################################################
 # a = FileSystem()
@@ -240,7 +260,7 @@ def restore_hyphen(uuid_str: str) -> str:
 def format_email(email: str) -> str:
     return email.lower().strip()
 
-class UserRole(str, Enum):
+class UserRole:
     root = 'root'
     admin = 'admin'
     user = 'user'
@@ -270,7 +290,7 @@ class User(BaseModel):
         description="Remote File System configuration, designed for use with fsspec-compatible backends.",
     )
 
-    role: UserRole = Field(default=UserRole.user,example="user",
+    role: str = Field(default=UserRole.user,example="user",
         description="The role assigned to the user, determining permissions.",
     )
 
@@ -340,14 +360,27 @@ class User(BaseModel):
         return not self.disabled
 
     # --- Representation ---
-    def model_dump(self, *args, **kwargs):
+    def model_dump_exclude_sensitive(self, level=0):
         """Hide sensitive fields unless explicitly requested."""
-        exclude = kwargs.pop('exclude', set())
-        sensitive_fields = {'hashed_password','salt',}
-        if not kwargs.get('include', None):
-            exclude = set(exclude)
-            exclude.update(sensitive_fields)            
-        return super().model_dump(*args, exclude=exclude, **kwargs)
+        sensitive_fields = [
+            {
+                'hashed_password','salt'
+            },
+            {
+                'rank','create_time','update_time','status','metadata','auto_del'
+                'hashed_password','salt',
+            },
+        ]
+        
+        d = super().model_dump(exclude=sensitive_fields[level])
+
+        if level>0:            
+            d['username'] = ""
+            d['full_name'] = ""
+            d['salt'] = ""
+            d['hashed_password'] = ""
+            
+        return d
 
 try:
     from ..Storages.BasicModel import BasicStore, Controller4Basic, Model4Basic
@@ -420,7 +453,7 @@ class Model4User:
         
         def gen_new_id(self) -> str:
             return self.generate_user_id(self.email)
-
+        
         _controller: Controller4User.UserController = None
         def get_controller(self)->Controller4User.UserController: return self._controller
         def init_controller(self,store):self._controller = Controller4User.UserController(store,self)
@@ -460,9 +493,8 @@ class Model4User:
         def init_controller(self,store):self._controller = Controller4User.AppUsageController(store,self)
 
 class UsersStore(BasicStore):
-
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, encryptor=None):
+        super().__init__(None, encryptor)
         self.tmp_user_uuids = {}
     
     def _get_class(self, id: str, modelclass=Model4User):

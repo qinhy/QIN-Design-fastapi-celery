@@ -97,6 +97,7 @@ class AuthService:
             rank,
             metadata
         )
+    
     def find_user_by_email(self, email: str):
         return self.user_db.find_user_by_email(email)
         
@@ -266,8 +267,7 @@ class OAuthRoutes:
 
     def read_users_me(self,request:Request):
         current_user = self.get_current_user_from_request(request)
-
-        return dict(**current_user.model_dump(), uuid=current_user.get_id())
+        return dict(**current_user.model_dump_exclude_sensitive(), uuid=current_user.get_id())
 
     def read_session(self, request: Request):
         current_user = self.get_current_user_from_request(request)

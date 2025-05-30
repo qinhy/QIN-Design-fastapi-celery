@@ -17,6 +17,7 @@ from fastapi.routing import APIRoute
 
 # Application imports
 from Task.Basic import AppInterface, ServiceOrientedArchitecture, SmartModelConverter, TaskModel
+from Task.UserModel import Model4User
 
 # Common execution time parameter for API endpoints
 EXECUTION_TIME_PARAM = Query(
@@ -765,19 +766,20 @@ class BasicCeleryTask:
         d.update(data)
 
         if hasattr(request.state,'user'):
-            d['param']['user'] = request.state.user.model_dump_json_dict()
-        
-            del d['param']['user']['rank']
-            del d['param']['user']['create_time']
-            del d['param']['user']['update_time']
-            del d['param']['user']['status']
-            del d['param']['user']['metadata']
-            del d['param']['user']['auto_del']
+            user:Model4User.User = request.state.user
+            d['param']['user'] = user.model_dump_exclude_sensitive(1)
             
-            d['param']['user']['username'] = ""
-            d['param']['user']['full_name'] = ""
-            d['param']['user']['salt'] = ""
-            d['param']['user']['hashed_password'] = ""
+            # del d['param']['user']['rank']
+            # del d['param']['user']['create_time']
+            # del d['param']['user']['update_time']
+            # del d['param']['user']['status']
+            # del d['param']['user']['metadata']
+            # del d['param']['user']['auto_del']
+            
+            # d['param']['user']['username'] = ""
+            # d['param']['user']['full_name'] = ""
+            # d['param']['user']['salt'] = ""
+            # d['param']['user']['hashed_password'] = ""
 
         # task = self.celery_perform_simple_action.apply_async(
         task = self.celery_actions[name.lower()].apply_async(        

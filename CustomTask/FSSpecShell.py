@@ -75,17 +75,15 @@ Performs filesystem operations using `fsspec`, simulating basic shell commands:
                 path = self.model.args.path
 
                 try:
-                    fs, full_path = self.fs_config.get_fs_and_path(path)
                     result = None
-
                     if command == 'ls':
-                        result = fs.ls(full_path, detail=False)
+                        result = self.fs_config.ls(path, detail=False)
                     elif command == 'mkdir':
-                        fs.makedirs(full_path, exist_ok=True)
-                        result = f"Directory created: {full_path}"
+                        self.fs_config.makedirs(path, exist_ok=True)
+                        result = f"Directory created: {path}"
                     elif command == 'rm':
-                        fs.rm(full_path, recursive=True)
-                        result = f"Removed: {full_path}"
+                        self.fs_config.rm(path, recursive=True)
+                        result = f"Removed: {path}"
                     else:
                         raise ValueError(f"Unsupported command: {command}")
 
@@ -98,6 +96,7 @@ Performs filesystem operations using `fsspec`, simulating basic shell commands:
                     )
                     self.model.ret.result = str(e)
 
+                self.model.param.user = None
                 return self.model
 
         def to_stop(self):

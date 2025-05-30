@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 # Application imports
+from CustomTask.rjson import PEMFileReader, SimpleRSAChunkEncryptor
 from Task.Basic import (
     ServiceOrientedArchitecture,
     AppInterface, 
@@ -256,7 +257,12 @@ class CeleryTask(BasicCeleryTask):
 
 ########################################################
 conf = AppConfig()
-USER_DB = UsersStore()
+ENCRYPPR=None
+ENCRYPPR=SimpleRSAChunkEncryptor(
+                public_key=PEMFileReader('../tmp/public_key.pem').load_public_pkcs8_key(),
+                private_key=PEMFileReader('../tmp/private_key.pem').load_private_pkcs8_key()
+            )
+USER_DB = UsersStore(encryptor=ENCRYPPR)
 print(conf.validate_backend().model_dump())
 
 if conf.app_backend=='redis':

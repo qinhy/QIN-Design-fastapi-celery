@@ -345,6 +345,7 @@ class AppInterface(PubSubInterface):
         
     def listen_data_of_task(self, task_id, data_callback=lambda data: data, eternal=False):
         return self.subscribe(task_id,data_callback,eternal)
+    
     def _decompress_str(self, compressed_b64: Optional[str]) -> str:
         if compressed_b64 is None:
             raise ValueError("Decompression failed: input is None.")
@@ -411,6 +412,7 @@ function decode_func(compressedB64) {
     }
 }
 """
+    
     def _compress_str(self, content: Optional[str]) -> str:
         if content is None:
             raise ValueError("Compression failed: input is None.")
