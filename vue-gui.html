@@ -183,6 +183,15 @@
                         <span v-else>Save File System Config</span>
                     </p-button>
                 </form>
+                
+                <!-- File System Simple browser -->
+                <div>
+                  <h2 class="text-xl font-bold mt-6 mb-4">File Browser</h2>
+                  <p-tree :value="fileTreeNodes"
+                    @node-expand="onNodeExpand"
+                    loadingMode="icon"
+                  />
+                </div>
             </div>
         </p-tabpanel>
 
@@ -317,6 +326,9 @@
             this.authToken = null;
         }
 
+        // async waitTask(task_id){
+        // }
+
         // Helper to set authentication token
         setAuthToken(token) {this.authToken = token;}
         
@@ -398,7 +410,10 @@
         // Get Current User Info
         async getCurrentUser() { return this.request("/auth/me"); }
         // Read Session
-        async readSession() { return this.request("/auth/session"); }
+        async readSession() { return this.request("/auth/session"); }        
+        // ls
+        async ls(path) { return this.request(`/ls?path=${path}`); }
+
         // Get OTP QR Code
         async getOtpQr() {
             const response = await fetch(`/auth/otp/qr`);
@@ -422,6 +437,7 @@
             if (!response.ok) throw new Error("Failed to fetch icon");
             return response.blob();
         }
+
         // Logout
         async logout() {
             const response = await this.request("/auth/logout", "GET");
@@ -614,6 +630,110 @@
               loading.value = false;
           }
       }
+
+      const fileTreeNodes = ref([]);
+
+      // Helper: Safely join paths
+      function joinPath(parent, name) {
+        return parent.endsWith('/') ? parent + name : `${parent}/${name}`;
+      }
+
+      // Helper: Build children nodes from API response
+      function getIcon(entry) {
+        if (entry.isDir) {
+          return 'pi pi-fw pi-folder';
+        }
+        // Simple filetype detection (add more as you like)
+        const ext = entry.name.split('.').pop().toLowerCase();
+        if (['jpg', 'png', 'gif', 'jpeg', 'bmp', 'svg'].includes(ext)) {
+          return 'pi pi-fw pi-image';
+        }
+        if (['txt', 'md', 'log'].includes(ext)) {
+          return 'pi pi-fw pi-file';
+        }
+        if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
+          return 'pi pi-fw pi-inbox';
+        }
+        if (['js', 'ts', 'json', 'html', 'css', 'vue'].includes(ext)) {
+          return 'pi pi-fw pi-code';
+        }
+        // Fallback
+        return 'pi pi-fw pi-file';
+      }
+
+      function buildChildren(entries) {
+        return entries.map(entry => ({
+          key: entry.name,
+          label: entry.name.split('/').pop(),
+          leaf: !entry.isDir,
+          loading: false,
+          icon: getIcon(entry),
+        }));
+      }
+
+      // Helper: Recursively update a node by key
+      function updateNodeByKey(list, key, updateFn) {
+        for (let i = 0; i < list.length; i++) {
+          if (list[i].key === key) {
+            list[i] = updateFn(list[i]);
+            return true;
+          }
+          if (Array.isArray(list[i].children)) {
+            if (updateNodeByKey(list[i].children, key, updateFn)) return true;
+          }
+        }
+        return false;
+      }
+
+      // Expand a node, loading children if needed
+      async function onNodeExpand(node) {
+        if (node.children?.length) return; // Already loaded
+
+        // Mark node as loading in tree (reactive)
+        updateNodeByKey(fileTreeNodes.value, node.key, n => ({ ...n, loading: true }));
+
+        try {
+          const entries = await api.ls(node.key);
+          const children = buildChildren(entries);
+
+          updateNodeByKey(fileTreeNodes.value, node.key, n => ({
+            ...n,
+            children,
+            loading: false
+          }));
+        } catch (err) {
+          console.error(`Failed to list ${node.key}:`, err);
+          updateNodeByKey(fileTreeNodes.value, node.key, n => ({ ...n, loading: false }));
+        }
+      }
+
+      // Initial root node loader
+      async function loadRoot() {
+        const rootNode = {
+          key: '/',
+          label: '/',
+          leaf: false,
+          loading: true,
+          children: []
+        };
+        fileTreeNodes.value = [rootNode];
+
+        try {
+          const entries = await api.ls('/');
+          fileTreeNodes.value = [{
+            ...rootNode,
+            children: buildChildren(entries),
+            loading: false
+          }];
+        } catch (err) {
+          console.error('Failed to list /:', err);
+          fileTreeNodes.value = [{ ...rootNode, loading: false }];
+        }
+      }
+
+      // Call once on mount/init
+      loadRoot();
+
       return {
                 // Pagination
                 page,
@@ -659,6 +779,8 @@
                 //
                 saveFileSystemConfig,
                 fileSystem,
+                fileTreeNodes,
+                onNodeExpand,
       };
     }
   });

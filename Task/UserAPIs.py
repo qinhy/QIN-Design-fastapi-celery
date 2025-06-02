@@ -22,13 +22,9 @@ import pyotp
 import qrcode
 
 #######################################################################################
-class UserModels:    
-    class User(Model4User.User):
-        pass
-        # username: str
-        # full_name: str
-        # email: EmailStr
-        # hashed_password: str
+class UserModels:  
+    class FileSystem(FileSystem):
+        pass  
         # file_system : 
                 # protocol: str
                 # host: Optional[str]
@@ -38,6 +34,13 @@ class UserModels:
                 # bucket: Optional[str]
                 # root_path: Optional[str]
                 # options: Optional[Dict[str, Any]]
+    class User(Model4User.User):
+        pass
+        # username: str
+        # full_name: str
+        # email: EmailStr
+        # hashed_password: str
+        # file_system : file_system
         # role: UserRole
         # disabled: bool
         # salt: str

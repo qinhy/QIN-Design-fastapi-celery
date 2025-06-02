@@ -1,12 +1,13 @@
 import threading
-import urllib.request
-import urllib.error
 import os
 from typing import Optional
 from pydantic import BaseModel, Field
 import redis
+import requests
+
 try:
     from Task.Basic import ServiceOrientedArchitecture
+    from Task.UserModel import FileSystem
     from .utils import FileInputHelper
 except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
@@ -25,7 +26,7 @@ Optionally uploads downloaded files to Redis and removes local copies.
         pass
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Param(ServiceOrientedArchitecture.Model.Param):
             chunk_size: int = Field(8192, description="Size of each data chunk in bytes")
             redis_url: Optional[str] = Field(None, description="Redis connection URL, e.g., redis://localhost:6379/0, if provided, the file will be uploaded to Redis and deleted from local storage.")
 
@@ -121,22 +122,60 @@ Optionally uploads downloaded files to Redis and removes local copies.
                 except Exception as e:
                     self._handle_specific_exception(e, url, dest_path)
                 
+                if hasattr(self.model.param,'user'):
+                    self.model.param.user = None
                 return self.model
+            
+        def _fs(self)->FileSystem:
+            fs = FileSystem()
+            if hasattr(self.model.param,'user') and hasattr(self.model.param.user,'file_system'):
+                fs = self.model.param.user.file_system
+            return fs
 
-        def _download_file(self, url: str, path: str, chunk_size: int, stop_flag: threading.Event):
-            """Download a file from the given URL to the specified path."""
-            with urllib.request.urlopen(url, timeout=10) as response, open(path, 'wb') as out_file:
-                content_length = response.info().get("Content-Length")
-                total_size = int(content_length) if content_length else None
-                downloaded = 0
+        def _download_file(
+            self,
+            url: str,
+            path: str,
+            chunk_size: int,
+            stop_flag: threading.Event
+        ):
+            headers = {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/115.0 Safari/537.36"
+                )
+            }
+            try:
+                with requests.get(url, headers=headers, stream=True, timeout=10) as resp:
+                    resp.raise_for_status()
+                    total_size = (
+                        int(resp.headers.get("Content-Length", 0))
+                        if resp.headers.get("Content-Length")
+                        else None
+                    )
+                    downloaded = 0
 
-                while not stop_flag.is_set():
-                    chunk = response.read(chunk_size)
-                    if not chunk:
-                        break
-                    out_file.write(chunk)
-                    downloaded += len(chunk)
-                    self._report_progress(downloaded, total_size)
+                    with self._fs().open_for_write(path, "wb") as out_file:
+                        for chunk in resp.iter_content(chunk_size=chunk_size):
+                            if stop_flag.is_set():
+                                break
+                            if not chunk:
+                                break
+                            out_file.write(chunk)
+                            downloaded += len(chunk)
+                            self._report_progress(downloaded, total_size)
+
+            except requests.exceptions.HTTPError as e:
+                print(f"→ HTTPError {e.response.status_code}: {e.response.reason}")
+                print("→ Response headers:")
+                for k, v in e.response.headers.items():
+                    print(f"   {k}: {v}")
+                print("→ Partial response body (first 200 chars):")
+                print(e.response.text[:200])
+                raise
+            except Exception:
+                raise
 
         def _report_progress(self, downloaded: int, total_size: Optional[int]):
             """Report download progress to the task."""
@@ -179,25 +218,60 @@ Optionally uploads downloaded files to Redis and removes local copies.
             """Store a file in Redis."""
             self.log_and_send(f"Uploading file to Redis ({redis_key}) via {redis_url}")
             r = redis.from_url(redis_url)
-            with FileInputHelper.open(file_path, "rb") as f:
+            with self._fs().open_for_read(file_path, "rb") as f:
                 data = f.read()
                 r.set(redis_key, data)
             self.send_data_to_task({"INFO": f"File uploaded to Redis with key: {redis_key}"})
 
-        def _handle_specific_exception(self, exception: Exception, url: str, dest_path: str):
+        def _handle_specific_exception(
+            self, exception: Exception, url: str, dest_path: str
+        ):
             """Handle specific exceptions with appropriate error messages."""
-            if isinstance(exception, urllib.error.HTTPError):
-                self.handle_exception(f"HTTP Error {exception.code}: {exception.reason} for URL: {url}")
-            elif isinstance(exception, urllib.error.URLError):
-                self.handle_exception(f"URL Error: {exception.reason} for URL: {url}")
+            # 1) requests’ HTTP errors (e.g. status codes 4xx/5xx)
+            if isinstance(exception, requests.exceptions.HTTPError):
+                # requests.exceptions.HTTPError has a .response attribute
+                status_code = (
+                    exception.response.status_code
+                    if exception.response is not None
+                    else "?"
+                )
+                reason = (
+                    exception.response.reason
+                    if exception.response is not None
+                    else str(exception)
+                )
+                self.handle_exception(
+                    f"HTTP Error {status_code}: {reason} for URL: {url}"
+                )
+
+            # 2) Any other requests‐level error (ConnectionError, Timeout, etc.)
+            elif isinstance(exception, requests.exceptions.RequestException):
+                # .args or str(exception) will capture the underlying message
+                self.handle_exception(
+                    f"Request Error: {str(exception)} for URL: {url}"
+                )
+
+            # 3) Filesystem errors
             elif isinstance(exception, FileNotFoundError):
-                self.handle_exception(f"Destination path '{dest_path}' is invalid or unwritable.")
+                self.handle_exception(
+                    f"Destination path '{dest_path}' is invalid or unwritable."
+                )
             elif isinstance(exception, PermissionError):
-                self.handle_exception(f"Permission denied when writing to '{dest_path}'.")
+                self.handle_exception(
+                    f"Permission denied when writing to '{dest_path}'."
+                )
+
+            # 4) Redis errors (if you’re caching or storing metadata)
             elif isinstance(exception, redis.RedisError):
                 self.handle_exception(f"Redis error: {str(exception)}")
+
+            # 5) Any other OS‐level error
             elif isinstance(exception, OSError):
-                self.handle_exception(f"OS Error: {exception.strerror} at '{dest_path}'")
+                # OSError.strerror can be None in some cases; fall back to str(exception)
+                errmsg = exception.strerror if exception.strerror else str(exception)
+                self.handle_exception(f"OS Error: {errmsg} at '{dest_path}'")
+
+            # 6) Anything else
             else:
                 self.handle_exception(f"Unexpected error: {str(exception)}")
 

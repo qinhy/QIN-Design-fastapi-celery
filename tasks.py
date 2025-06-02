@@ -1,10 +1,10 @@
 # Standard library imports
 from threading import Thread
 import time
-from typing import Literal, Union
+from typing import Any, Dict, List, Literal, Union
 
 # FastAPI imports
-from fastapi import Body, Depends, FastAPI, HTTPException
+from fastapi import Body, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
@@ -22,7 +22,7 @@ from Task.Basic import (
 from Task.BasicAPIs import BasicCeleryTask
 import CustomTask
 from Task.UserAPIs import AuthService, OAuthRoutes
-from Task.UserModel import UsersStore
+from Task.UserModel import Model4User, UsersStore
 from config import *
 
 TaskNames = [i for i in CustomTask.__dir__() if '_' not in i]
@@ -329,7 +329,17 @@ def get_file(file='vue-gui.html'):
                 pass
     raise HTTPException(status_code=404, detail="file not found")
 
-my_app.add_web_api(lambda:get_file(),'get','/myapi/gui/').reload_routes()
+def ls_file(path:str='/',request:Request=None)-> Union[List[str], List[Dict[str, Any]]]:
+    try:
+        user:Model4User.User = request.state.user
+        fs = user.file_system
+        return fs.ls(path,True)
+    except Exception as e:
+        return [f'{e}']
+
+
+my_app.add_web_api(lambda:get_file(),'get','/myapi/gui').reload_routes()
+my_app.add_web_api(ls_file,'get','/ls', deps=True).reload_routes()
 my_app.add_web_api(lambda:get_file('icon.png'),'get','/favicon.ico').reload_routes()
 
 

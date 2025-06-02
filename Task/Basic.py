@@ -24,7 +24,7 @@ import redis
 import requests
 from pydantic import BaseModel, Field, PrivateAttr
 
-from .UserModel import User
+from .UserAPIs import Model4User
 
 try:
     from ..Storages import EventDispatcherController, PythonDictStorage
@@ -1021,7 +1021,7 @@ class ServiceOrientedArchitecture:
                 return f'_v{self.major}{self.minor}{self.patch}_'
 
         class Param(BaseModel):
-            user: Optional[User] = Field(None, description="User object")
+            user: Optional[Model4User.User] = Field(None, description="User object")
             
         class Args(BaseModel):
             pass

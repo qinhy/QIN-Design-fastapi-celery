@@ -729,7 +729,7 @@ class BasicCeleryTask:
         return workers
 
     ############################# general function
-    def api_perform_action_list(self,format:Literal['mcp','openai']='mcp'):
+    def api_perform_action_list(self,format:Literal['mcp','openai','json']='mcp'):
         """Returns a mcp tool list of all available actions that can be performed."""
         self.api_ok()
         if format == 'mcp':
