@@ -1,20 +1,13 @@
+from datetime import datetime, timedelta, timezone
 import base64
-from datetime import datetime, timezone
 import hashlib
 import json
 import os
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, IO, List, Literal, Optional, Union
 import uuid
 import fsspec
-from pydantic import BaseModel, Field, EmailStr, field_validator
-
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Dict, Literal, Optional, Union, IO
-
-import fsspec
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 #
@@ -907,7 +900,6 @@ class User(BaseModel):
     def is_active(self) -> bool:
         return not self.disabled
 
-    # --- Representation ---
     def model_dump_exclude_sensitive(self, level=0):
         """Hide sensitive fields unless explicitly requested."""
         sensitive_fields = [
@@ -1002,6 +994,27 @@ class Model4User:
         def gen_new_id(self) -> str:
             return self.generate_user_id(self.email)
         
+        def _utc(days=50000):
+            utc_now = datetime.now(timezone.utc)
+            future_offset = timedelta(days=days)
+            future_utc = utc_now + future_offset
+            return future_utc
+
+        def wipe_sensitive_field(self, level=0):
+            """Hide sensitive fields unless explicitly requested."""
+            self.hashed_password = ""
+            self.salt = ""
+            
+            if level==1:
+                self.rank = [0]
+                self.status = ""
+            if level==2:            
+                self.username = ""
+                self.full_name = ""            
+                self.create_time = self._utc()
+                self.update_time = self._utc()
+                self.auto_del = False
+
         _controller: Controller4User.UserController = None
         def get_controller(self)->Controller4User.UserController: return self._controller
         def init_controller(self,store):self._controller = Controller4User.UserController(store,self)

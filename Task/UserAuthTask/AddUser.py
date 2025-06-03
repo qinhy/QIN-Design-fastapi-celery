@@ -2,24 +2,20 @@ import threading
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
 from Task.Basic import ServiceOrientedArchitecture
+from Task.UserAuthTask.UserBaseTask import UserBaseTask
 from Task.UserModel import Model4User, UsersStore
 
-class RegisterUser(ServiceOrientedArchitecture):
+class AddUser(UserBaseTask):
     @classmethod
     def description(cls):
         return """
-
         """
 
-    class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):
-        pass
+    class Model(UserBaseTask.Model):
 
-    class Model(ServiceOrientedArchitecture.Model):
+        class Param(UserBaseTask.Model.Param):
+            pass        
         
-        class Param(BaseModel):
-            backend: Literal["redis", "file", "mongo"] = "redis"
-            backend_url: str = "redis://localhost:6379"
-
         class Args(BaseModel):            
             username: str
             full_name: str
@@ -32,10 +28,10 @@ class RegisterUser(ServiceOrientedArchitecture):
         class Return(Model4User.User):
             pass
 
-        class Logger(ServiceOrientedArchitecture.Model.Logger):
+        class Logger(UserBaseTask.Model.Logger):
             pass        
 
-        class Version(ServiceOrientedArchitecture.Model.Version):
+        class Version(UserBaseTask.Model.Version):
             pass
 
         @staticmethod
@@ -48,17 +44,11 @@ class RegisterUser(ServiceOrientedArchitecture):
         ret:Optional[Return] = Return()
         logger: Logger = Logger(name=Version().class_name)
 
-    class Action(ServiceOrientedArchitecture.Action):
+    class Action(UserBaseTask.Action):
         def __init__(self, model, BasicApp, level=None):
             super().__init__(model, BasicApp, level)
-            self.model:RegisterUser.Model = self.model
-            self.db = UsersStore(encryptor=None)
-            if self.model.param.backend == "redis":
-                self.db.redis_backend(redis_URL=self.model.param.backend_url)
-            elif self.model.param.backend == "file":
-                self.db.file_backend(file_path=self.model.param.backend_url)
-            elif self.model.param.backend == "mongo":
-                self.db.mongo_backend(mongo_URL=self.model.param.backend_url)
+            self.model:AddUser.Model = self.model
+            self.db:UsersStore = self.db
             
         def __call__(self, *args, **kwargs):
             with self.listen_stop_flag() as stop_flag:
@@ -74,21 +64,10 @@ class RegisterUser(ServiceOrientedArchitecture):
                             'user',
                             self.model.args.rank,
                             {})
-                            
+
+            self.model.ret.wipe_sensitive_field()
             return self.model
-
-        def to_stop(self):
-            self.log_and_send("Stop flag detected.", RegisterUser.Levels.WARNING)
-            self.model.ret.n = 0
-            return self.model
-
-        def log_and_send(self, message, level=None):
-            if level is None:
-                level = self.logger.level
-            self.logger.log(level, message)
-            self.send_data_to_task({level: message})
-
 
 if __name__ == "__main__":
     import json
-    print(json.dumps(RegisterUser.as_mcp_tool(), indent=4))
+    print(json.dumps(AddUser.as_mcp_tool(), indent=4))
