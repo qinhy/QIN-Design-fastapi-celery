@@ -831,6 +831,10 @@ class User(BaseModel):
         description="Remote File System configuration, designed for use with fsspec-compatible backends.",
     )
 
+    file_systems : Optional[List[FileSystem]] = Field([],
+        description="Remote File System configurations",
+    )
+
     role: str = Field(default=UserRole.user,example="user",
         description="The role assigned to the user, determining permissions.",
     )

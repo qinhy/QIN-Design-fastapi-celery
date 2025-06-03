@@ -1,3 +1,4 @@
+import os
 import threading
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
@@ -7,21 +8,13 @@ from Task.UserModel import Model4User, UsersStore
 class UserBaseTask(ServiceOrientedArchitecture):
     @classmethod
     def description(cls):
-        return """
-
-        """
+        return ""
 
     class Levels(ServiceOrientedArchitecture.Model.Logger.Levels):
         pass
 
     class Model(ServiceOrientedArchitecture.Model):
         
-        class Param(BaseModel):
-            backend: Literal["redis", "file", "mongo"] = "redis"
-            backend_url: str = "redis://localhost:6379"
-            pub_key_path: Optional[str] = None
-            priv_key_path: Optional[str] = None
-
         class Args(BaseModel):
             pass
 
@@ -39,9 +32,8 @@ class UserBaseTask(ServiceOrientedArchitecture):
             return []
             
         version:Version = Version()
-        param:Param = Param()
         args:Args
-        ret:Optional[Return] = Return()
+        ret:Optional[Return] = None
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -51,34 +43,38 @@ class UserBaseTask(ServiceOrientedArchitecture):
             self._prepare_db()
         
         def _prepare_db(self):        
+            
+            backend: Literal["redis", "file", "mongo"] = os.environ['APP_BACK_END']
+            pub_key_path: Optional[str] = None
+            priv_key_path: Optional[str] = None
+
             self.db = UsersStore(encryptor=None)
-            if "redis" in self.model.param.backend:
-                self.db.redis_backend(redis_URL=self.model.param.backend_url)
-            elif "file" in self.model.param.backend:
-                self.db.file_backend(file_path=self.model.param.backend_url)
-            elif "mongo" in self.model.param.backend:
-                self.db.mongo_backend(mongo_URL=self.model.param.backend_url)
+            if "redis" in backend:
+                backend_url: str = os.environ['REDIS_URL']
+                self.db.redis_backend(redis_URL=backend_url)
+            elif "file" in backend:
+                backend_url: str = os.environ['FILE_DIR']
+                self.db.file_backend(file_path=backend_url)
+            elif "mongo" in backend:
+                backend_url: str = os.environ['MONGO_URL']
+                self.db.mongo_backend(mongo_URL=backend_url)
+
+        def forward(self):
+            raise NotImplementedError
             
         def __call__(self, *args, **kwargs):
             with self.listen_stop_flag() as stop_flag:
                 if stop_flag.is_set():
                     return self.to_stop()
-
-                self.log_and_send("Registering user...")
-                self.db.add_new_user(
-                            self.model.args.username,
-                            self.model.args.password,
-                            self.model.args.full_name, 
-                            self.model.args.email,
-                            'user',
-                            self.model.args.rank,
-                            {})
+                    
+                # execute the action
+                self.forward()
                             
             return self.model
 
         def to_stop(self):
             self.log_and_send("Stop flag detected.", UserBaseTask.Levels.WARNING)
-            self.model.ret.n = 0
+            self.model.ret = None
             return self.model
 
         def log_and_send(self, message, level=None):

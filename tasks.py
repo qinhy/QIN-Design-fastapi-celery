@@ -25,6 +25,8 @@ from Task.UserAPIs import AuthService, OAuthRoutes
 from Task.UserModel import Model4User, UsersStore
 from config import *
 
+from Task.UserAuthTask import AddUser
+
 TaskNames = [i for i in CustomTask.__dir__() if '_' not in i]
 TaskClass = [CustomTask.__dict__[i] for i in CustomTask.__dir__() if '_' not in i]
 
@@ -40,6 +42,11 @@ TaskParentClass = [get_first_non_object_base(cls) if isinstance(cls, type) else 
 ValidTask = ['ServiceOrientedArchitecture' in str(i) for i in TaskParentClass]
 ACTION_REGISTRY={k:v for k,v,i in zip(TaskNames,TaskClass,ValidTask) if i}
 
+ACTION_REGISTRY = {}
+ACTION_REGISTRY.update({
+    'AddUser':AddUser,
+})
+print(ACTION_REGISTRY)
 class CeleryTask(BasicCeleryTask):
     def __init__(self, BasicApp, celery_app, root_fast_app:FastAPI,
                  dependencies: list = [],
