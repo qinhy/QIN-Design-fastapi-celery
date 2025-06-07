@@ -34,7 +34,9 @@ pillow
 
 # Data Processing
 numpy
-
+python-jose
+pyotp
+qrcode
 fsspec
 
 #### these are for web browser
