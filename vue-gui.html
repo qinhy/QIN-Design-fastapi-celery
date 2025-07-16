@@ -329,6 +329,20 @@
         // async waitTask(task_id){
         // }
 
+        async get_schema(schema_name){
+          const response = await fetch('/openapi.json');
+          if (!response.ok) {
+            throw new Error('Failed to fetch OpenAPI schema');
+          }
+          const openapi = await response.json();    
+          const schemas = openapi.components.schemas;
+          const schema = schemas[schema_name];
+          if (!schema) {
+            throw new Error('schema not found');
+          }
+          return schema;
+        }
+
         // Helper to set authentication token
         setAuthToken(token) {this.authToken = token;}
         
@@ -447,7 +461,7 @@
     }
 
 
-
+  
   const app = createApp({
     setup() {
 
@@ -467,6 +481,7 @@
 
       // Tasks
       const api = new APIClient();
+      window.api = api;
       const tasks = ref([]);
       const taskOptions = ref([]);
       const selectedTaskId = ref(null);
@@ -557,18 +572,14 @@
       const loginForm = ref({ username: '', password: '', otp: '', });
       const useOtp = ref(false);
       const passwordVisible = ref(false);
-      const otpQr = ref('/favicon.ico');      
-      const fileSystem = ref({
-          protocol: 'file',
-          host: '',
-          port: null,
-          username: '',
-          password: '',
-          bucket: '',
-          root_path: '',
-          options: '{}'  // Stored as JSON string for gui
-      });
-
+      const otpQr = ref('/favicon.ico'); 
+      const fileSystem = ref({});
+      api.get_schema('FileSystem').then(
+        sc=>{
+          fileSystem.value = Object.fromEntries(
+              Object.entries(sc.properties).map(([key, _]) => [key, ""]));
+        }
+      );
 
       const getUserdata = async () => {
         const data = await api.getCurrentUser();
@@ -579,6 +590,7 @@
         await reflesh_tabs();
         otpQr.value = '/auth/otp/qr';
       }
+      
       const loginUser = async () => {
           loading.value = true;
           try {
@@ -591,6 +603,7 @@
             loading.value = false;
           }
       }
+      
       getUserdata();
 
       const editUserInfo = async () => {
@@ -618,6 +631,7 @@
       };
 
       const registerForm = ref({ username: '', full_name: '', email: '', password: '', invite_code: '', });
+      
       const registerUser = async () => {
           loading.value = true;
           try {
