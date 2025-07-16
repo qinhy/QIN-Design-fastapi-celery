@@ -17,7 +17,6 @@ from fastapi.routing import APIRoute
 
 # Application imports
 from Task.Basic import AppInterface, ServiceOrientedArchitecture, SmartModelConverter, TaskModel
-from Task.UserModel import Model4User
 
 # Common execution time parameter for API endpoints
 EXECUTION_TIME_PARAM = Query(
@@ -766,7 +765,7 @@ class BasicCeleryTask:
         d.update(data)
 
         if hasattr(request.state,'user'):
-            user:Model4User.User = request.state.user
+            user = request.state.user
             d['param']['user'] = user.model_dump_exclude_sensitive(1)
             
             # del d['param']['user']['rank']

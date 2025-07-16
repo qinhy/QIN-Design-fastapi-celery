@@ -7,11 +7,15 @@ from contextlib import contextmanager
 import celery.states
 
 try:
-    from Task.UserModel import User
     from .utils import FileInputHelper
 except:
-    from UserModel import User
     from utils import FileInputHelper
+
+User = None
+try:
+    from Task.UserModel import User
+except:
+    from UserModel import User
 
 class ServiceOrientedArchitecture:
     BasicApp:Any = None

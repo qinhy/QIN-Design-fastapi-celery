@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 try:
     from Task.Basic import ServiceOrientedArchitecture
     from .utils import FileInputHelper
-    from Task.UserModel import User,FileSystem
+    from Task.FileSystem import FileSystem
 except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
     from utils import FileInputHelper
@@ -59,11 +59,11 @@ Performs filesystem operations using `fsspec`, simulating basic shell commands:
         def __init__(self, model, BasicApp, level=None):
             super().__init__(model, BasicApp, level)
             self.model: FSSpecShell.Model = self.model
-            self.user:User = self.model.param.user
             self.fs_config = FileSystem()
 
-            if self.user and self.user.file_system:
-                self.fs_config = self.user.file_system
+            # self.user:User = self.model.param.user
+            # if self.user and self.user.file_system:
+            #     self.fs_config = self.user.file_system
                 
 
         def __call__(self, *args, **kwargs):

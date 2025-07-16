@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 # Application imports
-from CustomTask.rjson import PEMFileReader, SimpleRSAChunkEncryptor
+
 from Task.Basic import (
     ServiceOrientedArchitecture,
     AppInterface, 
@@ -21,11 +21,7 @@ from Task.Basic import (
 )
 from Task.BasicAPIs import BasicCeleryTask
 import CustomTask
-from Task.UserAPIs import AuthService, OAuthRoutes
-from Task.UserModel import Model4User, UsersStore
 from config import *
-
-from Task.UserAuthTask import AddUser
 
 TaskNames = [i for i in CustomTask.__dir__() if '_' not in i]
 TaskClass = [CustomTask.__dict__[i] for i in CustomTask.__dir__() if '_' not in i]
@@ -46,7 +42,7 @@ ACTION_REGISTRY = {}
 ACTION_REGISTRY.update({
     'AddUser':AddUser,
 })
-print(ACTION_REGISTRY)
+
 class CeleryTask(BasicCeleryTask):
     def __init__(self, BasicApp, celery_app, root_fast_app:FastAPI,
                  dependencies: list = [],
@@ -264,32 +260,20 @@ class CeleryTask(BasicCeleryTask):
 
 ########################################################
 conf = AppConfig()
-ENCRYPPR=None
-ENCRYPPR=SimpleRSAChunkEncryptor(
-                public_key=PEMFileReader('../tmp/public_key.pem').load_public_pkcs8_key(),
-                private_key=PEMFileReader('../tmp/private_key.pem').load_private_pkcs8_key()
-            )
-USER_DB = UsersStore(encryptor=ENCRYPPR)
-print(conf.validate_backend().model_dump())
-
 if conf.app_backend=='redis':
     BasicApp:AppInterface = RedisApp(conf.redis.url)
-    USER_DB.redis_backend(redis_URL=conf.redis.url)
     
 elif conf.app_backend=='file':
     BasicApp:AppInterface = FileSystemApp(conf.file.url)
-    USER_DB.file_backend(conf.file.url)
     
 elif conf.app_backend=='mongodbrabbitmq':
     BasicApp:AppInterface = RabbitmqMongoApp(conf.rabbitmq.url,
                             conf.rabbitmq.user,conf.rabbitmq.password,
                             conf.mongo.url,conf.mongo.db,conf.celery.meta_table,
                             conf.celery.broker)
-    USER_DB.mongo_backend(conf.mongo.url)
 else:
     raise ValueError(f'no back end of {conf.app_backend}')
 
-auth_service = AuthService(USER_DB)
 celery_app = BasicApp.get_celery_app()
 
 api = FastAPI()
@@ -302,52 +286,73 @@ api.add_middleware(
 api.add_middleware(SessionMiddleware,
                     secret_key=conf.secret_key, max_age=conf.session_duration)
 
-my_app = CeleryTask(BasicApp,celery_app,api,
-                dependencies=[Depends(auth_service.get_current_user)])
+def get_auth_service():
+    from Task.UserAPIs import AuthService, OAuthRoutes
+    from Task.UserModel import Model4User, UsersStore
+    from CustomTask.rjson import PEMFileReader, SimpleRSAChunkEncryptor
+    from Task.UserAuthTask import AddUser
+    ENCRYPPR=None
+    ENCRYPPR=SimpleRSAChunkEncryptor(
+                    public_key=PEMFileReader('../tmp/public_key.pem').load_public_pkcs8_key(),
+                    private_key=PEMFileReader('../tmp/private_key.pem').load_private_pkcs8_key()
+                )
+    USER_DB = UsersStore(encryptor=ENCRYPPR)
+    if conf.app_backend=='redis':
+        USER_DB.redis_backend(redis_URL=conf.redis.url)    
+    elif conf.app_backend=='file':
+        USER_DB.file_backend(conf.file.url)    
+    elif conf.app_backend=='mongodbrabbitmq':
+        USER_DB.mongo_backend(conf.mongo.url)
+    else:
+        raise ValueError(f'no back end of {conf.app_backend}')
+    auth_service = AuthService(USER_DB)
+    ## add auth api
+    auth_router = OAuthRoutes(auth_service)
+    auth_service.add_new_user(username='root',password='root',
+            full_name='root',email='root@root.com',role='root')
+    api.include_router(auth_router.router, prefix="/auth", tags=["users"])
+    return auth_service
 
-## add auth api
-auth_router = OAuthRoutes(auth_service)
-auth_service.add_new_user(username='root',password='root',
-        full_name='root',email='root@root.com',role='root')
-api.include_router(auth_router.router, prefix="/auth", tags=["users"])
+def build_my_app(dependencies=[]):
+    my_app = CeleryTask(BasicApp,celery_app,api,
+                    dependencies=dependencies)
 
-## add original api
-from CustomTask import Fibonacci
-def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
-    m = Fibonacci.Model()
-    m.param = Fibonacci.Model.Param(mode=mode)
-    m.args = Fibonacci.Model.Args(n=n)
-    return my_app.api_perform_action('Fibonacci', m.model_dump(),0)
 
-my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
+    ## add original api
+    from CustomTask import Fibonacci
+    def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
+        m = Fibonacci.Model()
+        m.param = Fibonacci.Model.Param(mode=mode)
+        m.args = Fibonacci.Model.Args(n=n)
+        return my_app.api_perform_action('Fibonacci', m.model_dump(),0)
 
-from CustomTask import TaskDAGRunner
-def my_mermaid_editor():
-    return HTMLResponse(content=TaskDAGRunner.MermaidEditorHtml)
+    my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
 
-my_app.add_web_api(my_mermaid_editor,'get','/myapi/mermaideditor/').reload_routes()
+    from CustomTask import TaskDAGRunner
+    def my_mermaid_editor():
+        return HTMLResponse(content=TaskDAGRunner.MermaidEditorHtml)
 
-def get_file(file='vue-gui.html'):
-    for  f in [f'./{file}',f'../{file}']:
+    my_app.add_web_api(my_mermaid_editor,'get','/myapi/mermaideditor/').reload_routes()
+
+    def get_file(file='vue-gui.html'):
+        for  f in [f'./{file}',f'../{file}']:
+            try:
+                with open(f, 'r') as ff:pass
+                return FileResponse(f)
+            except FileNotFoundError:
+                    pass
+        raise HTTPException(status_code=404, detail="file not found")
+        
+    my_app.add_web_api(lambda:get_file(),'get','/myapi/gui').reload_routes()
+    my_app.add_web_api(lambda:get_file('icon.png'),'get','/favicon.ico').reload_routes()
+
+    def ls_file(path:str='/',request:Request=None)-> Union[List[str], List[Dict[str, Any]]]:
         try:
-            with open(f, 'r') as ff:pass
-            return FileResponse(f)
-        except FileNotFoundError:
-                pass
-    raise HTTPException(status_code=404, detail="file not found")
+            user = request.state.user
+            fs = user.file_system
+            return fs.ls(path,True)
+        except Exception as e:
+            return [f'{e}']
+    my_app.add_web_api(ls_file,'get','/ls', deps=True).reload_routes()
 
-def ls_file(path:str='/',request:Request=None)-> Union[List[str], List[Dict[str, Any]]]:
-    try:
-        user:Model4User.User = request.state.user
-        fs = user.file_system
-        return fs.ls(path,True)
-    except Exception as e:
-        return [f'{e}']
-
-
-my_app.add_web_api(lambda:get_file(),'get','/myapi/gui').reload_routes()
-my_app.add_web_api(ls_file,'get','/ls', deps=True).reload_routes()
-my_app.add_web_api(lambda:get_file('icon.png'),'get','/favicon.ico').reload_routes()
-
-
-
+build_my_app([Depends(get_auth_service().get_current_user)])
