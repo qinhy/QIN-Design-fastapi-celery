@@ -1,12 +1,12 @@
 # Standard library imports
 from threading import Thread
 import time
-from typing import Literal, Union
+from typing import Any, Dict, List, Literal, Union
 
 # FastAPI imports
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 # Application imports
@@ -39,12 +39,13 @@ ACTION_REGISTRY={k:v for k,v,i in zip(TaskNames,TaskClass,ValidTask) if i}
 
 class CeleryTask(BasicCeleryTask):
     def __init__(self, BasicApp, celery_app, root_fast_app:FastAPI,
+                 dependencies: list = [],
                  ACTION_REGISTRY:dict[str,any]=ACTION_REGISTRY):
-        super().__init__(BasicApp, celery_app, root_fast_app, ACTION_REGISTRY)
-
-        self.router.post("/pipeline/add")(self.api_add_pipeline)
-        self.router.post("/pipeline/config")(self.api_set_config_pipeline)
-        self.router.get("/pipeline/config/{name}")(self.api_get_config_pipeline)
+        super().__init__(BasicApp, celery_app, root_fast_app, dependencies, ACTION_REGISTRY)
+        
+        self.add_web_api(self.api_add_pipeline, "post", "/pipeline/add", deps=True)
+        self.add_web_api(self.api_set_config_pipeline, "post", "/pipeline/config", deps=True)
+        self.add_web_api(self.api_get_config_pipeline, "get", "/pipeline/config/{name}", deps=True)
 
     def create_api_pipeline_handler(self,name: str,pipeline: list[str]):        
         ACTION_REGISTRY:dict[str,ServiceOrientedArchitecture]=self.ACTION_REGISTRY
@@ -254,18 +255,6 @@ class CeleryTask(BasicCeleryTask):
 ########################################################
 conf = AppConfig()
 print(conf.validate_backend().model_dump())
-api = FastAPI()
-
-api.add_middleware(
-    CORSMiddleware,
-    allow_origins=['*',],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-api.add_middleware(SessionMiddleware,
-                    secret_key=conf.secret_key, max_age=conf.session_duration)
-
 
 if conf.app_backend=='redis':
     BasicApp:AppInterface = RedisApp(conf.redis.url)
@@ -274,21 +263,34 @@ elif conf.app_backend=='file':
     BasicApp:AppInterface = FileSystemApp(conf.file.url)
     
 elif conf.app_backend=='mongodbrabbitmq':
-    BasicApp:AppInterface = RabbitmqMongoApp(conf.rabbitmq.url,conf.rabbitmq.user,conf.rabbitmq.password,
-                                             conf.mongo.url,conf.mongo.db,conf.celery.meta_table,
-                                             conf.celery.broker)
+    BasicApp:AppInterface = RabbitmqMongoApp(conf.rabbitmq.url,
+                            conf.rabbitmq.user,conf.rabbitmq.password,
+                            conf.mongo.url,conf.mongo.db,conf.celery.meta_table,
+                            conf.celery.broker)
 else:
     raise ValueError(f'no back end of {conf.app_backend}')
 
 celery_app = BasicApp.get_celery_app()
-my_app = CeleryTask(BasicApp,celery_app,api)
+
+api = FastAPI()
+api.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*',],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],)
+api.add_middleware(SessionMiddleware,
+                    secret_key=conf.secret_key, max_age=conf.session_duration)
+
+my_app = CeleryTask(BasicApp,celery_app,api,
+                dependencies=[])
 
 ## add original api
 from CustomTask import Fibonacci
 def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
     m = Fibonacci.Model()
-    m.param.mode = mode
-    m.args.n = n
+    m.param = Fibonacci.Model.Param(mode=mode)
+    m.args = Fibonacci.Model.Args(n=n)
     return my_app.api_perform_action('Fibonacci', m.model_dump(),0)
 
 my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
@@ -300,15 +302,14 @@ def my_mermaid_editor():
 
 my_app.add_web_api(my_mermaid_editor,'get','/myapi/mermaideditor/').reload_routes()
 
-def my_gui():
-    try:
-        with open('./vue-gui.html', 'r') as f:
-            return HTMLResponse(content=f.read())
-    except FileNotFoundError:
+def get_file(file='vue-gui.html'):
+    for  f in [f'./{file}',f'../{file}']:
         try:
-            with open('../vue-gui.html', 'r') as f:
-                return HTMLResponse(content=f.read())
+            with open(f, 'r') as ff:pass
+            return FileResponse(f)
         except FileNotFoundError:
-            raise HTTPException(status_code=404, detail="GUI template file not found")
+                pass
+    raise HTTPException(status_code=404, detail="file not found")
 
-my_app.add_web_api(my_gui,'get','/myapi/gui/').reload_routes()
+my_app.add_web_api(lambda:get_file(),'get','/myapi/gui').reload_routes()
+my_app.add_web_api(lambda:get_file('icon.png'),'get','/favicon.ico').reload_routes()

@@ -5,10 +5,10 @@ from pydantic import BaseModel, Field
 try:
     from Task.Basic import ServiceOrientedArchitecture
     from .utils import FileInputHelper
+    from Task.FileSystem import FileSystem
 except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
     from utils import FileInputHelper
-
 
 class FSSpecShell(ServiceOrientedArchitecture):
     @classmethod
@@ -24,10 +24,12 @@ Performs filesystem operations using `fsspec`, simulating basic shell commands:
         pass
 
     class Model(ServiceOrientedArchitecture.Model):
-        class Param(BaseModel):
-            command: Literal['ls', 'mkdir', 'rm'] = Field("ls", description="Filesystem command to execute")
+        class Param(ServiceOrientedArchitecture.Model.Param):
+            pass
 
         class Args(BaseModel):
+            command: Literal['ls', 'mkdir', 'rm'] = Field("ls", description="Filesystem command to execute")
+
             path: str = Field(".", description="Target path for the command")
 
         class Return(BaseModel):
@@ -42,9 +44,9 @@ Performs filesystem operations using `fsspec`, simulating basic shell commands:
         @staticmethod
         def examples():
             return [
-                {"param": {"command": "ls",}, "args": {"path": "."}},
-                {"param": {"command": "mkdir",}, "args": {"path": "./testdir"}},
-                {"param": {"command": "rm",}, "args": {"path": "./testdir"}}
+                { "args": {"command": "ls","path": "."}},
+                { "args": {"command": "mkdir","path": "./testdir"}},
+                { "args": {"command": "rm","path": "./testdir"}}
             ]
 
         version: Version = Version()
@@ -57,32 +59,44 @@ Performs filesystem operations using `fsspec`, simulating basic shell commands:
         def __init__(self, model, BasicApp, level=None):
             super().__init__(model, BasicApp, level)
             self.model: FSSpecShell.Model = self.model
+            self.fs_config = FileSystem()
+
+            # self.user:User = self.model.param.user
+            # if self.user and self.user.file_system:
+            #     self.fs_config = self.user.file_system
+                
 
         def __call__(self, *args, **kwargs):
             with self.listen_stop_flag() as stop_flag:
                 if stop_flag.is_set():
                     return self.to_stop()
 
-                command = self.model.param.command
+                command = self.model.args.command
                 path = self.model.args.path
-                fs, full_path = FileInputHelper.get_fsspec_from_env_and_path(path)
 
                 try:
+                    result = None
                     if command == 'ls':
-                        contents = fs.ls(full_path, detail=False)
-                        self.model.ret.result = contents
+                        result = self.fs_config.ls(path, detail=False)
                     elif command == 'mkdir':
-                        fs.makedirs(full_path, exist_ok=True)
-                        self.model.ret.result = f"Directory created: {full_path}"
+                        self.fs_config.makedirs(path, exist_ok=True)
+                        result = f"Directory created: {path}"
                     elif command == 'rm':
-                        fs.rm(full_path, recursive=True)
-                        self.model.ret.result = f"Removed: {full_path}"
+                        self.fs_config.rm(path, recursive=True)
+                        result = f"Removed: {path}"
                     else:
                         raise ValueError(f"Unsupported command: {command}")
+
+                    self.model.ret.result = result
+
                 except Exception as e:
-                    self.log_and_send(f"Error executing command '{command}' on '{path}': {e}", level=FSSpecShell.Levels.ERROR)
+                    self.log_and_send(
+                        f"Error executing command '{command}' on '{path}': {e}",
+                        level=FSSpecShell.Levels.ERROR
+                    )
                     self.model.ret.result = str(e)
 
+                self.model.param.user = None
                 return self.model
 
         def to_stop(self):
