@@ -280,9 +280,10 @@ api.add_middleware(
 api.add_middleware(SessionMiddleware,
                     secret_key=conf.secret_key, max_age=conf.session_duration)
 
-def build_my_app(dependencies=[]):
+def build_my_app(dependencies=[],ACTION_REGISTRY=ACTION_REGISTRY):
     my_app = CeleryTask(BasicApp,celery_app,api,
-                dependencies=dependencies)
+                    dependencies=dependencies,
+                    ACTION_REGISTRY=ACTION_REGISTRY)
 
     ## add original api
     from CustomTask import Fibonacci
@@ -311,6 +312,15 @@ def build_my_app(dependencies=[]):
         
     my_app.add_web_api(lambda:get_file(),'get','/myapi/gui').reload_routes()
     my_app.add_web_api(lambda:get_file('icon.png'),'get','/favicon.ico').reload_routes()
+
+    def ls_file(path:str='/',request:Request=None)-> Union[List[str], List[Dict[str, Any]]]:
+        try:
+            user = request.state.user
+            fs = user.file_system
+            return fs.ls(path,True)
+        except Exception as e:
+            return [f'{e}']
+    my_app.add_web_api(ls_file,'get','/ls', deps=True).reload_routes()
     return my_app
 
 my_app = build_my_app([])
