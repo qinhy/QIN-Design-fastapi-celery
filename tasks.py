@@ -38,11 +38,6 @@ TaskParentClass = [get_first_non_object_base(cls) if isinstance(cls, type) else 
 ValidTask = ['ServiceOrientedArchitecture' in str(i) for i in TaskParentClass]
 ACTION_REGISTRY={k:v for k,v,i in zip(TaskNames,TaskClass,ValidTask) if i}
 
-ACTION_REGISTRY = {}
-ACTION_REGISTRY.update({
-    'AddUser':AddUser,
-})
-
 class CeleryTask(BasicCeleryTask):
     def __init__(self, BasicApp, celery_app, root_fast_app:FastAPI,
                  dependencies: list = [],
@@ -286,37 +281,10 @@ api.add_middleware(
 api.add_middleware(SessionMiddleware,
                     secret_key=conf.secret_key, max_age=conf.session_duration)
 
-def get_auth_service():
-    from Task.UserAPIs import AuthService, OAuthRoutes
-    from Task.UserModel import Model4User, UsersStore
-    from CustomTask.rjson import PEMFileReader, SimpleRSAChunkEncryptor
-    from Task.UserAuthTask import AddUser
-    ENCRYPPR=None
-    ENCRYPPR=SimpleRSAChunkEncryptor(
-                    public_key=PEMFileReader('../tmp/public_key.pem').load_public_pkcs8_key(),
-                    private_key=PEMFileReader('../tmp/private_key.pem').load_private_pkcs8_key()
-                )
-    USER_DB = UsersStore(encryptor=ENCRYPPR)
-    if conf.app_backend=='redis':
-        USER_DB.redis_backend(redis_URL=conf.redis.url)    
-    elif conf.app_backend=='file':
-        USER_DB.file_backend(conf.file.url)    
-    elif conf.app_backend=='mongodbrabbitmq':
-        USER_DB.mongo_backend(conf.mongo.url)
-    else:
-        raise ValueError(f'no back end of {conf.app_backend}')
-    auth_service = AuthService(USER_DB)
-    ## add auth api
-    auth_router = OAuthRoutes(auth_service)
-    auth_service.add_new_user(username='root',password='root',
-            full_name='root',email='root@root.com',role='root')
-    api.include_router(auth_router.router, prefix="/auth", tags=["users"])
-    return auth_service
-
-def build_my_app(dependencies=[]):
+def build_my_app(dependencies=[],ACTION_REGISTRY=ACTION_REGISTRY):
     my_app = CeleryTask(BasicApp,celery_app,api,
-                    dependencies=dependencies)
-
+                    dependencies=dependencies,
+                    ACTION_REGISTRY=ACTION_REGISTRY)
 
     ## add original api
     from CustomTask import Fibonacci
@@ -354,5 +322,37 @@ def build_my_app(dependencies=[]):
         except Exception as e:
             return [f'{e}']
     my_app.add_web_api(ls_file,'get','/ls', deps=True).reload_routes()
+    return my_app
 
-build_my_app([Depends(get_auth_service().get_current_user)])
+def get_auth_service():
+    from Task.UserAPIs import AuthService, OAuthRoutes
+    from Task.UserModel import Model4User, UsersStore
+    from CustomTask.rjson import PEMFileReader, SimpleRSAChunkEncryptor
+    ENCRYPPR=None
+    ENCRYPPR=SimpleRSAChunkEncryptor(
+                    public_key=PEMFileReader('../tmp/public_key.pem').load_public_pkcs8_key(),
+                    private_key=PEMFileReader('../tmp/private_key.pem').load_private_pkcs8_key()
+                )
+    USER_DB = UsersStore(encryptor=ENCRYPPR)
+    if conf.app_backend=='redis':
+        USER_DB.redis_backend(redis_URL=conf.redis.url)    
+    elif conf.app_backend=='file':
+        USER_DB.file_backend(conf.file.url)    
+    elif conf.app_backend=='mongodbrabbitmq':
+        USER_DB.mongo_backend(conf.mongo.url)
+    else:
+        raise ValueError(f'no back end of {conf.app_backend}')
+    auth_service = AuthService(USER_DB)
+    ## add auth api
+    auth_router = OAuthRoutes(auth_service)
+    auth_service.add_new_user(username='root',password='root',
+            full_name='root',email='root@root.com',role='root')
+    api.include_router(auth_router.router, prefix="/auth", tags=["users"])
+    return auth_service
+ACTION_REGISTRY = {}
+from Task.UserAuthTask import AddUser
+ACTION_REGISTRY.update({
+    'AddUser':AddUser,
+})
+
+my_app = build_my_app([Depends(get_auth_service().get_current_user)])
