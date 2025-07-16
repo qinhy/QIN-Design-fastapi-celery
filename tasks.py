@@ -348,10 +348,10 @@ def get_auth_service():
             full_name='root',email='root@root.com',role='root')
     api.include_router(auth_router.router, prefix="/auth", tags=["users"])
     return auth_service
-ACTION_REGISTRY = {}
+# ACTION_REGISTRY = {}
 from Task.UserAuthTask import AddUser
 ACTION_REGISTRY.update({
     'AddUser':AddUser,
 })
 
-my_app = build_my_app([Depends(get_auth_service().get_current_user)])
+my_app = build_my_app([Depends(get_auth_service().get_current_user)],ACTION_REGISTRY=ACTION_REGISTRY)

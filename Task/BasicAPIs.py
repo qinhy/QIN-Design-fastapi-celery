@@ -764,8 +764,14 @@ class BasicCeleryTask:
         d = self._prepare_model_example(name).model_dump()
         d.update(data)
 
-        if hasattr(request.state,'user'):
+        user = None            
+        if isinstance(request,dict):
+            user = request.get('state',{}).get('user',None)
+            
+        if not user and hasattr(request.state,'user'):
             user = request.state.user
+
+        if user:
             d['param']['user'] = user.model_dump_exclude_sensitive(1)
             
             # del d['param']['user']['rank']

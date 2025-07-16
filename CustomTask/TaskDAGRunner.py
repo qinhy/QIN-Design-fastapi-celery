@@ -71,7 +71,7 @@ class TaskDAGRunner(ServiceOrientedArchitecture):
         pass
 
     class Model(ServiceOrientedArchitecture.Model):
-        class Param(BaseModel):
+        class Param(ServiceOrientedArchitecture.Model.Param):
             str_customize_separator: str = Field(
                 default=",", description="Customize the separator used when joining multiple values for a field.")
 
@@ -299,7 +299,8 @@ graph TD
             Submit a task via the BasicApp API and return its task_id.
             """
             self._log(f"Submitting {task_name!r} with payload {payload}")
-            resp = self.BasicApp.parent.api_perform_action(task_name, payload)
+            resp = self.BasicApp.parent.api_perform_action(task_name, payload,
+                                                           request={'state':{'user':self.model.param.user}})
             return resp["task_id"]
 
         def _wait(self, task_id: str, timeout: int = 30) -> AsyncResult:
