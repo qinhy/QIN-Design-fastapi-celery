@@ -254,8 +254,6 @@ class CeleryTask(BasicCeleryTask):
 
 ########################################################
 conf = AppConfig()
-print(conf.validate_backend().model_dump())
-
 if conf.app_backend=='redis':
     BasicApp:AppInterface = RedisApp(conf.redis.url)
     
@@ -282,34 +280,37 @@ api.add_middleware(
 api.add_middleware(SessionMiddleware,
                     secret_key=conf.secret_key, max_age=conf.session_duration)
 
-my_app = CeleryTask(BasicApp,celery_app,api,
-                dependencies=[])
+def build_my_app(dependencies=[]):
+    my_app = CeleryTask(BasicApp,celery_app,api,
+                dependencies=dependencies)
 
-## add original api
-from CustomTask import Fibonacci
-def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
-    m = Fibonacci.Model()
-    m.param = Fibonacci.Model.Param(mode=mode)
-    m.args = Fibonacci.Model.Args(n=n)
-    return my_app.api_perform_action('Fibonacci', m.model_dump(),0)
+    ## add original api
+    from CustomTask import Fibonacci
+    def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
+        m = Fibonacci.Model()
+        m.param = Fibonacci.Model.Param(mode=mode)
+        m.args = Fibonacci.Model.Args(n=n)
+        return my_app.api_perform_action('Fibonacci', m.model_dump(),0)
 
-my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
+    my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
 
+    from CustomTask import TaskDAGRunner
+    def my_mermaid_editor():
+        return HTMLResponse(content=TaskDAGRunner.MermaidEditorHtml)
 
-from CustomTask import TaskDAGRunner
-def my_mermaid_editor():
-    return HTMLResponse(content=TaskDAGRunner.MermaidEditorHtml)
+    my_app.add_web_api(my_mermaid_editor,'get','/myapi/mermaideditor/').reload_routes()
 
-my_app.add_web_api(my_mermaid_editor,'get','/myapi/mermaideditor/').reload_routes()
+    def get_file(file='vue-gui.html'):
+        for  f in [f'./{file}',f'../{file}']:
+            try:
+                with open(f, 'r') as ff:pass
+                return FileResponse(f)
+            except FileNotFoundError:
+                    pass
+        raise HTTPException(status_code=404, detail="file not found")
+        
+    my_app.add_web_api(lambda:get_file(),'get','/myapi/gui').reload_routes()
+    my_app.add_web_api(lambda:get_file('icon.png'),'get','/favicon.ico').reload_routes()
+    return my_app
 
-def get_file(file='vue-gui.html'):
-    for  f in [f'./{file}',f'../{file}']:
-        try:
-            with open(f, 'r') as ff:pass
-            return FileResponse(f)
-        except FileNotFoundError:
-                pass
-    raise HTTPException(status_code=404, detail="file not found")
-
-my_app.add_web_api(lambda:get_file(),'get','/myapi/gui').reload_routes()
-my_app.add_web_api(lambda:get_file('icon.png'),'get','/favicon.ico').reload_routes()
+my_app = build_my_app([])
