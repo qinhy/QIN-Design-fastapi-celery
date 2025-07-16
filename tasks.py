@@ -10,7 +10,6 @@ from fastapi.responses import FileResponse, HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 # Application imports
-
 from Task.Basic import (
     ServiceOrientedArchitecture,
     AppInterface, 
