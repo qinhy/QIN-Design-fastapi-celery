@@ -6,6 +6,11 @@ from pydantic import BaseModel, Field, PrivateAttr
 from contextlib import contextmanager
 import celery.states
 
+try:
+    from .utils import FileInputHelper
+except:
+    from utils import FileInputHelper
+
 class ServiceOrientedArchitecture:
     BasicApp:Any = None
 
@@ -34,6 +39,7 @@ class ServiceOrientedArchitecture:
 
         class Param(BaseModel):
             pass
+            
         class Args(BaseModel):
             pass
         class Return(BaseModel):

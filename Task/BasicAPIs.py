@@ -54,6 +54,7 @@ class BasicCeleryTask:
                  BasicApp: AppInterface,
                  celery_app,
                  root_fast_app: FastAPI,
+                 dependencies: list = [],
                  ACTION_REGISTRY = {}):
         
         self.BasicApp = BasicApp
@@ -62,6 +63,7 @@ class BasicCeleryTask:
         self.ACTION_REGISTRY: dict[str, ServiceOrientedArchitecture] = ACTION_REGISTRY
         self.pipelines = {}
         self.root_fast_app = root_fast_app
+        self.dependencies = dependencies
         self.load_code_snippet()
 
         # Initialize API router
@@ -69,36 +71,53 @@ class BasicCeleryTask:
         
         # Register API endpoints
         self._register_api_endpoints()
+        self._setup_celery_on_task_received()
+        
         
         # Setup Celery tasks and handlers
-        self._setup_celery_tasks()
-        
+        self.celery_perform_simple_action = self.celery_app.task(
+                    name='perform_simple_action',bind=True)(
+                        self._create_celery_perform_simple_action()
+                    )
+        self.celery_perform_translate_action = self.celery_app.task(
+                    name='perform_translate_action',bind=True)(
+                        self._create_celery_perform_translate_action()
+                    )
+        self.celery_perform_multi_translate_action = self.celery_app.task(
+                    name='perform_multi_translate_action',bind=True)(
+                        self._create_celery_perform_multi_translate_action()    
+                    )
+        self.celery_actions = {}
+        for action_name, _ in self.ACTION_REGISTRY.items():  
+            self.celery_actions[action_name.lower()] = self.celery_app.task(
+                name=action_name.lower(),bind=True)(
+                    self._create_celery_perform_simple_action()
+                )
+
         # Auto-generate endpoints for each action
-        self._register_action_endpoints()
+        self._register_action_endpoints()        
     
     def _register_api_endpoints(self):
         """Register all API endpoints"""
-        self.router.get("/tasks/")(self.api_list_tasks)
-        self.router.get("/tasks/meta/{task_id}")(self.api_task_meta)
-        self.router.get("/tasks/meta/delete/{task_id}")(self.api_task_meta_delete)
-        self.router.get("/tasks/stop/{task_id}")(self.api_task_stop)
-        self.router.get("/tasks/sub/{task_id}")(self.api_listen_data_of_task)
-        self.router.get("/workers/")(self.api_get_workers)
-        self.router.get("/action/list")(self.api_perform_action_list)
-        self.router.post("/action/{name}")(self.api_perform_action)
-        
-        # Pipeline management endpoints
-        self.router.get("/pipeline/list")(self.api_list_pipelines)
-        # self.router.post("/pipeline/add")(self.api_add_pipeline)
-        self.router.get("/pipeline/refresh")(self.api_refresh_pipeline)
-        self.router.delete("/pipeline/delete")(self.api_delete_pipeline)
+        self.add_web_api(self.api_list_tasks,"get","/tasks/",deps=True)
+        self.add_web_api(self.api_task_meta,"get","/tasks/meta/{task_id}",deps=True)
+        self.add_web_api(self.api_task_meta_delete,"get","/tasks/meta/delete/{task_id}",deps=True)
+        self.add_web_api(self.api_task_stop,"get","/tasks/stop/{task_id}",deps=True)
+        self.add_web_api(self.api_listen_data_of_task,"get","/tasks/sub/{task_id}",deps=True)
+        self.add_web_api(self.api_get_workers,"get","/workers/",deps=True)
+        self.add_web_api(self.api_perform_action_list,"get","/action/list",deps=True)
+        self.add_web_api(self.api_perform_action,"post","/action/{name}",deps=True)
+        self.add_web_api(self.api_list_pipelines,"get","/pipeline/list",deps=True)
+        # self.add_web_api(self.api_add_pipeline,"post","/pipeline/add",deps=True)
+        self.add_web_api(self.api_refresh_pipeline,"get","/pipeline/refresh",deps=True)
+        self.add_web_api(self.api_delete_pipeline,"delete","/pipeline/delete",deps=True)
     
     def _register_action_endpoints(self):
         """Auto-generate endpoints for each action"""
         for action_name, action_class in self.ACTION_REGISTRY.items():
             self.add_web_api(
                 self._make_api_action_handler(action_name, action_class),
-                'post', f"/{action_name.lower()}/")
+                'post', f"/{action_name.lower()}/",deps=True)
             
     def task_result_normalize_to_jsonStr(self, res):
         """Convert task result to a JSON string format."""
@@ -130,11 +149,8 @@ class BasicCeleryTask:
             except ValueError:
                 return '{}'
     
-    def _setup_celery_tasks(self):
+    def _setup_celery_on_task_received(self):
         """Setup Celery tasks and handlers"""
-        self.celery_perform_simple_action = self._create_celery_perform_simple_action()
-        self.celery_perform_translate_action = self._create_celery_perform_translate_action()
-        self.celery_perform_multi_translate_action = self._create_celery_perform_multi_translate_action()
         # Register task received handler
         @task_received.connect
         def on_task_received(*args, **kwargs):
@@ -156,19 +172,6 @@ class BasicCeleryTask:
                 print(f'[on_task_received] error : {e}')
             
         self.on_task_received = on_task_received
-
-    def api_task_meta(self, task_id: str):
-        """API endpoint to get task metadata."""
-        self.api_ok()
-        res = self.BasicApp.get_task_meta(task_id)
-        
-        if res is None:
-            raise HTTPException(status_code=404, detail="Task not found")
-            
-        if 'result' in res:
-            res['result'] = self.task_result_decode_as_jsonStr(res['result'])
-            
-        return res
 
     def perform_simple_action(
         self,
@@ -205,29 +208,6 @@ class BasicCeleryTask:
             prior_data,
         )
         
-        # # Handle model creation based on pipeline context
-        # model_instance = self._prepare_model_example(action_name)
-
-        # previous_model_instance, previous_name, _ = self._prepare_action(previous_data)
-        # previous_data = previous_model_instance.model_dump()
-        
-        # if isinstance(previous_to_current_map,dict):
-        #     action_data = self._map_fields_between_models(
-        #         previous_data, previous_to_current_map)
-            
-        #     # Create model with example data and update args
-        #     model_instance.args = model_instance.args.model_copy(update=action_data)
-        
-        # elif not previous_to_current_map:
-        #     # Use smart conversion between models
-        #     model_instance = self._convert_between_models(
-        #         self.ACTION_REGISTRY[previous_name],
-        #         class_type,
-        #         previous_data
-        #     )
-
-        # return self.perform_simple_action(task_id, model_instance.model_dump(), prior_data)
-
     def perform_multi_translate_action(
         self,
         task_id: str,
@@ -267,22 +247,18 @@ class BasicCeleryTask:
 
     def _create_celery_perform_simple_action(self):
         """Create the celery_perform_simple_action task"""
-        @self.celery_app.task(bind=True)
-        def celery_perform_simple_action(
+        def task_func(
             t: Task,
             data: dict, 
             prior_data: dict = None,
         ) -> ServiceOrientedArchitecture.Model:
             """Celery task wrapper for perform_simple_action"""
-            return self.perform_simple_action(t.request.id, data, prior_data)
-        
-        return celery_perform_simple_action
-    
+            return self.perform_simple_action(t.request.id, data, prior_data)        
+        return task_func    
     
     def _create_celery_perform_translate_action(self):
         """Create the celery_perform_translate_action task"""
-        @self.celery_app.task(bind=True)
-        def celery_perform_translate_action(
+        def task_func(
                 t: Task,
                 previous_data: dict,
                 action_name: str,
@@ -297,26 +273,11 @@ class BasicCeleryTask:
                     [previous_to_current_map],
                     prior_data,
                 )
-        return celery_perform_translate_action
-
-    # def _create_celery_perform_translate_action(self):
-    #     """Create the celery_perform_translate_action task"""
-    #     @self.celery_app.task(bind=True)
-    #     def celery_perform_translate_action(
-    #         t: Task,
-    #         previous_data: dict,
-    #         action_name: str,
-    #         previous_to_current_map: dict = None,
-    #         prior_data: dict = None,
-    #     ) -> ServiceOrientedArchitecture.Model:
-    #         """Celery task wrapper for perform_translate_action"""
-    #         return self.perform_translate_action(t.request.id, action_name, previous_data, previous_to_current_map, prior_data) 
-    #     return celery_perform_translate_action
-
+        return task_func
+    
     def _create_celery_perform_multi_translate_action(self):
         """Create the celery_perform_multi_translate_action task"""
-        @self.celery_app.task(bind=True)
-        def celery_perform_multi_translate_action(
+        def task_func(
                 t: Task,
                 previous_datas: list[dict],
                 action_name: str,
@@ -331,8 +292,8 @@ class BasicCeleryTask:
                     previous_to_current_map,
                     prior_data,
                 )
-        return celery_perform_multi_translate_action
-
+        return task_func
+        
     def _prepare_model_example(self, action_name: str):
         """Prepare model examples for a given class type"""
         
@@ -564,24 +525,19 @@ class BasicCeleryTask:
         return code_snippets.get(function_name, None)
     
     def _make_api_action_handler(self, action_name, action_class):
-        examples = action_class.Model.examples() if hasattr(action_class.Model,'examples') else None
+        examples = action_class.Model.examples() if hasattr(
+                            action_class.Model,'examples') else None
         
         def handler(
             task_model: action_class.Model = Body(..., examples=examples),                    
             execution_time: str = self.EXECUTION_TIME_PARAM,
-            timezone: BasicCeleryTask.VALID_TIMEZONES = self.TIMEZONE_PARAM
-        ):
-                            
+            timezone: BasicCeleryTask.VALID_TIMEZONES = self.TIMEZONE_PARAM,
+            request:Request=None):
             return self.api_perform_action(action_name, task_model.model_dump(),
                                             execution_time=execution_time,
-                                            timezone=timezone)
+                                            timezone=timezone,request=request)
         return handler
-        
-    def api_ok(self):
-        if not self.BasicApp.check_services():
-            raise HTTPException(status_code=503, detail={
-                                'error': 'service not healthy'})
-        
+    
     def _reload_routes(self, root_fast_app:FastAPI):            
         router_route_names = {route.name for route in self.router.routes}
         root_fast_app.router.routes = [
@@ -600,20 +556,8 @@ class BasicCeleryTask:
     def reload_routes(self):
         self._reload_routes(self.root_fast_app)
         self.root_fast_app.include_router(self.router, prefix="", tags=["Tasks"])
-        
-    def api_refresh_pipeline(self):
-        """Refresh existing pipelines"""
-        self.refresh_pipeline()
-        self.reload_routes()
-        return {"status": "refreshed"}
     
-    def api_delete_pipeline(self, name: str):
-        """Delete an existing pipeline"""
-        self.delete_pipeline(name)    
-        self.reload_routes()
-        return {"status": "deleted", "pipeline": name}
-        
-    def add_web_api(self, func, method: str = 'post', endpoint: str = '/'):
+    def add_web_api(self, func, method: str = 'post', endpoint: str = '/', deps=False):        
         method = method.lower().strip()
         allowed_methods = {
             'get':    self.router.get,
@@ -629,17 +573,12 @@ class BasicCeleryTask:
             raise ValueError(
                 f"Method '{method}' is not allowed. "
                 f"Supported methods: {', '.join(allowed_methods)}")
-
-        allowed_methods[method](endpoint)(func)
+        if deps:
+            allowed_methods[method](endpoint,
+                    dependencies = self.dependencies)(func)
+        else:
+            allowed_methods[method](endpoint)(func)        
         return self
-    
-    def api_list_pipelines(self,):
-        self.api_ok()
-        pipelines = self.BasicApp.store().get('pipelines')
-        if pipelines is None:
-            self.BasicApp.store().set('pipelines',{})
-            pipelines = {}
-        return pipelines
     
     def delete_pipeline(self, name: str):
         self.api_ok()
@@ -679,9 +618,52 @@ class BasicCeleryTask:
         # Update local pipelines dictionary
         self.pipelines = server_pipelines
 
-    def api_list_tasks(self,page:int=1, page_size:int=10):
+    ########################### web api
+    def api_ok(self):
+        if not self.BasicApp.check_services():
+            raise HTTPException(status_code=503, detail={
+                                'error': 'service not healthy'})
+    
+    def api_refresh_pipeline(self):
+        """Refresh existing pipelines"""
+        self.refresh_pipeline()
+        self.reload_routes()
+        return {"status": "refreshed"}
+
+    def api_task_meta(self, task_id: str):
+        """API endpoint to get task metadata."""
         self.api_ok()
-        return self.BasicApp.get_tasks_list(page,page_size)
+        res = self.BasicApp.get_task_meta(task_id)
+        
+        if res is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        if 'result' in res:
+            res['result'] = self.task_result_decode_as_jsonStr(res['result'])
+            
+        return res
+
+    def api_list_pipelines(self,):
+        self.api_ok()
+        pipelines = self.BasicApp.store().get('pipelines')
+        if pipelines is None:
+            self.BasicApp.store().set('pipelines',{})
+            pipelines = {}
+        return pipelines
+    
+    def api_delete_pipeline(self, name: str):
+        """Delete an existing pipeline"""
+        self.delete_pipeline(name)    
+        self.reload_routes()
+        return {"status": "deleted", "pipeline": name}
+
+    def api_list_tasks(self,page:int=1, page_size:int=10, decode_func:str=None):
+        self.api_ok()
+        res = self.BasicApp.get_tasks_list(page,page_size)
+        decode_func = decode_func.lower() if decode_func else None
+        if decode_func == 'js' or decode_func == 'javascript':
+            res['decode_func'] = self.BasicApp._js_decompress_str()
+        return res
 
     def api_task_meta_delete(self,task_id: str):
         self.api_ok()
@@ -746,7 +728,7 @@ class BasicCeleryTask:
         return workers
 
     ############################# general function
-    def api_perform_action_list(self,format:Literal['mcp','openai']='mcp'):
+    def api_perform_action_list(self,format:Literal['mcp','openai','json']='mcp'):
         """Returns a mcp tool list of all available actions that can be performed."""
         self.api_ok()
         if format == 'mcp':
@@ -754,30 +736,15 @@ class BasicCeleryTask:
         elif format == 'openai':
             return [v.as_openai_tool() for k,v in self.ACTION_REGISTRY.items()]
         else:
-            raise ValueError(f"Invalid format: {format}")
-        # available_actions = []
-        # for k,v in self.ACTION_REGISTRY.items():
-        #     model_schema = {}
-        #     for kk,vv in zip(['param','args','ret'],[v.Model.Param,v.Model.Args,v.Model.Return]):
-        #         schema = vv.model_json_schema()
-        #         model_schema.update({
-        #             kk: {
-        #                 key: {
-        #                     "type": value["type"],
-        #                     "description": value.get("description", "")
-        #                 }
-        #                 for key, value in schema["properties"].items() if 'type' in value
-        #             },
-        #             f"{kk}_required": schema.get("required", [])
-        #         })
-        #     available_actions.append({k:model_schema})
-        # return {"available_actions": available_actions}
+            # return pydantic schema
+            return [v.Model.model_json_schema() for k,v in self.ACTION_REGISTRY.items()]
     
     def api_perform_action(self,
         name: str, 
         data: dict,                        
         execution_time: str = EXECUTION_TIME_PARAM,
         timezone: VALID_TIMEZONES = TIMEZONE_PARAM,
+        request:Request=None,
     ):
         
         """API endpoint to execute a generic action asynchronously with optional delay."""
@@ -786,6 +753,7 @@ class BasicCeleryTask:
         # Validate that the requested action exists
         if name not in self.ACTION_REGISTRY:
             return {"error": f"Action '{name}' is not available."}
+            
         if not isinstance(timezone,str):
             timezone:str = timezone.default
 
@@ -793,21 +761,22 @@ class BasicCeleryTask:
         ) = self.parse_execution_time(execution_time, timezone)
         
         # Schedule the task
-        # print('[api_perform_action]',name,data)
         d = self._prepare_model_example(name).model_dump()
         d.update(data)
-        # print('[api_perform_action]',data)
-        task = self.celery_perform_simple_action.apply_async(
+
+        # task = self.celery_perform_simple_action.apply_async(
+        task = self.celery_actions[name.lower()].apply_async(        
             # args=[data, prior_data,],
             args=[d, None,],
             eta=utc_execution_time)
         
         self.BasicApp.set_task_status(task.task_id,status='SENDED')
+
         if next_execution_time_str:
-            return TaskModel.create_task_response(
-                task, utc_execution_time, local_time, timezone,
-                (next_execution_time_str,timezone_str))
-        else:
-            return TaskModel.create_task_response(
-                task, utc_execution_time, local_time, timezone, None)
+            next_execution = (next_execution_time_str,timezone_str)
+        else :
+            next_execution = None
+            
+        return TaskModel.create_task_response(
+                task, utc_execution_time, local_time, timezone, next_execution)
     

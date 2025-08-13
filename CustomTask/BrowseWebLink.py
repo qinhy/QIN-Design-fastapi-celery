@@ -14,9 +14,12 @@ from bs4 import BeautifulSoup
 from markdownify import markdownify as md
 
 try:
+    from Task.FileSystem import FileSystem
     from Task.Basic import ServiceOrientedArchitecture
+    from .utils import FileInputHelper
 except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from utils import FileInputHelper
 
 class SeleniumDriverManager:
     _driver = None
@@ -50,7 +53,7 @@ class BrowseWebLink(ServiceOrientedArchitecture):
 
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Param(ServiceOrientedArchitecture.Model.Param):
             headless: bool = Field(False, description="Run browser in headless mode.")
             remove_tags: list[str] = Field(['script', 'style', 'data:image'], description="List of HTML tags to remove.")
 
@@ -104,15 +107,24 @@ class BrowseWebLink(ServiceOrientedArchitecture):
                         folder = Path(self.model.version.class_name)
                         folder.mkdir(exist_ok=True)
                         filename = folder / f'link_{self.date()}.txt'
-                        with open(filename, 'w', encoding='utf-8', errors='ignore') as f:
+                        with self._fs(filename, 'w', encoding='utf-8', errors='ignore') as f:
                             f.write(result_text)
                         self.model.ret.result = f"Saved information to {filename}"
                     else:
                         self.model.ret.result = result_text
                 except Exception as e:
                     self.model.ret.result = f"Error: {str(e)}"
+                
+                if hasattr(self.model.param,'user'):
+                    self.model.param.user = None
                 return self.model
 
+        def _fs(self)->FileSystem:
+            fs = FileSystem()
+            if hasattr(self.model.param,'user') and hasattr(self.model.param.user,'file_system'):
+                fs = self.model.param.user.file_system
+            return fs
+        
         def to_stop(self):
             self.model.ret.result = "Execution stopped by flag."
             return self.model

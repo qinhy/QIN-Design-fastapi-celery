@@ -2,8 +2,10 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 try:
     from Task.Basic import ServiceOrientedArchitecture
+    from .utils import FileInputHelper
 except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from utils import FileInputHelper
 
 class AddNumbers(ServiceOrientedArchitecture):
     @classmethod

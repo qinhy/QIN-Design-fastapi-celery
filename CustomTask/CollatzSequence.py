@@ -3,8 +3,10 @@ from typing import Optional, List
 from pydantic import BaseModel, Field
 try:
     from Task.Basic import ServiceOrientedArchitecture
+    from .utils import FileInputHelper
 except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from utils import FileInputHelper
 
 class CollatzSequence(ServiceOrientedArchitecture):
     @classmethod

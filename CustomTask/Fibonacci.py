@@ -3,8 +3,10 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 try:
     from Task.Basic import ServiceOrientedArchitecture
+    from .utils import FileInputHelper
 except:
     from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from utils import FileInputHelper
 
 class Fibonacci(ServiceOrientedArchitecture):
     @classmethod
@@ -21,7 +23,7 @@ Supports two computation modes:
 
     class Model(ServiceOrientedArchitecture.Model):
         
-        class Param(BaseModel):
+        class Param(ServiceOrientedArchitecture.Model.Param):
             mode: Literal['fast', 'slow'] = Field("fast", description="Execution mode, either 'fast' or 'slow'")
 
             def is_fast(self):

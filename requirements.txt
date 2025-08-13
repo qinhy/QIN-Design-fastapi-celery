@@ -35,6 +35,8 @@ pillow
 # Data Processing
 numpy
 
+fsspec
+
 #### these are for web browser
 # selenium
 # webdriver_manager

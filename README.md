@@ -6,13 +6,13 @@ A modular, plug-and-play backend system built with **FastAPI**, **Celery**, and 
 
 ## 🚀 Features
 
-- ✨ RESTful API powered by **FastAPI**
-- 🧵 Background task management with **Celery**
-- ⚙️ Dynamic backend selection: `redis` or `mongodbrabbitmq`
-- 🐇 RabbitMQ support with `advanced.config` auto-updating
-- 🌼 Monitoring via **Flower**
-- 🕒 Timezone-aware scheduling
-- 🔌 Plug-and-play custom task support
+- RESTful API powered by **FastAPI**
+- Background task management with **Celery**
+- Dynamic backend selection: `redis` or `mongodbrabbitmq`
+- RabbitMQ support with `advanced.config` auto-updating
+- Monitoring via **Flower**
+- Timezone-aware scheduling
+- Plug-and-play custom task support
 
 ---
 
@@ -29,142 +29,126 @@ A modular, plug-and-play backend system built with **FastAPI**, **Celery**, and 
 
 ---
 
-## 📦 Dependencies
+## 📦 Installation
 
-Install requirements with:
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/qinhy/QIN-Design-fastapi-celery
+   cd QIN-Design-fastapi-celery
+   ```
+2. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. **Configure environment:**
+   - Edit `.env` or `.env.docker` as needed for your setup.
+
+---
+
+## 🐳 Docker Setup
+
+You can run the entire stack using Docker Compose:
 
 ```bash
-pip install -r requirements.txt
+docker-compose up --build
 ```
 
-<details>
-<summary>requirements.txt</summary>
-
-```
-requests
-celery
-flower
-redis
-fastapi
-pydantic
-pydantic[email]
-pydantic-settings
-starlette
-pymongo
-pika
-itsdangerous
-pytz
-uvicorn
-...
-```
-
-</details>
+This will start:
+- Redis (as broker)
+- FastAPI app (API server)
+- Celery worker
+- Flower (monitoring dashboard at port 5555)
 
 ---
 
-## ⚙️ Configuration
+## 🏗️ Project Structure
 
-All configuration is driven by environment variables. Create a `.env` file in the root directory:
-
-```env
-# Select Backend: redis OR mongodbrabbitmq
-APP_BACK_END=redis
-
-# Core App Settings
-APP_INVITE_CODE=123
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-UVICORN_PORT=8000
-FLOWER_PORT=5555
-
-# RabbitMQ
-RABBITMQ_URL=localhost:15672
-RABBITMQ_USER=guest
-RABBITMQ_PASSWORD=guest
-RABBITMQ_CONSUMER_TIMEOUT=259200000
-
-# MongoDB
-MONGO_URL=mongodb://localhost:27017
-MONGO_DB=tasks
-
-# Celery
-CELERY_CONCURRENCY=4
-CELERY_META=celery_taskmeta
-CELERY_RABBITMQ_BROKER=amqp://localhost
-
-# Redis
-REDIS_URL=redis://localhost:6379/0
-```
+- `CustomTask/` — Custom task implementations (e.g., Fibonacci, PrimeNumberChecker, ChatGPTService, etc.)
+- `Storages/` — Storage backends (Redis, MongoDB, FileSystem)
+- `Task/` — Core task and app interfaces
+- `tasks.py` — Main Celery and FastAPI integration, task registration
+- `start_server.py` — Entrypoint for running API, Celery worker, or Flower
+- `config.py` — Configuration utilities (including RabbitMQ advanced config)
+- `docker-compose.yml` & `Dockerfile` — Containerization setup
+- `sh/` — Shell and batch scripts for quick start/stop
 
 ---
 
-## 📡 Running the App
+## 🛠️ Quick Start Scripts
 
-check folder of /sh/...
+### Windows
+- Start all services:
+  ```bat
+  sh\start_all.bat
+  ```
+- Start only the API server:
+  ```bat
+  sh\uvicorn.bat
+  ```
+- Start only Redis:
+  ```bat
+  sh\redis.bat
+  ```
 
----
-
-## 🧪 Sample Task: Fibonacci
-
-The app includes an example `Fibonacci` task with both **immediate** and **scheduled** execution.
-
-### GET Request Example:
-
-```http
-GET /myapi/fibonacci/?n=10&mode=fast
-```
-
-### POST Endpoint Examples:
-
-```http
-POST /fibonacci/
-POST /fibonacci/schedule/
-```
-
----
-
-## 📁 Custom Tasks
-
-To define a custom task:
-
-1. Create a class in `CustomTask`
-2. Inherit from `ServiceOrientedArchitecture`
-3. Define a nested `Model` using Pydantic
-4. Your tasks will be auto-registered via reflection
+### Linux/macOS
+- Start all services:
+  ```bash
+  bash sh/start_all.sh
+  ```
+- Stop all services:
+  ```bash
+  bash sh/stop_all.sh
+  ```
 
 ---
 
-## 🧠 Backend Selection Logic
+## 🚦 Usage
 
-- `redis`: Uses Redis as both broker and backend
-- `mongodbrabbitmq`: Uses RabbitMQ + MongoDB; will also validate and optionally update the `advanced.config` to match `RABBITMQ_CONSUMER_TIMEOUT`
-
----
-
-## 🧰 Dev Utilities
-
-```python
-# Access external IP
-AppConfig().external_ip
-
-# Automatically fix RabbitMQ's advanced.config
-AppConfig().validate_backend()
-```
+- **Start API server:**
+  ```bash
+  python start_server.py uvicorn
+  ```
+- **Start Celery worker:**
+  ```bash
+  python start_server.py celery
+  ```
+- **Start Flower monitoring:**
+  ```bash
+  python start_server.py flower
+  ```
 
 ---
 
-## 🌐 API Docs
+## 🧩 Adding Custom Tasks
 
-- Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
-- Redoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+To add your own custom task:
+
+1. **Create a new Python file** in the `CustomTask/` directory (e.g., `MyCustomTask.py`).
+2. **Define your task class**. Your class should implement the logic you want to run as a task. For example:
+   ```python
+   # CustomTask/Fibonacci.py
+    class Fibonacci(ServiceOrientedArchitecture):
+        @classmethod
+        def description(cls):
+            return """...
+   ```
+3. **Register your task** in `CustomTask/__init__.py` by importing your class:
+   ```python
+   from .MyCustomTask import MyCustomTask
+   ```
+4. **(Optional) Add dependencies** to `requirements.txt` if your task needs extra packages.
+5. **Restart the backend** to load your new task.
+
+Your new task will now be available via the API and can be scheduled or called like the built-in tasks. For advanced usage, see the structure of existing tasks in `CustomTask/` and how they are registered in `ACTION_REGISTRY`. If your task needs to interact with storage or other services, you can inject dependencies via the constructor or use the provided storage interfaces in `Storages/`.
 
 ---
 
-## 🤝 Contributing
+## 📑 API Endpoints
 
-Pull requests welcome! Custom tasks, backend strategies, and plugin systems are especially appreciated.
+The API exposes endpoints for submitting tasks, managing pipelines, and querying results. See `tasks.py` for details or use `/docs` when the server is running for interactive documentation.
 
 ---
 
-## 📄 License
+## 📝 License
 
-MIT License. Use freely and improve openly.
+MIT License. See [LICENSE](LICENSE) for details.
