@@ -35,4 +35,5 @@ dependencies = [
 [dependency-groups]
 dev = [
     "aiohttp>=3.12.15",
+    "ipython>=9.4.0",
 ]
