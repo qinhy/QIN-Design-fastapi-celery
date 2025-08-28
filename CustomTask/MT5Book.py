@@ -51,9 +51,7 @@ class BookService(ServiceOrientedArchitecture):
 
     class Model(ServiceOrientedArchitecture.Model):
             
-        class Param(BaseModel):
-            account:MT5Account = MT5Account()
-            book:Book = Book()
+        class Param(Book,MT5Account):
             action:str = BookServiceActionTypes.account_info
 
         class Args(BaseModel):
@@ -85,7 +83,7 @@ class BookService(ServiceOrientedArchitecture):
             if isinstance(book, dict):
                 book = Book(**book)
             if plan:book = book.as_plan()
-            param = BookService.Model.Param(account=acc,book=book)
+            param = BookService.Model.Param(**acc.model_dump(),**book.model_dump())
             return BookService.Model(param=param)
         
     class Action(ServiceOrientedArchitecture.Action, MT5Action):
@@ -93,8 +91,8 @@ class BookService(ServiceOrientedArchitecture):
         def __call__(self, *args, **kwargs):
             super().__call__(*args, **kwargs)
             action = self.model.param.action
-            acc = self.model.param.account
-            book = self.model.param.book
+            acc = self.model.param
+            book = self.model.param
             task_id = self.model.task_id
             self.model = BookService.Model.build(acc,book,action in ['send'])            
             self.model.task_id = task_id
@@ -103,15 +101,15 @@ class BookService(ServiceOrientedArchitecture):
             self.model.ret.first_book = first_book
             self.model.ret.books = books
             self.model.ret.books_dict = books_dict
-            self.model.param.account.password = ''
+            self.model.param.password = ''
             return self.model
 
         def __init__(self, model,BasicApp:AppInterface,level=None):            
             super().__init__(model,BasicApp,level)
-            account = self.model.param.account
-            self.book = self.model.param.book
+            account = self.model.param
+            self.book = self.model.param
             self.uuid = uuid.uuid4()
-            self._account: MT5Account = account
+            self._account: MT5Account = MT5Account(account.account_id,account.password,account.account_server)
             self.retry_times_on_error = 3
         
         def log_and_send(self,msg:str):
@@ -180,11 +178,11 @@ class BookService(ServiceOrientedArchitecture):
 # }
 class MT5CopyLastRatesService(ServiceOrientedArchitecture):
     class Model(ServiceOrientedArchitecture.Model):
-        class Param(BaseModel):
-            account: MT5Account = MT5Account()
+        class Param(MT5Account):
+            pass
         
         class Args(BaseModel):
-            symbol: str = "NULL"
+            symbol: str = "USDJPY"
             timeframe: str = "H1"
             count: int = 10
             debug: bool = False
@@ -249,7 +247,7 @@ class MT5CopyLastRatesService(ServiceOrientedArchitecture):
             super().__init__(model,BasicApp,level)
             self.model:MT5CopyLastRatesService.Model = self.model
             print(self.model)
-            account = self.model.param.account
+            account = self.model.param
             self.uuid = uuid.uuid4()
             self._account: MT5Account = account
             self.retry_times_on_error = 3

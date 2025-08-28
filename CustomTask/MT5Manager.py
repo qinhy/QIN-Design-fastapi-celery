@@ -229,7 +229,7 @@ class Book(BaseModel):
             def send(self,book):
                 book:Book = book
                 res = book._make_order()
-                book.state = Book.Controller.Order() if res else Book.Controller.Plan()
+                book._state = Book.Controller.Order() if res else Book.Controller.Plan()
             def close(self,book):
                 raise ValueError('This is just a Plan')
             def changeP(self,book,p):
@@ -246,7 +246,7 @@ class Book(BaseModel):
             def close(self,book):
                 book:Book = book
                 res = book._close_order()
-                if res : book.state = Book.Controller.Null()
+                if res : book._state = Book.Controller.Null()
             def changeP(self,book,p):
                 book:Book = book
                 res = book._changeOrderP(p)
@@ -264,7 +264,7 @@ class Book(BaseModel):
             def close(self,book):
                 book:Book = book
                 res = book._close_position()
-                if res : book.state = Book.Controller.Null()
+                if res : book._state = Book.Controller.Null()
             def changeP(self,book,p):
                 raise ValueError('This is a exists Position, can not change price open')
             def changeTS(self,book,tp,sl):
@@ -286,7 +286,6 @@ class Book(BaseModel):
             values['state'] = state_class(**state_data)
         return values
     
-    state: Controller.Null = Controller.Plan()
     symbol: str = ''
     sl: float = 0.0
     tp: float = 0.0
@@ -296,27 +295,29 @@ class Book(BaseModel):
     ticket: int = -1
     is_order: bool = False
     is_position: bool = False
-    acc_info: dict = {}
+    
+    _state: Controller.Null = Controller.Plan()
+    _acc_info: dict = {}
 
     _book: Any = None# mt5_order_position
     _type: str = ''
     _swap: int = 0
 
     def as_plan(self):
-        self.state = Book.Controller.Plan()
+        self._state = Book.Controller.Plan()
         return self
     
     def send(self):
-        self.state.send(self)
+        self._state.send(self)
         return self
     def close(self):
-        self.state.close(self)
+        self._state.close(self)
         return self
     def changeP(self,p):
-        self.state.changeP(self,p)
+        self._state.changeP(self,p)
         return self
     def changeTS(self,tp,sl):
-        self.state.changeTS(self,tp,sl)
+        self._state.changeTS(self,tp,sl)
         return self
 
     def getBooks(self):
@@ -328,7 +329,7 @@ class Book(BaseModel):
         if account_info is None:
             raise ValueError("Failed to get account info")
         else:
-            return Book(acc_info=account_info._asdict())
+            return Book(_acc_info=account_info._asdict())
         
     def set_mt5_book(self,book):
         self._book = book
@@ -344,10 +345,10 @@ class Book(BaseModel):
         
         if self._book.__class__.__name__ == "TradeOrder" : 
             self.is_order=True
-            self.state = Book.Controller.Order()
+            self._state = Book.Controller.Order()
         elif self._book.__class__.__name__ == "TradePosition": 
             self.is_position=True
-            self.state = Book.Controller.Position()
+            self._state = Book.Controller.Position()
         if hasattr(self._book,'volume_current'):
             self.is_order=True
             self.volume=self._book.volume_current
@@ -378,7 +379,7 @@ class Book(BaseModel):
         if result.__class__.__name__ == "OrderSendResult" :
             self.ticket = result.order
             self.is_order=True
-            self.state = Book.Controller.Order()
+            self._state = Book.Controller.Order()
 
         return True
     

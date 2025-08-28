@@ -403,15 +403,30 @@ else:
     raise ValueError(f'no back end of {conf.app_backend}')
 
 celery_app = BasicApp.get_celery_app()
+
+api = FastAPI()
+api.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*',],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],)
+api.add_middleware(SessionMiddleware,
+                    secret_key=conf.secret_key, max_age=conf.session_duration)
 my_app = CeleryTask(BasicApp,celery_app,api)
 
-## add original api
-from CustomTask import Fibonacci
-def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
-    m = Fibonacci.Model()
-    m.param.mode = mode
-    m.args.n = n
-    return my_app.api_perform_action('Fibonacci', m.model_dump(),0)
+def build_my_app(dependencies=[],ACTION_REGISTRY=ACTION_REGISTRY):
+    my_app = CeleryTask(BasicApp,celery_app,api,
+                    dependencies=dependencies,
+                    ACTION_REGISTRY=ACTION_REGISTRY)
+    
+    ## add original api
+    from CustomTask import Fibonacci
+    def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
+        m = Fibonacci.Model()
+        m.param.mode = mode
+        m.args.n = n
+        return my_app.api_perform_action('Fibonacci', m.model_dump(),0)
 
     my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
 
@@ -443,4 +458,4 @@ def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
     my_app.add_web_api(ls_file,'get','/ls', deps=True).reload_routes()
     return my_app
 
-my_app = build_my_app([])
+my_app = build_my_app([],ACTION_REGISTRY=ACTION_REGISTRY)
