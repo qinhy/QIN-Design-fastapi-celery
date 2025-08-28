@@ -17,6 +17,11 @@ try:
 except:
     from UserModel import User
 
+try:
+    from .utils import FileInputHelper
+except:
+    from utils import FileInputHelper
+
 class ServiceOrientedArchitecture:
     BasicApp:Any = None
 
@@ -44,8 +49,7 @@ class ServiceOrientedArchitecture:
                 return f'_v{self.major}{self.minor}{self.patch}_'
 
         class Param(BaseModel):
-            user: Optional[User] = Field(None, description="User object")
-            
+            pass
         class Args(BaseModel):
             pass
         class Return(BaseModel):

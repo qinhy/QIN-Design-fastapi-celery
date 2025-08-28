@@ -1,12 +1,12 @@
 # Standard library imports
 from threading import Thread
 import time
-from typing import Any, Dict, List, Literal, Union
+from typing import Any, Dict, List, Any, Dict, List, Literal, Union
 
 # FastAPI imports
-from fastapi import Body, Depends, FastAPI, HTTPException, Request
+from fastapi import Body, Depends, Depends, FastAPI, HTTPException, Request, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, FileResponse, HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 # Application imports
@@ -265,10 +265,29 @@ elif conf.app_backend=='mongodbrabbitmq':
                             conf.rabbitmq.user,conf.rabbitmq.password,
                             conf.mongo.url,conf.mongo.db,conf.celery.meta_table,
                             conf.celery.broker)
+    BasicApp:AppInterface = RabbitmqMongoApp(conf.rabbitmq.url,
+                            conf.rabbitmq.user,conf.rabbitmq.password,
+                            conf.mongo.url,conf.mongo.db,conf.celery.meta_table,
+                            conf.celery.broker)
 else:
     raise ValueError(f'no back end of {conf.app_backend}')
 
 celery_app = BasicApp.get_celery_app()
+
+api = FastAPI()
+api.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*',],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],)
+api.add_middleware(SessionMiddleware,
+                    secret_key=conf.secret_key, max_age=conf.session_duration)
+
+def build_my_app(dependencies=[],ACTION_REGISTRY=ACTION_REGISTRY):
+    my_app = CeleryTask(BasicApp,celery_app,api,
+                    dependencies=dependencies,
+                    ACTION_REGISTRY=ACTION_REGISTRY)
 
 api = FastAPI()
 api.add_middleware(
@@ -292,14 +311,22 @@ def build_my_app(dependencies=[],ACTION_REGISTRY=ACTION_REGISTRY):
         m.param = Fibonacci.Model.Param(mode=mode)
         m.args = Fibonacci.Model.Args(n=n)
         return my_app.api_perform_action('Fibonacci', m.model_dump(),0)
+    ## add original api
+    from CustomTask import Fibonacci
+    def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
+        m = Fibonacci.Model()
+        m.param = Fibonacci.Model.Param(mode=mode)
+        m.args = Fibonacci.Model.Args(n=n)
+        return my_app.api_perform_action('Fibonacci', m.model_dump(),0)
 
     my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
+    my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
 
-    from CustomTask import TaskDAGRunner
-    def my_mermaid_editor():
-        return HTMLResponse(content=TaskDAGRunner.MermaidEditorHtml)
+        from CustomTask import TaskDAGRunner
+        def my_mermaid_editor():
+            return HTMLResponse(content=TaskDAGRunner.MermaidEditorHtml)
 
-    my_app.add_web_api(my_mermaid_editor,'get','/myapi/mermaideditor/').reload_routes()
+        my_app.add_web_api(my_mermaid_editor,'get','/myapi/mermaideditor/').reload_routes()
 
     def get_file(file='vue-gui.html'):
         for  f in [f'./{file}',f'../{file}']:
