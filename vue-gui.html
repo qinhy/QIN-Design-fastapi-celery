@@ -120,6 +120,13 @@
                         class="w-full"
                       />
                     </template>
+                    <template v-else-if="(field.anyOf?field.anyOf[0].type:field.type) === 'string' && field.description.toLowerCase().includes('text')">
+                      <p-textarea
+                        v-model="dynamicTasks[i][groupKey][fieldKey]"
+                        :placeholder="field.description || fieldKey"
+                        class="w-full"
+                      />
+                    </template>
                     <template v-else>
                       <p-inputtext
                         v-model="dynamicTasks[i][groupKey][fieldKey]"
