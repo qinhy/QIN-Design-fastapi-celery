@@ -322,11 +322,11 @@ def build_my_app(dependencies=[],ACTION_REGISTRY=ACTION_REGISTRY):
     my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
     my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
 
-        from CustomTask import TaskDAGRunner
-        def my_mermaid_editor():
-            return HTMLResponse(content=TaskDAGRunner.MermaidEditorHtml)
+    from CustomTask import TaskDAGRunner
+    def my_mermaid_editor():
+        return HTMLResponse(content=TaskDAGRunner.MermaidEditorHtml)
 
-        my_app.add_web_api(my_mermaid_editor,'get','/myapi/mermaideditor/').reload_routes()
+    my_app.add_web_api(my_mermaid_editor,'get','/myapi/mermaideditor/').reload_routes()
 
     def get_file(file='vue-gui.html'):
         for  f in [f'./{file}',f'../{file}']:

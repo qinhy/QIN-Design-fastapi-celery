@@ -55,7 +55,6 @@ class BasicCeleryTask:
                  celery_app,
                  root_fast_app: FastAPI,
                  dependencies: list = [],
-                 dependencies: list = [],
                  ACTION_REGISTRY = {}):
         
         self.BasicApp = BasicApp
@@ -130,7 +129,7 @@ class BasicCeleryTask:
         for action_name, action_class in self.ACTION_REGISTRY.items():
             self.add_web_api(
                 self._make_api_action_handler(action_name, action_class),
-                'post', f"/{action_name.lower()}/",deps=True,deps=True)
+                'post', f"/{action_name.lower()}/",deps=True)
             
     def task_result_normalize_to_jsonStr(self, res):
         """Convert task result to a JSON string format."""
