@@ -2,7 +2,7 @@ import os
 import json
 import threading
 import requests
-from typing import Generator, Optional, Dict, Any
+from typing import Generator, Literal, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Union
 import base64
@@ -118,16 +118,28 @@ Supports text + multimodal input, streaming, and customization of model paramete
 
     class Model(ServiceOrientedArchitecture.Model):
 
+
         class Param(BaseModel):
+            class ReasoningParam(BaseModel):
+                """Controls the model's chain-of-thought *style* (not the content you receive)."""
+                effort: Literal["low", "medium", "high"] = Field(
+                    "low",description="How much reasoning effort to spend (latency/$$ trade-off).")
+                summary: Literal["auto", "concise", "detailed"] = Field("auto",
+                    description="How much reasoning *summary* to include in the response.")
+                
             api_key: Optional[str] = Field(None, description="OpenAI API key (optional if set in env)")
-            model: str = Field("gpt-4o-mini", description="OpenAI model to use")
+            model: str = Field("gpt-5-nano", description="OpenAI model to use")
             temperature: float = Field(1.0, ge=0, le=2.0, description="Sampling temperature")
             max_output_tokens: int = Field(1024, ge=1, description="(Compat) Maximum tokens to generate; mapped to max_output_tokens")
             top_p: float = Field(1.0, ge=0.0, le=1.0, description="Nucleus sampling parameter")
             stream: bool = Field(False, description="Whether to use streaming mode")
             system_prompt: Optional[str] = Field(None, description="Optional system prompt (sent as 'instructions')")
             base_url: str = Field("https://api.openai.com/v1/responses", description="OpenAI Responses API endpoint")
-            previous_response_id: Optional[str] = Field(None, description="Chain context across turns (optional).")  # Responses API feature
+            previous_response_id: Optional[str] = Field(None, description="Chain context across turns (optional).")
+            reasoning: Optional[ReasoningParam] = Field(
+                None,
+                description="Optional reasoning controls for the Responses API."
+            )
 
         class Args(BaseModel):
             user_prompt: str = Field("Hi", description="The user prompt to send to the model")
@@ -160,17 +172,18 @@ Supports text + multimodal input, streaming, and customization of model paramete
                     }
                 },
                 {
-                    "param": {
-                        "api_key": None,
-                        "model": "gpt-4o-mini",
-                        "system_prompt": "You are a helpful assistant.",
-                        "temperature": 0.5,
-                        "max_output_tokens": 100,
-                        "top_p": 1.0
+                "param": {
+                    "api_key": None,
+                    "max_output_tokens":1024,
+                    "reasoning": {
+                        "effort": "low",
+                        "summary": "auto"
                     },
-                    "args": {
-                        "user_prompt": "What's a quick summary of the solar system?"
-                    }
+                    "model": "gpt-5-nano"
+                },
+                "args": {
+                    "user_prompt": "JSON format of Tokyo info"
+                }
                 }
             ]
 
@@ -328,6 +341,8 @@ Supports text + multimodal input, streaming, and customization of model paramete
                 "max_output_tokens": max_output_tokens,
                 "stream": stream,
             }
+            if self.model.param.reasoning:
+                payload["reasoning"] = self.model.param.reasoning.model_dump()
 
             # system prompt becomes 'instructions' for Responses API
             if system_prompt:

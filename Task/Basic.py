@@ -757,7 +757,7 @@ class SmartModelConverter(BaseModel):
     A class for building and managing conversion functions between different
     ServiceOrientedArchitecture classes using LLM.
     """
-    model: str = "gpt-4o-mini"
+    model: str = "gpt-5-nano"
     api_key: Optional[str] = None
     
     def model_post_init(self, __context):
