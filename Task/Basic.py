@@ -1,6 +1,7 @@
 # Standard library imports
 import base64
 from contextlib import contextmanager
+from copy import deepcopy
 from datetime import datetime
 import io
 import json
@@ -14,6 +15,7 @@ from uuid import uuid4
 import zlib
 
 # Third party imports
+import jsonref
 import celery
 import celery.states
 import pika
@@ -1146,12 +1148,18 @@ class ServiceOrientedArchitecture:
         return cls.Model.model_json_schema()
 
     @classmethod
+    def replace_refs(cls,model_json_schema):
+        s = jsonref.replace_refs(model_json_schema)
+        s = {k:deepcopy(s[k]) for k in s if k!='$defs'}
+        return s
+        
+    @classmethod
     def as_mcp_tool(cls):
         "https://modelcontextprotocol.io/docs/concepts/tools"
         "To be used in MCP tools"
-        param_schema = cls.Model.Param.model_json_schema()
-        args_schema = cls.Model.Args.model_json_schema()
-        ret_schema = cls.Model.Return.model_json_schema()
+        param_schema = cls.replace_refs(cls.Model.Param.model_json_schema())
+        args_schema = cls.replace_refs(cls.Model.Args.model_json_schema())
+        ret_schema = cls.replace_refs(cls.Model.Return.model_json_schema())
 
         # Determine if "param" and/or "args" should be required at the top level
         top_level_required = []
@@ -1190,13 +1198,11 @@ class ServiceOrientedArchitecture:
     def as_openai_tool(cls):
         mcp_tool = cls.as_mcp_tool()
         return {
-            "type": "function",
-            "function": {
                 "name": mcp_tool['name'],
+                "type": "function",
                 "description": mcp_tool['description'],
                 "parameters": mcp_tool['inputSchema'],
                 "returns": mcp_tool['outputSchema'],
-            },
         }
     
     class Action:

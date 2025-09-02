@@ -96,55 +96,11 @@
             <p class="mb-2 whitespace-pre-line">{{ fn.description }}</p>
             <h3 class="text-lg font-bold mt-4 mb-2">Parameters</h3>
 
-            <!-- Dynamic Parameter Form -->
-            <!-- <form @submit.prevent="submitDynamicTask(fn, i)">
-                <template v-for="(fieldGroup, groupKey) in fn.parameters.properties">
-                  <div class="mb-2 font-bold">{{ groupKey }}</div>
-                  <div v-for="(field, fieldKey) in fieldGroup.properties" :key="fieldKey" class="mb-4 pl-4">
-                    <label class="block mb-1 font-medium">
-                      {{ field.title }} ({{ field.anyOf?field.anyOf[0].type:field.type }})
-                    </label>
-  
-                    <template v-if="field.enum">
-                      <p-select
-                        v-model="dynamicTasks[i][groupKey][fieldKey]"
-                        :options="field.enum"
-                        :placeholder="field.description || fieldKey"
-                        class="w-full"
-                      />
-                    </template>
-                    <template v-else-if="(field.anyOf?field.anyOf[0].type:field.type) === 'integer'">
-                      <p-inputnumber
-                        v-model="dynamicTasks[i][groupKey][fieldKey]"
-                        :placeholder="field.description || fieldKey"
-                        class="w-full"
-                      />
-                    </template>
-                    <template v-else-if="(field.anyOf?field.anyOf[0].type:field.type) === 'string' && field.description.toLowerCase().includes('text')">
-                      <p-textarea
-                        v-model="dynamicTasks[i][groupKey][fieldKey]"
-                        :placeholder="field.description || fieldKey"
-                        class="w-full"
-                      />
-                    </template>
-                    <template v-else>
-                      <p-inputtext
-                        v-model="dynamicTasks[i][groupKey][fieldKey]"
-                        :placeholder="field.description || fieldKey"
-                        class="w-full"
-                      />
-                    </template>
-                    <div class="text-xs text-gray-500">{{ field.description }}</div>
-                  </div>
-                </template>
-                <hr>
-                <p-button label="Submit Task" type="submit" class="mt-2" :disabled="loading"></p-button>
-              </form> -->
-
             <form @submit.prevent="submitDynamicTask(fn, i)">
               <p-autoform :schema="fn.parameters" :data="dynamicTasks[i]" :autits="autocompleteItems"></p-autoform>
               <p-button label="Submit Task" type="submit" class="mt-2" :disabled="loading"></p-button>
             </form>
+
             <!-- Task Submission Result -->
             <div v-if="taskId" class="mt-4">
               <h3 class="text-lg font-bold">Task Submitted</h3>
@@ -200,6 +156,7 @@
     }
     async getActions() { return await this.request('/action/list?format=openai'); }
     async submitTask(func_name, inputs, taskMeta, taskId, errorMessage, loading) {
+      console.log(inputs);
       loading.value = true;
       taskMeta.value = "";
       func_name = func_name.toLowerCase();
@@ -301,7 +258,11 @@
       const dynamicTasks = ref([]); // indexed by tab
 
 
-      function initializeFormData(schema, data) {
+      function initializeFormData(schema, data, key=null) {
+        if (key && data[key] && data[key]===null){
+          data[key] = {};
+          data = data[key];
+        }
         if (!schema || typeof schema !== 'object') return data;
 
         const props = schema.properties || {};
@@ -351,7 +312,7 @@
       }
 
       api.getActions().then((action_list) => {
-        action_list = action_list.map((v) => v[v.type])
+        // action_list = action_list.map((v) => v[v.type])
         all_schema.value = action_list;
         console.log(action_list);
         TABS.value = ["Dashboard", ...action_list.map((v) => v.name)];
@@ -359,9 +320,7 @@
         dynamicTasks.value = action_list.map(fn => {
           // Init an object for all top-level parameter groups
           const paramGroups = {};
-          console.log(fn);
           initializeFormData(fn.parameters, paramGroups);
-          console.log(paramGroups);
           return paramGroups;
         });
       });
@@ -516,6 +475,7 @@
     app.component('p-treeselect', PrimeVue.TreeSelect);
     app.component('p-treetable', PrimeVue.TreeTable);
     app.component('p-virtualscroller', PrimeVue.VirtualScroller);
+    app.component('p-dropdown', PrimeVue.Dropdown);
   }
 
 
@@ -573,197 +533,300 @@
   });
 
   app.component('p-autoform', {
-    props: ['schema', 'data', 'autits'],
+    props: ['schema', 'data', 'autits'], // autits = { value: [] } expected
+    data() {
+      return {
+        anyOfActive: {} // e.g., set later as strings: '0', '1', ...
+      };
+    },
+    mounted() {
+      // initialize active tab per anyOf field to '0'
+      for (const [k, f] of Object.entries(this.schema?.properties || {})) {
+        if (Array.isArray(f.anyOf) && f.anyOf.length && this.anyOfActive[k] == null) {
+          this.$set?.(this.anyOfActive, k, String(f.anyOf.length)) || (this.anyOfActive[k] = String(f.anyOf.length));
+        }
+      }
+    },
     methods: {
+      initializeFormData(schema, data) {
+        if (data===null)data={};
+        if (!schema || typeof schema !== 'object') return data;
+
+        const props = schema.properties || {};
+        for (const key in props) {
+          const field = props[key] || {};
+          let type = field.type;
+          if (Array.isArray(type)) type = type.find(t => t !== 'null') || 'null';
+
+          if (type === 'boolean') {
+            data[key] = field.default === undefined ? false : field.default;
+
+          } else if (type === 'integer' || type === 'number') {
+            data[key] = field.default === undefined ? 0 : field.default;
+
+          } else if (type === 'string') {
+            data[key] = field.default === undefined ? '' : field.default;
+
+          } else if (type === 'object') {
+            if (field.default && typeof field.default === 'object' && !Array.isArray(field.default)) {
+              data[key] = JSON.parse(JSON.stringify(field.default));
+            } else {
+              data[key] = {};
+              this.initializeFormData(field, data[key]); // use field, not schema.properties[key]
+            }
+
+          } else if (type === 'array') {
+            if (Array.isArray(field.default)) {
+              data[key] = JSON.parse(JSON.stringify(field.default));
+            } else {
+              data[key] = [];
+              const items = field.items;
+              if (items && (items.type === 'object' || items.properties)) {
+                data[key].addItem = () => {
+                  const tmpitem = {};
+                  this.initializeFormData(items, tmpitem);
+                  data[key].push(tmpitem);
+                };
+                data[key].delItem = (index) => data[key].splice(index, 1);
+              }
+            }
+
+          } else {
+            data[key] = field.default === undefined ? null : field.default;
+          }
+        }
+        return data;
+      },
       getIcon(entry) {
-        if (entry.isDir) {
-          return 'pi pi-fw pi-folder';
-        }
-        // Simple filetype detection (add more as you like)
-        const ext = entry.name.split('.').pop().toLowerCase();
-        if (['jpg', 'png', 'gif', 'jpeg', 'bmp', 'svg'].includes(ext)) {
-          return 'pi pi-fw pi-image';
-        }
-        if (['txt', 'md', 'log'].includes(ext)) {
-          return 'pi pi-fw pi-file';
-        }
-        if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
-          return 'pi pi-fw pi-inbox';
-        }
-        if (['js', 'ts', 'json', 'html', 'css', 'vue'].includes(ext)) {
-          return 'pi pi-fw pi-code';
-        }
-        // Fallback
+        if (entry.isDir) return 'pi pi-fw pi-folder';
+        const ext = String(entry.name || '').split('.').pop().toLowerCase();
+        if (['jpg','png','gif','jpeg','bmp','svg','webp','avif'].includes(ext)) return 'pi pi-fw pi-image';
+        if (['txt','md','log','csv','ini','yaml','yml'].includes(ext)) return 'pi pi-fw pi-file';
+        if (['zip','rar','7z','tar','gz'].includes(ext)) return 'pi pi-fw pi-inbox';
+        if (['js','ts','json','html','css','vue','jsx','tsx'].includes(ext)) return 'pi pi-fw pi-code';
         return 'pi pi-fw pi-file';
       },
       onFileUpload(key, event) {
-        // event.files is an array of File objects
-        formData.value[key] = event.files?.length ? event.files[0] : null;
-        showInfo(`Loaded file for ${key}: ${formData.value[key]?.name || 'none'}`);
+        const file = event.files?.[0] ?? null;
+        this.$set?.(this.data, key, file) || (this.data[key] = file);
+        // replace with your own toast/emitter as needed
+        console.info(`Loaded file for ${key}: ${file?.name || 'none'}`);
+        this.$emit?.('file-selected', { key, file });
       },
-      gw(field, key, data) {
-        // explicit override first
+      gw(field, key, value) {
         const w = field['x-pv-widget'];
         if (w) return w;
 
-        // heuristics
         if (field.type === 'boolean') return 'checkbox';
+
         if (field.type === 'string') {
           if (field.format === 'password') return 'password';
           if (field.format === 'date' || field.format === 'date-time') return 'calendar';
-          if (field.format === 'email') return 'email'; // renders as inputtext w/ type=email
+          if (field.format === 'email') return 'email';
           if (field.format === 'uri' || field.format === 'url') return 'url';
           if (field.format === 'color') return 'color';
           if (Array.isArray(field.enum)) return 'dropdown';
-          // large text fallback
-          if (data && data.length && data.length > 20) return 'textarea';
-          if (field.maxLength && field.maxLength > 200) return 'textarea';
+          if ((value && String(value).length > 200) || (field.maxLength && field.maxLength > 200)) return 'textarea';
+          return 'text';
         }
+
         if (field.type === 'integer' || field.type === 'number') {
           if (Array.isArray(field.enum)) return 'dropdown';
           return 'number';
         }
+
         if (field.type === 'array') {
           if (field.items?.enum) return 'multiselect';
           if (field.items?.type === 'object') return 'objectarray';
-          return 'chips'; // free-form strings
+          return 'chips';
         }
-        if (field.type === 'object') {
-          return 'autoform';
-        }
+
+        if (field.type === 'object') return 'autoform';
+
         return 'text';
+      },
+      ensureArray(key) {
+        if (!Array.isArray(this.data[key])) this.$set?.(this.data, key, []) || (this.data[key] = []);
+      },
+      addObjectItem(key, schemaItem) {
+        this.ensureArray(key);
+        const blank = {};
+        if (schemaItem?.properties) {
+          for (const k of Object.keys(schemaItem.properties)) blank[k] = null;
+        }
+        this.data[key].push(blank);
+      },
+      delObjectItem(key, i) {
+        this.ensureArray(key);
+        this.data[key].splice(i, 1);
       }
     },
     template: `
-          <div class="w-full rounded overflow-hidden shadow-lg">
-            <div v-for="(field, key) in schema.properties" :key="key" class="m-2">
-              <label :for="key" class="block mb-1 font-medium">
-                {{ field.title || key }}
-                <span v-if="Array.isArray(schema.required) && schema.required.includes(key)" class="text-red-500">*</span>
-              </label>
+  <div class="w-full rounded overflow-hidden shadow-lg">
+    <div v-for="(field, key) in schema.properties" :key="key" class="m-2">
+      <!-- anyOf: Tabs -->
+      <div v-if="field.anyOf">
+        <label :for="key" class="block mb-1 font-medium">
+          {{ field.title || key }}
+          <span class="opacity-70">( {{ field.anyOf.map(i => i.title ? i.title : i.type).join(' | ') }} )</span>
+          <span v-if="Array.isArray(schema.required) && schema.required.includes(key)" class="text-red-500">*</span>
+        </label>
 
-              <!-- Switch -->
-              <div v-if="gw(field, key, data[key]) === 'switch'">
-                <p-toggleswitch v-model="data[key]" :inputId="key" />
-              </div>
-
-              <!-- Radio group -->
-              <div v-else-if="gw(field, key, data[key]) === 'radio'">
-                <div class="flex gap-4">
-                  <div v-for="opt in field.enum" :key="opt" class="flex items-center gap-1">
-                    <p-radiobutton :inputId="key + '-' + opt" :name="key" :value="opt" v-model="data[key]" />
-                    <label :for="key + '-' + opt">{{ opt }}</label>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Slider -->
-              <div v-else-if="gw(field, key, data[key]) === 'slider'">
-                <p-slider v-model="data[key]" :min="field.minimum ?? 0" :max="field.maximum ?? 100" />
-                <div class="text-sm mt-1">{{ data[key] }}</div>
-              </div>
-
-              <!-- Rating -->
-              <div v-else-if="gw(field, key, data[key]) === 'rating'">
-                <p-rating v-model="data[key]" :stars="field.maximum ?? 5" :cancel="false" />
-              </div>
-
-              <!-- File -->
-              <div v-else-if="gw(field, key, data[key]) === 'file'">
-                <p-fileupload mode="basic" chooseLabel="Choose" :auto="true" customUpload
-                  @uploader="onFileUpload(key, $event)" :accept="field.contentMediaType || '*/*'" />
-                <div v-if="data[key]" class="text-xs mt-1 italic">
-                  {{ data[key]?.name || 'File selected' }}
-                </div>
-              </div>
-
-              <!-- Color -->
-              <div v-else-if="gw(field, key, data[key]) === 'color'">
-                <p-colorpicker v-model="data[key]" :inputId="key" />
-              </div>
-
-              <!-- Chips -->
-              <div v-else-if="gw(field, key, data[key]) === 'chips'">
-                <p-autocomplete  v-model="data[key]" multiple fluid :suggestions="autits.value" @complete="(e) => autits.value=[e.query]"
-                :inputId="key" />
-              </div>
+        <p-tabs v-model:value="anyOfActive[key]">
+          <p-tablist>
+            <p-tab v-for="(item, i) in field.anyOf" :key="i" :value="String(i)">
+              {{ item.title ? item.title : (item.type || 'option ' + (i+1)) }}
+            </p-tab>
+          </p-tablist>
+          <p-tabpanels>
+            <p-tabpanel v-for="(item, i) in field.anyOf" :key="i" :value="String(i)">
               
-              <!-- objectarray -->            
-              <div v-else-if="gw(field, key, data[key]) === 'objectarray'">              
-                <p-button v-if="data[key].addItem" icon="pi pi-plus" severity="success"
-                          size="small" @click="data[key].addItem"/>
-                <div v-for="(v, i) in data[key]" :key="key" class="m-2">
-                  <p-button  icon="pi pi-times" severity="danger"
-                          size="small" @click="()=>data[key].delItem(i)"/>
-                  <p-autoform :schema="schema.properties[key].items"
-                              :data="data[key][i]" :gw="gw" :autits="autits"/>
-                </div>
-              </div>
-              
-
-              <!-- SelectButton -->
-              <div v-else-if="gw(field, key, data[key]) === 'selectbutton'">
-                <p-selectbutton v-model="data[key]" :options="field.enum" optionLabel="" optionValue="" />
-              </div>
-              
-              <!-- text -->
-              <div v-else-if="gw(field, key, data[key]) === 'text'">
-                <p-inputtext v-model="data[key]" :id="key" class="w-full" :autoResize="true" />
-              </div>
-
-              <!-- Textarea -->
-              <div v-else-if="gw(field, key, data[key]) === 'textarea'">
-                <p-textarea v-model="data[key]" :id="key" class="w-full" :autoResize="true" />
-              </div>
-
-              <!-- Password -->
-              <div v-else-if="gw(field, key, data[key]) === 'password'">
-                <p-password v-model="data[key]" :id="key" class="w-full" toggle-mask />
-              </div>
-
-              <!-- Calendar -->
-              <div v-else-if="gw(field, key, data[key]) === 'calendar'">
-                <p-datepicker v-model="data[key]" :id="key" class="w-full" :showIcon="true"
-                  :showTime="field.format === 'date-time'" />
-              </div>
-
-              <!-- Dropdown no available
-              <div v-else-if="gw(field, key, data[key]) === 'dropdown'">
-                <p-dropdown v-model="data[key]" :options="field.enum" :id="key" class="w-full"
-                  :placeholder="'Select ' + (field.title || key)" />
-              </div> -->
-
-              <!-- MultiSelect -->
-              <div v-else-if="gw(field, key, data[key]) === 'multiselect'">
-                <p-multiselect v-model="data[key]" :options="field.items.enum" :id="key" class="w-full"
-                  :placeholder="'Select ' + (field.title || key)" />
-              </div>
-
-              <!-- Number / Integer -->
-              <div v-else-if="gw(field, key, data[key]) === 'number'">
-                <p-inputnumber v-model="data[key]" :id="key" class="w-full" :useGrouping="false" :min="field.minimum"
-                  :max="field.maximum" :step="field.multipleOf" />
-              </div>
-
-              <!-- Checkbox (boolean fallback) -->
-              <div v-else-if="gw(field, key, data[key]) === 'checkbox'">
-                <p-checkbox v-model="data[key]" :inputId="key" :binary="true" />
-              </div>
-
-              <!-- autoform -->
-              <div v-else-if="gw(field, key, data[key]) === 'autoform'">
-                <p-autoform :schema="schema.properties[key]" :data="data[key]"
-                            :gw="gw" :autits="autits"/>
-              </div>
-
-              <!-- Default text -->
-              <div v-else>
+              <div v-if="item.type=='object'">
+                <p-autoform :schema="item"
+                            :data="initializeFormData(item,data,key)" :autits="autits"/>
+              </div>              
+              <div v-else-if="item.type!=='null'">
                 <p-textarea v-model="data[key]" :id="key" class="w-full" />
               </div>
+
+            </p-tabpanel>
+          </p-tabpanels>
+        </p-tabs>
+      </div>
+
+      <!-- Simple types -->
+      <div v-else-if="field.type">
+        <label :for="key" class="block mb-1 font-medium">
+          {{ field.title || key }} <span class="opacity-70">({{ field.type }})</span>
+          <span v-if="Array.isArray(schema.required) && schema.required.includes(key)" class="text-red-500">*</span>
+        </label>
+
+        <!-- Switch -->
+        <div v-if="gw(field, key, data[key]) === 'switch'">
+          <p-toggleswitch v-model="data[key]" :inputId="key" />
+        </div>
+
+        <!-- Radio -->
+        <div v-else-if="gw(field, key, data[key]) === 'radio'">
+          <div class="flex gap-4">
+            <div v-for="opt in field.enum" :key="opt" class="flex items-center gap-1">
+              <p-radiobutton :inputId="key + '-' + opt" :name="key" :value="opt" v-model="data[key]" />
+              <label :for="key + '-' + opt">{{ opt }}</label>
             </div>
           </div>
-    `});
+        </div>
 
+        <!-- Slider -->
+        <div v-else-if="gw(field, key, data[key]) === 'slider'">
+          <p-slider v-model="data[key]" :min="field.minimum ?? 0" :max="field.maximum ?? 100" />
+          <div class="text-sm mt-1">{{ data[key] }}</div>
+        </div>
+
+        <!-- Rating -->
+        <div v-else-if="gw(field, key, data[key]) === 'rating'">
+          <p-rating v-model="data[key]" :stars="field.maximum ?? 5" :cancel="false" />
+        </div>
+
+        <!-- File -->
+        <div v-else-if="gw(field, key, data[key]) === 'file'">
+          <p-fileupload mode="basic" chooseLabel="Choose" :auto="true" customUpload
+            @uploader="onFileUpload(key, $event)" :accept="field.contentMediaType || '*/*'" />
+          <div v-if="data[key]" class="text-xs mt-1 italic">{{ data[key]?.name || 'File selected' }}</div>
+        </div>
+
+        <!-- Color -->
+        <div v-else-if="gw(field, key, data[key]) === 'color'">
+          <p-colorpicker v-model="data[key]" :inputId="key" />
+        </div>
+
+        <!-- Chips / free-form strings -->
+        <div v-else-if="gw(field, key, data[key]) === 'chips'">
+          <p-autocomplete v-model="data[key]" multiple class="w-full"
+            :suggestions="autits?.value || []"
+            @complete="(e) => autits && (autits.value = [e.query])"
+            :inputId="key" />
+        </div>
+
+        <!-- Object array -->
+        <div v-else-if="gw(field, key, data[key]) === 'objectarray'">
+          <div class="flex gap-2 mb-2">
+            <p-button icon="pi pi-plus" label="Add" severity="success" size="small"
+              @click="addObjectItem(key, schema.properties[key].items)" />
+          </div>
+          <div v-for="(v, i) in (Array.isArray(data[key]) ? data[key] : (data[key] = []))" :key="i" class="mb-3 p-2 border rounded">
+            <div class="flex justify-end mb-2">
+              <p-button icon="pi pi-times" severity="danger" size="small" @click="delObjectItem(key, i)" />
+            </div>
+            {{schema.properties[key].items}}
+            <p-autoform :schema="schema.properties[key].items" :data="data[key][i]" :autits="autits" />
+          </div>
+        </div>
+
+        <!-- SelectButton -->
+        <div v-else-if="gw(field, key, data[key]) === 'selectbutton'">
+          <p-selectbutton v-model="data[key]" :options="field.enum" />
+        </div>
+
+        <!-- Dropdown (ENUM) -->
+        <div v-else-if="gw(field, key, data[key]) === 'dropdown'">
+          <p-dropdown v-model="data[key]" :options="field.enum" class="w-full"
+            :placeholder="'Select ' + (field.title || key)" />
+        </div>
+
+        <!-- Text -->
+        <div v-else-if="gw(field, key, data[key]) === 'text'">
+          <p-inputtext v-model="data[key]" :id="key" class="w-full" />
+        </div>
+
+        <!-- Textarea -->
+        <div v-else-if="gw(field, key, data[key]) === 'textarea'">
+          <p-textarea v-model="data[key]" :id="key" class="w-full" :autoResize="true" />
+        </div>
+
+        <!-- Password -->
+        <div v-else-if="gw(field, key, data[key]) === 'password'">
+          <p-password v-model="data[key]" :inputId="key" class="w-full" toggleMask />
+        </div>
+
+        <!-- Calendar / DatePicker -->
+        <div v-else-if="gw(field, key, data[key]) === 'calendar'">
+          <p-datepicker v-model="data[key]" :inputId="key" class="w-full"
+            :showIcon="true" :showTime="field.format === 'date-time'" />
+          <!-- If using older PrimeVue, replace with p-calendar and props: showIcon, showTime -->
+        </div>
+
+        <!-- MultiSelect (ENUM arrays) -->
+        <div v-else-if="gw(field, key, data[key]) === 'multiselect'">
+          <p-multiselect v-model="data[key]" :options="field.items.enum" class="w-full"
+            :placeholder="'Select ' + (field.title || key)" />
+        </div>
+
+        <!-- Number / Integer -->
+        <div v-else-if="gw(field, key, data[key]) === 'number'">
+          <p-inputnumber v-model="data[key]" :inputId="key" class="w-full"
+            :useGrouping="false" :min="field.minimum" :max="field.maximum" :step="field.multipleOf" />
+        </div>
+
+        <!-- Checkbox (boolean) -->
+        <div v-else-if="gw(field, key, data[key]) === 'checkbox'">
+          <p-checkbox v-model="data[key]" :inputId="key" :binary="true" />
+        </div>
+
+        <!-- Nested object -->
+        <div v-else-if="gw(field, key, data[key]) === 'autoform'">
+          <p-autoform :schema="schema.properties[key]" :data="data[key] ||= {}" :autits="autits" />
+        </div>
+
+        <!-- Fallback -->
+        <div v-else>
+          <p-textarea v-model="data[key]" :id="key" class="w-full" />
+        </div>
+      </div>
+    </div>
+  </div>
+    `
+  });
+    
   app.mount('#app');
 </script>
 
