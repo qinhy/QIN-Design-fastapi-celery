@@ -606,13 +606,37 @@
         if (['js','ts','json','html','css','vue','jsx','tsx'].includes(ext)) return 'pi pi-fw pi-code';
         return 'pi pi-fw pi-file';
       },
-      onFileUpload(key, event) {
-        const file = event.files?.[0] ?? null;
-        this.$set?.(this.data, key, file) || (this.data[key] = file);
-        // replace with your own toast/emitter as needed
-        console.info(`Loaded file for ${key}: ${file?.name || 'none'}`);
-        this.$emit?.('file-selected', { key, file });
+      
+      fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () => reject(reader.error);
+          reader.onload = () => {
+            const s = String(reader.result);                // "data:<mime>;base64,AAAA..."
+            const comma = s.indexOf(',');
+            resolve(comma >= 0 ? s.slice(comma + 1) : s);   // "AAAA..."
+          };
+          reader.readAsDataURL(file);
+        });
       },
+
+      // drop-in replacement
+      async onFileUpload(key, event) {
+        const files = event?.files ?? event?.target?.files ?? null;
+        const file = files && files.length ? files[0] : null;
+
+        const base64 = file ? await this.fileToBase64(file) : null;
+
+        if (this?.$set) this.$set(this.data, key, base64);
+        else this.data[key] = base64;
+
+        console.log(`Loaded base64 for ${key}: ${file?.name ?? 'none'}`);
+        this?.$emit?.('file-selected', { key, file, base64 });
+
+        // optional: allow re-selecting same file
+        if (event?.target && 'value' in event.target) event.target.value = '';
+      },
+
       gw(field, key, value) {
         const w = field['x-pv-widget'];
         if (w) return w;
@@ -637,8 +661,8 @@
 
         if (field.type === 'array') {
           if (field.items?.enum) return 'multiselect';
-          if (field.items?.type === 'object') return 'objectarray';
-          return 'chips';
+          return 'array';
+          // return 'chips';
         }
 
         if (field.type === 'object') return 'autoform';
@@ -650,9 +674,21 @@
       },
       addObjectItem(key, schemaItem) {
         this.ensureArray(key);
-        const blank = {};
+        var blank = {};
         if (schemaItem?.properties) {
           for (const k of Object.keys(schemaItem.properties)) blank[k] = null;
+        }
+        else if (schemaItem?.type=='number') {
+           blank = 0.0;
+        }
+        else if (schemaItem?.type=='integer') {
+           blank = 0;
+        }
+        else if (schemaItem?.type=='string') {
+           blank = '';
+        }
+        else if (schemaItem?.type=='boolean') {
+           blank = false;
         }
         this.data[key].push(blank);
       },
@@ -703,7 +739,7 @@
                 <p-textarea v-model="data[key]" :id="key" class="w-full" />
               </div>
 
-              <div v-else-if="item.type=='null'">
+              <div v-else-if="item.type === 'null'">
                 <p>The value is null now</p>
               </div>
               
@@ -747,9 +783,9 @@
 
         <!-- File -->
         <div v-else-if="gw(field, key, data[key]) === 'file'">
-          <p-fileupload mode="basic" chooseLabel="Choose" :auto="true" customUpload
-            @uploader="onFileUpload(key, $event)" :accept="field.contentMediaType || '*/*'" />
-          <div v-if="data[key]" class="text-xs mt-1 italic">{{ data[key]?.name || 'File selected' }}</div>
+          <p-fileupload chooseLabel="Choose" @select="onFileUpload(key, $event)"
+                         @removeUploadedFile="()=>{data[key]=''}"  @remove="()=>{data[key]=''} "/>
+          <div v-if="data[key]" class="text-xs mt-1 italic">{{ 'File selected : ' + data[key].slice(0,20) + '...' }}</div>
         </div>
 
         <!-- Color -->
@@ -757,16 +793,8 @@
           <p-colorpicker v-model="data[key]" :inputId="key" />
         </div>
 
-        <!-- Chips / free-form strings -->
-        <div v-else-if="gw(field, key, data[key]) === 'chips'">
-          <p-autocomplete v-model="data[key]" multiple class="w-full"
-            :suggestions="autits?.value || []"
-            @complete="(e) => autits && (autits.value = [e.query])"
-            :inputId="key" />
-        </div>
-
         <!-- Object array -->
-        <div v-else-if="gw(field, key, data[key]) === 'objectarray'">
+        <div v-else-if="gw(field, key, data[key]) === 'array'">
           <div class="flex gap-2 mb-2">
             <p-button icon="pi pi-plus" label="Add" severity="success" size="small"
               @click="addObjectItem(key, schema.properties[key].items)" />
@@ -775,8 +803,25 @@
             <div class="flex justify-end mb-2">
               <p-button icon="pi pi-times" severity="danger" size="small" @click="delObjectItem(key, i)" />
             </div>
-            {{schema.properties[key].items}}
-            <p-autoform :schema="schema.properties[key].items" :data="data[key][i]" :autits="autits" />
+
+              <!-- Number / Integer -->
+              <div v-if="gw(schema.properties[key].items, key, data[key]) === 'number'">
+                <p-inputnumber v-model="data[key][i]" :inputId="key" class="w-full" :useGrouping="false"/>
+              </div>
+
+              <!-- Checkbox (boolean) -->
+              <div v-else-if="gw(schema.properties[key].items, key, data[key]) === 'checkbox'">
+                <p-checkbox v-model="data[key][i]" :inputId="key" :binary="true" />
+              </div>
+
+              <div v-else-if="schema.properties[key].items?.type === 'string'">
+                <p-textarea v-model="data[key][i]" :id="key" class="w-full" />
+              </div>
+
+              <div v-else">
+                <p-autoform :schema="schema.properties[key].items" :data="data[key][i]" :autits="autits" />
+              </div>
+
           </div>
         </div>
 

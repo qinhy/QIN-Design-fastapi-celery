@@ -117,8 +117,7 @@ Supports text + multimodal input, streaming, and customization of model paramete
         pass
 
     class Model(ServiceOrientedArchitecture.Model):
-
-
+        
         class Param(BaseModel):
             class ReasoningParam(BaseModel):
                 """Controls the model's chain-of-thought *style* (not the content you receive)."""
@@ -142,11 +141,14 @@ Supports text + multimodal input, streaming, and customization of model paramete
             )
 
         class Args(BaseModel):
-            user_prompt: str = Field("Hi", description="The user prompt to send to the model")
-            # For backwards compatibility we accept old 'messages' and convert to 'input'
-            messages: List[Dict[str, Union[str, Dict, List[Dict[str, Any]]]]] = Field(
-                [], description="(Compat) Chat-style messages; converted to Responses API 'input'."
+            class SimpleTextMsg(BaseModel):
+                role: str = Field("user", description="The role of the msg")
+                content: str = Field("hi", description="The content of the msg")
+
+            history_messages: List[SimpleTextMsg] = Field([],
+                    description="(Compat) Chat-style messages; converted to Responses API 'input'."
             )
+            user_prompt: str = Field("Hi", description="The user prompt to send to the model")
 
         class Return(BaseModel):
             response: str = Field("", description="The full model response text")
@@ -322,8 +324,8 @@ Supports text + multimodal input, streaming, and customization of model paramete
         ) -> Dict[str, Any]:
 
             # Start with any pre-supplied messages (compat path)
-            if self.model.args.messages:
-                input_list = self._convert_legacy_messages_to_input(self.model.args.messages)
+            if self.model.args.history_messages:
+                input_list = self._convert_legacy_messages_to_input(self.model.args.history_messages)
             else:
                 input_list = []
 
@@ -700,7 +702,7 @@ def test_chatgpt_service_with_image():
     model.param.max_output_tokens = 100
 
     # Set messages from PromptBuilder
-    model.args.messages = prompt.build()
+    model.args.history_messages = prompt.build()
     model.args.user_prompt = ""  # No additional prompt needed
 
     # Run the service
