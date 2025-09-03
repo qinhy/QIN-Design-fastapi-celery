@@ -672,23 +672,41 @@
           <span v-if="Array.isArray(schema.required) && schema.required.includes(key)" class="text-red-500">*</span>
         </label>
 
-        <p-tabs v-model:value="anyOfActive[key]">
+        <p-tabs v-model:value="anyOfActive[key]" @update:value="(e)=>{if(field.anyOf[parseInt(e)].type=='null'){data[key]=null}}">
+
           <p-tablist>
             <p-tab v-for="(item, i) in field.anyOf" :key="i" :value="String(i)">
               {{ item.title ? item.title : (item.type || 'option ' + (i+1)) }}
             </p-tab>
           </p-tablist>
+
           <p-tabpanels>
             <p-tabpanel v-for="(item, i) in field.anyOf" :key="i" :value="String(i)">
               
               <div v-if="item.type=='object'">
                 <p-autoform :schema="item"
                             :data="initializeFormData(item,data,key)" :autits="autits"/>
-              </div>              
+              </div>
+              
+              <!-- Number / Integer -->
+              <div v-else-if="gw(item, key, data[key]) === 'number'">
+                <p-inputnumber v-model="data[key]" :inputId="key" class="w-full"
+                  :useGrouping="false" :min="field.minimum" :max="field.maximum" :step="field.multipleOf" />
+              </div>
+
+              <!-- Checkbox (boolean) -->
+              <div v-else-if="gw(field, key, data[key]) === 'checkbox'">
+                <p-checkbox v-model="data[key]" :inputId="key" :binary="true" />
+              </div>
+
               <div v-else-if="item.type!=='null'">
                 <p-textarea v-model="data[key]" :id="key" class="w-full" />
               </div>
 
+              <div v-else-if="item.type=='null'">
+                <p>The value is null now</p>
+              </div>
+              
             </p-tabpanel>
           </p-tabpanels>
         </p-tabs>
