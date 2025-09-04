@@ -61,11 +61,11 @@ class User(BaseModel):
         description="The hashed password of the user, stored securely.",
     )
 
-    file_system : Optional[FileSystem] = Field(None,
+    select_file_system : int = Field(0,
         description="Remote File System configuration, designed for use with fsspec-compatible backends.",
     )
 
-    file_systems : Optional[List[FileSystem]] = Field([],
+    file_systems : List[FileSystem] = Field([],
         description="Remote File System configurations",
     )
 
@@ -148,18 +148,28 @@ class User(BaseModel):
                 'rank','create_time','update_time','status','metadata','auto_del'
                 'hashed_password','salt',
             },
-        ]
-        
+        ]        
         d = super().model_dump(exclude=sensitive_fields[level])
-
         if level>0:            
             d['username'] = ""
             d['full_name'] = ""
             d['salt'] = ""
-            d['hashed_password'] = ""
-            
+            d['hashed_password'] = ""            
         return d
 
+    def model_json_schema_exclude_sensitive(self, level=0):
+        """Hide sensitive fields unless explicitly requested."""
+        sensitive_fields = [
+            {
+                'hashed_password','salt'
+            },
+            {
+                'rank','create_time','update_time','status','metadata','auto_del'
+                'hashed_password','salt',
+            },
+        ]        
+        d = super().model_json_schema(exclude=sensitive_fields[level])        
+        return d
 try:
     from ..Storages.BasicModel import BasicStore, Controller4Basic, Model4Basic
 except Exception as e:

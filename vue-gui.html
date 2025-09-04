@@ -139,53 +139,8 @@
                 <h2 class="text-xl font-bold mb-4">OTP QR</h2>
                 <img :src="otpQr" alt="OTP QR Code" class="mb-4" />
 
-                <!-- File System Configuration Form -->
-                <h2 class="text-xl font-bold mt-6 mb-4">File System Configuration</h2>
-                <form @submit.prevent="saveFileSystemConfig">
-                    <!-- Protocol -->
-                    <p-inputtext v-model="fileSystem.protocol" placeholder="Protocol (e.g., s3, gcs, ftp)" required
-                        class="border p-2 rounded w-full mb-2"></p-inputtext>
-
-                    <!-- Host -->
-                    <p-inputtext v-model="fileSystem.host" placeholder="Host (e.g., s3.amazonaws.com)"
-                        class="border p-2 rounded w-full mb-2"></p-inputtext>
-
-                    <!-- Port -->
-                    <p-inputnumber v-model="fileSystem.port" placeholder="Port (e.g., 443)" :min="0" :max="65535"
-                        class="border p-2 rounded w-full mb-2"></p-inputnumber>
-
-                    <!-- Username -->
-                    <p-inputtext v-model="fileSystem.username" placeholder="Username of File System" class="border p-2 rounded w-full mb-2"></p-inputtext>
-
-                    <!-- Password -->
-                    <p-password toggleMask id='fspw' v-model="fileSystem.password" placeholder="Password of File System" class="border p-2 rounded w-full mb-2"></p-password>
-
-                    <!-- Bucket -->
-                    <p-inputtext v-model="fileSystem.bucket" placeholder="Bucket (e.g., my-data-bucket)"
-                        class="border p-2 rounded w-full mb-2"></p-inputtext>
-
-                    <!-- Root Path -->
-                    <p-inputtext v-model="fileSystem.root_path" placeholder="Root Path (e.g., folder/subfolder)"
-                        class="border p-2 rounded w-full mb-2"></p-inputtext>
-
-                    <!-- Options (JSON) -->
-                    <p-textarea v-model="fileSystem.options" placeholder='Options (JSON), e.g., {"anon": false}'
-                        rows="4" autoResize class="border p-2 rounded w-full mb-2"></p-textarea>
-
-                    <!-- Save Button -->
-                    <p-button type="submit" :disabled="loading" class="w-full">
-                        <span v-if="loading" class="pi pi-spinner animate-spin"></span>
-                        <span v-else>Save File System Config</span>
-                    </p-button>
-                </form>
-                
-                <!-- File System Simple browser -->
-                <div>
-                  <h2 class="text-xl font-bold mt-6 mb-4">File Browser</h2>
-                  <p-tree :value="fileTreeNodes"
-                    @node-expand="onNodeExpand"
-                    loadingMode="icon"
-                  />
+                <div>                  
+                  <p-autoform :schema="userdataschema" :data="userdata" :autits="[]"></p-autoform>
                 </div>
             </div>
         </p-tabpanel>
@@ -383,6 +338,7 @@
         async removeAccount(data) { return this.request("/auth/remove", "POST", data); }
         // Get Current User Info
         async getCurrentUser() { return this.request("/auth/me"); }
+        async getCurrentUserSchema() { return this.request("/auth/me/schema"); }
         // Read Session
         async readSession() { return this.request("/auth/session"); }        
         // ls
@@ -527,6 +483,8 @@
       }
 
       // OAuth      
+      const userdata = ref({});
+      const userdataschema = ref({});
       const editForm = ref({ uuid:null, email:null, full_name:null, file_system:null,
             new_password:null, removeAccount: false, password:null, });
       const loginForm = ref({ username: '', password: '', otp: '', });
@@ -544,6 +502,8 @@
       const getUserdata = async () => {
         const data = await api.getCurrentUser();
         console.log(data);
+        userdata.value = data;
+        userdataschema.value = await api.getCurrentUserSchema()
         editForm.value = data;
         if(data.file_system)fileSystem.value = data.file_system;
         activeTab.value = 'Profile';
@@ -740,6 +700,8 @@
                 loading,
 
                 // User Forms and Authentication
+                userdata,
+                userdataschema,
                 editForm,
                 loginForm,
                 useOtp,

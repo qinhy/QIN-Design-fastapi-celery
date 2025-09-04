@@ -1,3 +1,4 @@
+from copy import deepcopy
 import os
 from typing import Optional
 from .UserModel import FileSystem, Model4User, text2hash2base32Str, UsersStore
@@ -20,6 +21,7 @@ from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr, Field
 import pyotp
 import qrcode
+import jsonref
 
 #######################################################################################
 class UserModels:  
@@ -195,6 +197,7 @@ class OAuthRoutes:
         self.router.post("/edit")(self.edit_user_info)
         self.router.post("/remove")(self.remove_account)
         self.router.get("/me")(self.read_users_me)
+        self.router.get("/me/schema")(self.read_users_schema)        
         self.router.get("/session")(self.read_session)
         self.router.get("/otp/qr")(self.get_otp_qr)
         self.router.get("/qr")(self.get_login_qr)
@@ -271,6 +274,12 @@ class OAuthRoutes:
     def read_users_me(self,request:Request):
         current_user = self.get_current_user_from_request(request)
         return dict(**current_user.model_dump_exclude_sensitive(), uuid=current_user.get_id())
+    
+    def read_users_schema(self,request:Request):
+        current_user = self.get_current_user_from_request(request)        
+        s = jsonref.replace_refs(current_user.model_json_schema())
+        s = {k:deepcopy(s[k]) for k in s if k!='$defs'}
+        return s
 
     def read_session(self, request: Request):
         current_user = self.get_current_user_from_request(request)
