@@ -20,7 +20,7 @@ class MermaidGraph:
         Fibonacci_01["{'args': {'n': 10}, 'param': {'mode': 'fast'}}"]
         PrimeNumberChecker["{'param': {'mode': 'smart'}}"]
         BinaryRepresentation["{'param': {'bit_length': 8}}"]
-        ChatGPTService["{'args': {'user_prompt': 'Is this number interesting?'}, 'param': {'model': 'gpt-4o-mini'}}"]
+        ChatGPTService["{'args': {'user_prompt': 'Is this number interesting?'}, 'param': {'model': 'gpt-5-nano'}}"]
 
         Fibonacci_01 -- "{'result':'number'}" --> PrimeNumberChecker
         PrimeNumberChecker --> BinaryRepresentation

@@ -8,7 +8,7 @@ class SmartBuilder:
     A class for building and managing conversion functions between different
     ServiceOrientedArchitecture classes using LLM.
     """
-    def __init__(self, model="gpt-4o-mini", api_key=None):
+    def __init__(self, model="gpt-5-nano", api_key=None):
         """
         Initialize the SmartBuilder with configuration options.
         
