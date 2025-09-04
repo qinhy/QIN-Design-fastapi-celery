@@ -496,7 +496,7 @@
       const dynamicTasks = ref([]); // indexed by tab
       const reflesh_tabs = async () => {        
         const action_list = await api.getActions();
-        const mapped_actions = action_list.map((v) => v[v.type]);
+        const mapped_actions = action_list;
         all_schema.value = mapped_actions;
         console.log(mapped_actions);
         
