@@ -34,9 +34,9 @@ Can create files from base64-encoded content if they don't exist locally.
             username: str = Field("", description="FTP username")
             password: str = Field("", description="FTP password")
             # New field for providing the file content encoded in base64
-            local_file_content_b64: Optional[str] = Field(
-                "", description="Base64 encoded content to create local_file if it does not exist"
-            )
+            local_file_content_b64: str = Field(
+                "", description="Base64 encoded content to create local_file if it does not exist",
+                json_schema_extra={"x-pv-widget": "file"})
 
         class Return(BaseModel):
             success: bool = Field(False, description="Whether the upload was successful")

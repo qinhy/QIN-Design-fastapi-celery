@@ -69,12 +69,11 @@ async def openai_call_tools(res):
     results = []
     for call in res['tool_calls']:
         tool_data = call.get(call['type'])
-        tool_call_id = call['id']
         if not tool_data: continue
         tool_name = tool_data['name']
         tool_args = json.loads(tool_data['arguments'])
         results.append({'role': 'tool','name': tool_name,
-            'tool_call_id':tool_call_id})
+            'tool_call_id':call['id']})
         try:
             result = await call_and_wait(tool_name, tool_args)            
             if 'error' in result:
@@ -84,7 +83,7 @@ async def openai_call_tools(res):
             results[-1]['content'] = f"Error calling tool {tool_name}: {str(e)}"
     return results
 
-async def llm(messages, tools=[]):
+async def llm(messages, model="gpt-5-nano", tools=[]):
     API_KEY = os.getenv("OPENAI_API_KEY")
     API_URL = "https://api.openai.com/v1/chat/completions"
     HEADERS = {
@@ -94,7 +93,7 @@ async def llm(messages, tools=[]):
     if type(messages) == str:
         messages = [{"role": "user", "content": messages}]
     body = {
-        "model": "gpt-4.1-nano", "messages": messages,
+        "model": model, "messages": messages,
         "tools": tools, "tool_choice": "auto"
     }
     async with aiohttp.ClientSession() as session:
@@ -113,16 +112,11 @@ async def llm(messages, tools=[]):
 
 async def one_query(ask:str='How many "r" in "raspberry"?',
                     llm=llm,tools=[]):
-    # Initialize structured messages
     messages = [{"role": "user", "content": ask}]
-    # First assistant response (might suggest a tool)
-    res = await llm(messages,tools)
-    # Handle tool calls
+    res = await llm(messages,tools=tools)
     if "tool_calls" not in res: return res
-    # Insert assistant message with tool_calls
     messages.append({
         "role": "assistant",
-        # might be empty or partial
         "content": res.get("content", ""),
         "tool_calls": res["tool_calls"]
     })

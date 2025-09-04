@@ -1,5 +1,6 @@
 ﻿# Standard library imports
 import ast
+from copy import deepcopy
 import json
 import re
 import time
@@ -8,6 +9,8 @@ from typing import Literal
 import pytz
 from celery.app import task as Task
 from celery.signals import task_received
+
+import jsonref
 
 # FastAPI imports
 from fastapi import APIRouter, Body, FastAPI, HTTPException, Query, Request
@@ -737,7 +740,14 @@ class BasicCeleryTask:
             return [v.as_openai_tool() for k,v in self.ACTION_REGISTRY.items()]
         else:
             # return pydantic schema
-            return [v.Model.model_json_schema() for k,v in self.ACTION_REGISTRY.items()]
+            ops = [v.as_openai_tool() for k,v in self.ACTION_REGISTRY.items()]
+            ss = [v.Model for k,v in self.ACTION_REGISTRY.items()]
+            ss = [jsonref.replace_refs(v.model_json_schema()) for v in ss]
+            for i,s in enumerate(ss):
+                ss[i] = {k:deepcopy(s[k]) for k in s if k!='$defs'}
+                ss[i]['name'] = ops[i]['name']
+            return ss
+            # return [v.Model.model_json_schema() for k,v in self.ACTION_REGISTRY.items()]
     
     def api_perform_action(self,
         name: str, 
