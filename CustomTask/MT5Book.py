@@ -76,11 +76,8 @@ class BookCloseService(ServiceOrientedArchitecture):
         
         def __init__(self, model,BasicApp:AppInterface,level=None):            
             super().__init__(model,BasicApp,level)
+            MT5Action.__init__(self,self.model.param)
             self.model:BookCloseService.Model = self.model
-            account:MT5Account = self.model.param
-            self.uuid = uuid.uuid4()
-            self._account: MT5Account = MT5Account(account.account_id,account.password,account.account_server)
-            self.retry_times_on_error = 3
             
         def __call__(self, *args, **kwargs):
             super().__call__(*args, **kwargs)
@@ -96,7 +93,59 @@ class BookCloseService(ServiceOrientedArchitecture):
                     except:
                         self.model.ret.ok=False
             return self.model
+
+
+class BookSendService(ServiceOrientedArchitecture):
+
+    class Model(ServiceOrientedArchitecture.Model):
+            
+        class Param(MT5Account):
+            pass
+
+        class Args(BaseModel):
+            symbol: str = 'USDJPY'
+            p:  int = -1
+            tp: int = -1
+            sl: int = -1
+            
+        class Return(BaseModel):
+            ok:bool=False
+
+        class Logger(ServiceOrientedArchitecture.Model.Logger):
+            pass
         
+        class Version(ServiceOrientedArchitecture.Model.Version):
+            pass
+        
+        version:Version = Version()
+        param:Param = Param()
+        args:Args = Args()
+        ret:Return = Return()
+        logger:Logger = Logger(name=Version().class_name)
+
+    class Action(ServiceOrientedArchitecture.Action, MT5Action):
+        
+        def __init__(self, model,BasicApp:AppInterface,level=None):            
+            super().__init__(model,BasicApp,level)
+            MT5Action.__init__(self,self.model.param)
+            self.model:BookCloseService.Model = self.model
+            
+        def __call__(self, *args, **kwargs):
+            super().__call__(*args, **kwargs)
+            return MT5Manager().get_singleton().do(self)
+
+        def run(self):
+            bs = Book().getBooks()
+            for b in bs:
+                if self.model.args.ticket==b.ticket:
+                    try:
+                        b.close()
+                        self.model.ret.ok=True
+                    except:
+                        self.model.ret.ok=False
+            return self.model
+       
+
 class BookService(ServiceOrientedArchitecture):
 
     class Model(ServiceOrientedArchitecture.Model):
