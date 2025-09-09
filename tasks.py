@@ -253,7 +253,7 @@ class CeleryTask(BasicCeleryTask):
             "total_tasks": len(task_ids)
         }
 
-from CustomTask import BookService, MT5CopyLastRatesService
+from CustomTask import MT5CopyLastRatesService #, BookService, 
 class MT5CeleryTask(CeleryTask):
     def __init__(self, BasicApp, celery_app, root_fast_app:FastAPI, ACTION_REGISTRY = ACTION_REGISTRY):
         super().__init__(BasicApp, celery_app, root_fast_app, ACTION_REGISTRY)
@@ -289,95 +289,95 @@ class MT5CeleryTask(CeleryTask):
 #     "action": "account_info"
 #   }
 # }
-    def api_my_fibo(self,n:int=13,mode:Literal['fast','slow']='fast'):
-        m = Fibonacci.Model()
-        m.param.mode = mode
-        m.args.n = n
-        res = self.api_perform_action('Fibonacci', m.model_dump(),'NOW')        
-        self.api_delete_task_delay(res['task_id'],30)
-        return res
+    # def api_my_fibo(self,n:int=13,mode:Literal['fast','slow']='fast'):
+    #     m = Fibonacci.Model()
+    #     m.param.mode = mode
+    #     m.args.n = n
+    #     res = self.api_perform_action('Fibonacci', m.model_dump(),'NOW')        
+    #     self.api_delete_task_delay(res['task_id'],30)
+    #     return res
 
-    def api_account_info(self, acc: MT5Account):
-        """Endpoint to fetch account information."""
-        m = BookService.Model()
-        m.param.account = acc
-        m.param.action= 'account_info'
-        res = self.api_perform_action('BookService', m.model_dump(),'NOW')
-        self.api_delete_task_delay(res['task_id'],30)
-        return res
+    # def api_account_info(self, acc: MT5Account):
+    #     """Endpoint to fetch account information."""
+    #     m = BookService.Model()
+    #     m.param.account = acc
+    #     m.param.action= 'account_info'
+    #     res = self.api_perform_action('BookService', m.model_dump(),'NOW')
+    #     self.api_delete_task_delay(res['task_id'],30)
+    #     return res
     
-    def api_get_books(self, acc: MT5Account):
-        """Endpoint to get books for a given MT5 account."""
-        m = BookService.Model()
-        m.param.account = acc
-        m.param.action= 'getBooks'
-        res = self.api_perform_action('BookService', m.model_dump(),'NOW')
-        self.api_delete_task_delay(res['task_id'],30)
-        return res
+    # def api_get_books(self, acc: MT5Account):
+    #     """Endpoint to get books for a given MT5 account."""
+    #     m = BookService.Model()
+    #     m.param.account = acc
+    #     m.param.action= 'getBooks'
+    #     res = self.api_perform_action('BookService', m.model_dump(),'NOW')
+    #     self.api_delete_task_delay(res['task_id'],30)
+    #     return res
 
-    def api_book_send(self, acc: MT5Account, book: Book):
-        """Endpoint to send a book."""
-        m = BookService.Model()
-        m.param.account = acc
-        m.param.action= 'send'
-        m.param.book= book
-        res = self.api_perform_action('BookService', m.model_dump(),'NOW')
-        self.api_delete_task_delay(res['task_id'],30)
-        return res
+    # def api_book_send(self, acc: MT5Account, book: Book):
+    #     """Endpoint to send a book."""
+    #     m = BookService.Model()
+    #     m.param.account = acc
+    #     m.param.action= 'send'
+    #     m.param.book= book
+    #     res = self.api_perform_action('BookService', m.model_dump(),'NOW')
+    #     self.api_delete_task_delay(res['task_id'],30)
+    #     return res
 
-    def api_schedule_book_send(self, acc: MT5Account, 
-        symbol:str='USDJPY',sl:float=147.0,tp:float=150.0,price_open:float=148.0,volume:float=0.01,
-        execution_time:str=EXECUTION_TIME_PARAM,
-        timezone:VALID_TIMEZONES=TIMEZONE_PARAM
-    ):
-        m = BookService.Model()
-        m.param.account = acc
-        m.param.action= 'send'
-        m.param.book= Book(symbol=symbol,sl=sl,tp=tp,price_open=price_open,volume=volume).as_plan()
-        return self.api_perform_action('BookService', m.model_dump(), execution_time,timezone)
+    # def api_schedule_book_send(self, acc: MT5Account, 
+    #     symbol:str='USDJPY',sl:float=147.0,tp:float=150.0,price_open:float=148.0,volume:float=0.01,
+    #     execution_time:str=EXECUTION_TIME_PARAM,
+    #     timezone:VALID_TIMEZONES=TIMEZONE_PARAM
+    # ):
+    #     m = BookService.Model()
+    #     m.param.account = acc
+    #     m.param.action= 'send'
+    #     m.param.book= Book(symbol=symbol,sl=sl,tp=tp,price_open=price_open,volume=volume).as_plan()
+    #     return self.api_perform_action('BookService', m.model_dump(), execution_time,timezone)
 
-    def api_book_close(self, acc: MT5Account, book: Book):
-        """Endpoint to close a book."""
-        m = BookService.Model()
-        m.param.account = acc
-        m.param.action= 'close'
-        m.param.book= book
-        res = self.api_perform_action('BookService', m.model_dump(),'NOW')
-        self.api_delete_task_delay(res['task_id'],30)
-        return res
+    # def api_book_close(self, acc: MT5Account, book: Book):
+    #     """Endpoint to close a book."""
+    #     m = BookService.Model()
+    #     m.param.account = acc
+    #     m.param.action= 'close'
+    #     m.param.book= book
+    #     res = self.api_perform_action('BookService', m.model_dump(),'NOW')
+    #     self.api_delete_task_delay(res['task_id'],30)
+    #     return res
     
-    def api_book_change_price(self, acc: MT5Account, book: Book, p: float):
-        """Endpoint to change the price of a book."""
-        m = BookService.Model()
-        m.param.account = acc
-        m.param.action= 'changeP'
-        m.param.book= book
-        m.param.book.price_open = p
-        m.args.p = p
-        res = self.api_perform_action('BookService', m.model_dump(),'NOW')
-        self.api_delete_task_delay(res['task_id'],30)
-        return res
+    # def api_book_change_price(self, acc: MT5Account, book: Book, p: float):
+    #     """Endpoint to change the price of a book."""
+    #     m = BookService.Model()
+    #     m.param.account = acc
+    #     m.param.action= 'changeP'
+    #     m.param.book= book
+    #     m.param.book.price_open = p
+    #     m.args.p = p
+    #     res = self.api_perform_action('BookService', m.model_dump(),'NOW')
+    #     self.api_delete_task_delay(res['task_id'],30)
+    #     return res
 
-    def api_book_change_tp_sl(self, acc: MT5Account, book: Book, tp: float, sl: float):
-        """Endpoint to change tp sl values of a book."""
-        m = BookService.Model()
-        m.param.account = acc
-        m.param.action= 'changeTS'
-        m.param.book= book
-        m.param.book.tp = tp
-        m.param.book.sl = sl
-        m.args.tp = tp
-        m.args.sl = sl
-        res = self.api_perform_action('BookService', m.model_dump(),'NOW')
-        self.api_delete_task_delay(res['task_id'],30)
-        return res
+    # def api_book_change_tp_sl(self, acc: MT5Account, book: Book, tp: float, sl: float):
+    #     """Endpoint to change tp sl values of a book."""
+    #     m = BookService.Model()
+    #     m.param.account = acc
+    #     m.param.action= 'changeTS'
+    #     m.param.book= book
+    #     m.param.book.tp = tp
+    #     m.param.book.sl = sl
+    #     m.args.tp = tp
+    #     m.args.sl = sl
+    #     res = self.api_perform_action('BookService', m.model_dump(),'NOW')
+    #     self.api_delete_task_delay(res['task_id'],30)
+    #     return res
     
     def api_rates_copy(self, acc: MT5Account, symbol: str, timeframe: str, count: int, debug: bool = False):
         """
         Endpoint to copy rates for a given MT5 account, symbol, timeframe, and count.
         """
         m = MT5CopyLastRatesService.Model()
-        m.param.account = acc
+        m.param = acc
         m.args.symbol = symbol
         m.args.timeframe = timeframe
         m.args.count = count

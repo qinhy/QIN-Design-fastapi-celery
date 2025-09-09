@@ -128,125 +128,125 @@ class BookSendService(ServiceOrientedArchitecture):
         def __init__(self, model,BasicApp:AppInterface,level=None):            
             super().__init__(model,BasicApp,level)
             MT5Action.__init__(self,self.model.param)
-            self.model:BookCloseService.Model = self.model
+            self.model:BookSendService.Model = self.model
             
         def __call__(self, *args, **kwargs):
             super().__call__(*args, **kwargs)
             return MT5Manager().get_singleton().do(self)
 
         def run(self):
-            bs = Book().getBooks()
-            for b in bs:
-                if self.model.args.ticket==b.ticket:
-                    try:
-                        b.close()
-                        self.model.ret.ok=True
-                    except:
-                        self.model.ret.ok=False
+            bs = Book(symbol=self.model.args.symbol,
+                      tp=self.model.args.tp,
+                      sl=self.model.args.sl).as_plan()
+            try:
+                bs.send()
+                self.model.ret.ok=True
+            except:
+                self.model.ret.ok=False
             return self.model
        
 
-class BookService(ServiceOrientedArchitecture):
+# class BookService(ServiceOrientedArchitecture):
 
-    class Model(ServiceOrientedArchitecture.Model):
+#     class Model(ServiceOrientedArchitecture.Model):
             
-        class Param(Book,MT5Account):
-            action:str = BookServiceActionTypes.account_info
+#         class Param(Book,MT5Account):
+#             action:str = BookServiceActionTypes.account_info
 
-        class Args(BaseModel):
-            p:float=-1.0 #price
-            tp:float=0.0
-            sl:float=0.0
+#         class Args(BaseModel):
+#             p:float=-1.0 #price
+#             tp:float=0.0
+#             sl:float=0.0
 
-        class Return(BaseModel):
-            first_book:Optional[Book] = None
-            books:list[Book] = []
-            books_dict:dict[str,Book] = {}
+#         class Return(BaseModel):
+#             first_book:Optional[Book] = None
+#             books:list[Book] = []
+#             books_dict:dict[str,Book] = {}
 
-        class Logger(ServiceOrientedArchitecture.Model.Logger):
-            pass
+#         class Logger(ServiceOrientedArchitecture.Model.Logger):
+#             pass
         
-        class Version(ServiceOrientedArchitecture.Model.Version):
-            pass
+#         class Version(ServiceOrientedArchitecture.Model.Version):
+#             pass
         
-        version:Version = Version()
-        param:Param = Param()
-        args:Args = Args()
-        ret:Return = Return()
-        logger:Logger = Logger(name=Version().class_name)
+#         version:Version = Version()
+#         param:Param = Param()
+#         args:Args = Args()
+#         ret:Return = Return()
+#         logger:Logger = Logger(name=Version().class_name)
 
-        @staticmethod
-        def build(acc:MT5Account,book:Book,plan=False):
-            if isinstance(acc, dict):
-                acc = MT5Account(**acc)
-            if isinstance(book, dict):
-                book = Book(**book)
-            if plan:book = book.as_plan()
-            param = BookService.Model.Param(**acc.model_dump(),**book.model_dump())
-            return BookService.Model(param=param)
+#         @staticmethod
+#         def build(acc:MT5Account,book:Book,plan=False):
+#             if isinstance(acc, dict):
+#                 acc = MT5Account(**acc)
+#             if isinstance(book, dict):
+#                 book = Book(**book)
+#             if plan:book = book.as_plan()
+#             param = BookService.Model.Param(**acc.model_dump(),**book.model_dump())
+#             return BookService.Model(param=param)
         
-    class Action(ServiceOrientedArchitecture.Action, MT5Action):
+#     class Action(ServiceOrientedArchitecture.Action, MT5Action):
 
-        def __call__(self, *args, **kwargs):
-            super().__call__(*args, **kwargs)
-            action = self.model.param.action
-            acc = self.model.param
-            book = self.model.param
-            task_id = self.model.task_id
-            self.model = BookService.Model.build(acc,book,action in ['send'])            
-            self.model.task_id = task_id
-            self.change_run(action, kwargs)
-            first_book,books,books_dict = MT5Manager().get_singleton().do(self)
-            self.model.ret.first_book = first_book
-            self.model.ret.books = books
-            self.model.ret.books_dict = books_dict
-            self.model.param.password = ''
-            return self.model
+#         def __call__(self, *args, **kwargs):
+#             super().__call__(*args, **kwargs)
+#             action = self.model.param.action
+#             acc = self.model.param
+#             book = self.model.param
+#             task_id = self.model.task_id
+#             self.model = BookService.Model.build(acc,book,action in ['send'])            
+#             self.model.task_id = task_id
+#             self.change_run(action, kwargs)
+#             first_book,books,books_dict = MT5Manager().get_singleton().do(self)
+#             self.model.ret.first_book = first_book
+#             self.model.ret.books = books
+#             self.model.ret.books_dict = books_dict
+#             self.model.param.password = ''
+#             return self.model
 
-        def __init__(self, model,BasicApp:AppInterface,level=None):            
-            super().__init__(model,BasicApp,level)
-            account = self.model.param
-            self.book = self.model.param
-            self.uuid = uuid.uuid4()
-            self._account: MT5Account = MT5Account(account.account_id,account.password,account.account_server)
-            self.retry_times_on_error = 3
+#         def __init__(self, model,BasicApp:AppInterface,level=None):            
+#             super().__init__(model,BasicApp,level)
+#             account = self.model.param
+#             self.book = self.model.param
+#             self.uuid = uuid.uuid4()
+#             self._account: MT5Account = MT5Account(account.account_id,account.password,account.account_server)
+#             self.retry_times_on_error = 3
         
-        def log_and_send(self,msg:str):
-            self.logger.log(self.logger.level,msg)
-            self.send_data_to_task(msg)
+#         def log_and_send(self,msg:str):
+#             self.logger.log(self.logger.level,msg)
+#             self.send_data_to_task(msg)
 
-        def change_run(self, func_name, kwargs):
-            self.log_and_send(f'change run: {func_name}, {kwargs}')
-            self.model.args = BookService.Model.Args(**kwargs)
-            self.book_run = lambda: getattr(self.book, func_name)(**kwargs)
-            return self
+#         def change_run(self, func_name, kwargs):
+#             self.log_and_send(f'change run: {func_name}, {kwargs}')
+#             self.model.args = BookService.Model.Args(**kwargs)
+#             self.book_run = lambda: getattr(self.book, func_name)(**kwargs)
+#             return self
 
-        def run(self):
-            # tbs = {f'{b.symbol}-{b.price_open}-{b.volume}':b.model_dump() for b in Book().getBooks()}
-            action = self.model.param.action            
-            first_book = None
-            books = []
-            books_dict = {}
-            if action == BookServiceActionTypes.getBooks:                
-                books:list[Book] = self.book_run()
-                books_dict = {f'{b.symbol}-{b.price_open}-{b.volume}-{b.ticket}': b for b in books}
-                books = []
-            elif action in [BookServiceActionTypes.send,
-                            BookServiceActionTypes.changeP,
-                            BookServiceActionTypes.changeTS,
-                            BookServiceActionTypes.account_info]:
-                books = [self.book_run()]
-                first_book = books[0]
-                books = []
-            else:
-                raise ValueError(f'no action of {action}')
+#         def run(self):
+#             # tbs = {f'{b.symbol}-{b.price_open}-{b.volume}':b.model_dump() for b in Book().getBooks()}
+#             action = self.model.param.action            
+#             first_book = None
+#             books = []
+#             books_dict = {}
+#             if action == BookServiceActionTypes.getBooks:                
+#                 books:list[Book] = self.book_run()
+#                 books_dict = {f'{b.symbol}-{b.price_open}-{b.volume}-{b.ticket}': b for b in books}
+#                 books = []
+#             elif action in [BookServiceActionTypes.send,
+#                             BookServiceActionTypes.changeP,
+#                             BookServiceActionTypes.changeTS,
+#                             BookServiceActionTypes.account_info]:
+#                 books = [self.book_run()]
+#                 first_book = books[0]
+#                 books = []
+#             else:
+#                 raise ValueError(f'no action of {action}')
             
-            return first_book,books,books_dict
-            # res = BookService.Model()
-            # res.ret.first_book = first_book
-            # res.ret.books = books
-            # res.ret.books_dict = books_dict
-            # return res
+#             return first_book,books,books_dict
+#             # res = BookService.Model()
+#             # res.ret.first_book = first_book
+#             # res.ret.books = books
+#             # res.ret.books_dict = books_dict
+#             # return res
         
 
 # @descriptions('Retrieve MT5 last N bars data in MetaTrader 5 terminal.',
