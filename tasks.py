@@ -38,6 +38,10 @@ TaskParentClass = [get_first_non_object_base(cls) if isinstance(cls, type) else 
 ValidTask = ['ServiceOrientedArchitecture' in str(i) for i in TaskParentClass]
 ACTION_REGISTRY={k:v for k,v,i in zip(TaskNames,TaskClass,ValidTask) if i}
 
+ACTION_REGISTRY={k:v for k,v in ACTION_REGISTRY.items()
+                 if k in ['Fibonacci','ChatGPTService','MT5CopyLastRatesService','BookCloseService','BookSendService','MT5RatesDownloader','FSSpecShell','TaskDAGRunner']
+}
+
 class CeleryTask(BasicCeleryTask):
     def __init__(self, BasicApp, celery_app, root_fast_app:FastAPI,
                  dependencies: list = [],
