@@ -1,2 +1,1 @@
-python ..\start_server.py uvicorn
-
+uv run ..\start_server.py uvicorn
