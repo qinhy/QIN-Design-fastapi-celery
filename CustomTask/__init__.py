@@ -7,7 +7,7 @@ from .Downloader import Downloader
 from .BinaryRepresentation import BinaryRepresentation
 from .CollatzSequence import CollatzSequence
 from .UploadToFTP import UploadToFTP
-from .MT5Book import MT5CopyLastRatesService, BookCloseService, BookSendService # BookService, 
+from .MT5Book import MT5CopyLastRatesService, BookCloseService, BookSendService, MT5AccountInfo# BookService, 
 from .MT5RatesDownloader import MT5RatesDownloader
 
 from .HttpRequestTask import HttpRequestTask

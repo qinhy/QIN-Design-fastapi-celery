@@ -92,6 +92,8 @@ class BookCloseService(ServiceOrientedArchitecture):
                         self.model.ret.ok=True
                     except:
                         self.model.ret.ok=False
+            
+            self.model.param = MT5Account()
             return self.model
 
 
@@ -143,9 +145,53 @@ class BookSendService(ServiceOrientedArchitecture):
                 self.model.ret.ok=True
             except:
                 self.model.ret.ok=False
+
+            self.model.param = MT5Account()
+            self.model.param = MT5Account()
             return self.model
        
 
+class MT5AccountInfo(ServiceOrientedArchitecture):
+
+    class Model(ServiceOrientedArchitecture.Model):
+            
+        class Param(MT5Account):
+            pass
+
+        class Args(BaseModel):
+            pass
+            
+        class Return(BaseModel):
+            info:dict={}
+
+        class Logger(ServiceOrientedArchitecture.Model.Logger):
+            pass
+        
+        class Version(ServiceOrientedArchitecture.Model.Version):
+            pass
+        
+        version:Version = Version()
+        param:Param = Param()
+        args:Args = Args()
+        ret:Return = Return()
+        logger:Logger = Logger(name=Version().class_name)
+
+    class Action(ServiceOrientedArchitecture.Action, MT5Action):
+        
+        def __init__(self, model,BasicApp:AppInterface,level=None):            
+            super().__init__(model,BasicApp,level)
+            MT5Action.__init__(self,self.model.param)
+            self.model:MT5AccountInfo.Model = self.model
+            
+        def __call__(self, *args, **kwargs):
+            super().__call__(*args, **kwargs)
+            return MT5Manager().get_singleton().do(self)
+
+        def run(self):
+            self.model.ret.info = Book().account_info()
+            self.model.param = MT5Account()
+            return self.model
+       
 # class BookService(ServiceOrientedArchitecture):
 
 #     class Model(ServiceOrientedArchitecture.Model):
@@ -369,6 +415,7 @@ class MT5CopyLastRatesService(ServiceOrientedArchitecture):
             self.model.ret.symbol = symbol
             self.model.ret.timeframe = timeframe
             self.model.ret.count = count
+            self.model.param = MT5Account()
             return self.model
 
         def run(self, symbol: str = None, timeframe: str = None, count: int = None, debug: bool = None):

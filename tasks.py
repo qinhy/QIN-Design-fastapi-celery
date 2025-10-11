@@ -39,7 +39,9 @@ ValidTask = ['ServiceOrientedArchitecture' in str(i) for i in TaskParentClass]
 ACTION_REGISTRY={k:v for k,v,i in zip(TaskNames,TaskClass,ValidTask) if i}
 
 ACTION_REGISTRY={k:v for k,v in ACTION_REGISTRY.items()
-                 if k in ['Fibonacci','ChatGPTService','MT5CopyLastRatesService','BookCloseService','BookSendService','MT5RatesDownloader','FSSpecShell','TaskDAGRunner']
+                 if k in ['Fibonacci','ChatGPTService',
+                          'MT5CopyLastRatesService','BookCloseService','MT5AccountInfo',
+                          'BookSendService','MT5RatesDownloader','FSSpecShell','TaskDAGRunner']
 }
 
 class CeleryTask(BasicCeleryTask):

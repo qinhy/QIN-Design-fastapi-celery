@@ -329,7 +329,10 @@ class Book(BaseModel):
         if account_info is None:
             raise ValueError("Failed to get account info")
         else:
-            return Book(_acc_info=account_info._asdict())
+            res = account_info._asdict()
+            bs = self.getBooks()
+            res['books'] = [b.model_dump_json() for b in bs]
+            return res
         
     def set_mt5_book(self,book):
         self._book = book
