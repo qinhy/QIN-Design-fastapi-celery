@@ -106,9 +106,10 @@ class BookSendService(ServiceOrientedArchitecture):
 
         class Args(BaseModel):
             symbol: str = 'USDJPY'
-            p:  int = -1
-            tp: int = -1
-            sl: int = -1
+            volume:  float = -1
+            price_open:  float = -1
+            tp: float = -1
+            sl: float = -1
             
         class Return(BaseModel):
             ok:bool=False
@@ -138,6 +139,8 @@ class BookSendService(ServiceOrientedArchitecture):
 
         def run(self):
             bs = Book(symbol=self.model.args.symbol,
+                      volume=self.model.args.volume,
+                      price_open=self.model.args.price_open,
                       tp=self.model.args.tp,
                       sl=self.model.args.sl).as_plan()
             try:
