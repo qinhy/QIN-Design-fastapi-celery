@@ -102,7 +102,7 @@ class CeleryTask:
         fib_task_model_dump['task_id'] = t.request.id
         model = Fibonacci.Model(**fib_task_model_dump)
         model = Fibonacci.Action(model)()
-        res: Fibonacci.Model.Return = model.ret
+        res: Fibonacci.Model.Returness = model.ret
         # make sure that res is dict or other primitive objects for json serialization
         return CeleryTask.is_json_serializable(res.model_dump())
 
@@ -190,7 +190,7 @@ class CeleryTask:
         fib_task_model_dump['task_id'] = t.request.id
         model = Fibonacci.Model(**fib_task_model_dump)
         model = Fibonacci.Action(model)()
-        res: Fibonacci.Model.Return = model.ret
+        res: Fibonacci.Model.Returness = model.ret
         # make sure that res is dict or other primitive objects for json serialization
         return CeleryTask.is_json_serializable(res.model_dump())
 
@@ -228,7 +228,7 @@ class CeleryTask:
         # #   "args": {
         # #     "n": 1
         # #   },
-        # #   "ret": {
+        # #   "rets": {
         # #     "n": -1
         # #   }
         # # }

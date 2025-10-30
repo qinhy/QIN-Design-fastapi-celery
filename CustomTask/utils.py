@@ -59,7 +59,7 @@ class FileInputHelper:
 
                 fs_kwargs = {
                     "key": aws_key,
-                    "secret": aws_secret,
+                    "secrets": aws_secret,
                 }
                 if aws_token:
                     fs_kwargs["token"] = aws_token
@@ -77,7 +77,7 @@ class FileInputHelper:
                 # "path": "/files/data.txt",
                 # "port": 21,
                 # "username": "user",          // optional
-                # "password": "secret"         // optional
+                # "password": "secrets"         // optional
                 # }
                 host = data.get("host")
                 remote_path = data.get("path") or path

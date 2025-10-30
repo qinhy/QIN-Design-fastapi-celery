@@ -102,7 +102,7 @@ class S3Config(BaseFileSystemConfig):
         None,
         description="AWS access key ID."
     )
-    secret: Optional[str] = Field(
+    secrets: Optional[str] = Field(
         None,
         description="AWS secret access key."
     )
@@ -317,7 +317,7 @@ class FileSystem(
                     "bucket": "my-bucket",
                     "region": "us-west-2",
                     "key": "AKIA...KEY",
-                    "secret": "SECRET…",
+                    "secrets": "SECRET…",
                     "token": "SESSION_TOKEN",
                     "endpoint_url": "https://s3.us-west-2.amazonaws.com",
                     "anon": False,
@@ -584,7 +584,7 @@ class FileSystem(
 #     password: Optional[str] = Field(
 #         default=None,
 #         description="Password or secret access key for authentication.",
-#         example="mysecret"
+#         example="mysecrets"
 #     )
 #     permissions: str = Field(
 #         default='rw',
@@ -643,7 +643,7 @@ class FileSystem(
 #                     "host": "webdav.example.com",
 #                     "port": 443,
 #                     "username": "alice",
-#                     "password": "SuperSecret",
+#                     "password": "SuperSec'rets',
 #                     "root_path": "/public/files",
 #                     "options": {
 #                         "protocol": "https"

@@ -29,10 +29,10 @@ Supports two checking modes:
             def is_smart(self):
                 return self.mode == 'smart'
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             text: str = Field(..., description="The string to check for palindrome")
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             is_palindrome: bool = Field(False, description="Whether the string is a palindrome")
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
@@ -50,8 +50,8 @@ Supports two checking modes:
         
         version:Version = Version()
         para: Parameter = Parameter()
-        args: Args
-        ret: Optional[Return] = Return()
+        args: Arguments
+        rets: Optional[Returness] = Returness()
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -72,12 +72,12 @@ Supports two checking modes:
                     return self.to_stop()
 
                 self.log_and_send(f"'{text}' is {'a palindrome' if result else 'not a palindrome'}.")
-                self.model.ret.is_palindrome = result
+                self.model.rets.is_palindrome = result
                 return self.model
 
         def to_stop(self):
             self.log_and_send("Stop flag triggered. Aborting palindrome check.", PalindromeChecker.Levels.WARNING)
-            self.model.ret.is_palindrome = False
+            self.model.rets.is_palindrome = False
             return self.model
 
         def log_and_send(self, message, level=None):

@@ -75,10 +75,10 @@ class TaskDAGRunner(ServiceOrientedArchitecture):
             str_customize_separator: str = Field(
                 default=",", description="Customize the separator used when joining multiple values for a field.")
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             mermaid_graph_text: str = Field(..., description="Mermaid graph text defining the DAG")
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             results: Dict[str, dict] = Field(
                     default_factory=dict, description="Final results (decoded from json string) of the DAG execution")
             execution_order: list = Field(
@@ -131,8 +131,8 @@ graph TD
 
         version: Version = Version()
         para: Parameter = Parameter()
-        args: Args
-        ret: Optional[Return] = Return()
+        args: Arguments
+        rets: Optional[Returness] = Returness()
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -148,8 +148,8 @@ graph TD
             Parse the DAG, submit each task in topological order,
             and collect the final results.
             """
-            self.model.ret.graph = graph = MermaidGraph(self.model.args.mermaid_graph_text)
-            self.model.ret.execution_order = order = graph.get_pipeline_order()
+            self.model.rets.graph = graph = MermaidGraph(self.model.args.mermaid_graph_text)
+            self.model.rets.execution_order = order = graph.get_pipeline_order()
             configs, mappings = graph.get_pipeline_config()[::2], graph.get_pipeline_config()[1::2]
 
             # Build maps for quick lookup
@@ -168,7 +168,7 @@ graph TD
             # if single end-node, unwrap the dict
             final = results if len(results) > 1 else next(iter(results.values()))
 
-            self.model.ret = self.model.Return(results=final)
+            self.model.rets = self.model.Returness(results=final)
             return self.model
 
         def get_args_schema(self, node):
@@ -325,7 +325,7 @@ graph TD
             self._wait(task_id)
             raw = self.BasicApp.get_task_meta(task_id)["result"]
             decoded = self.BasicApp.parent.task_result_decode_as_jsonStr(raw)
-            return json.loads(decoded)["ret"]
+            return json.loads(decoded)["rets"]
 
         def _collect_results(
             self,
@@ -341,7 +341,7 @@ graph TD
 
         def to_stop(self) -> 'TaskDAGRunner.Model':
             self._log("Stop flag detected; returning 0.", level=TaskDAGRunner.Levels.WARNING)
-            self.model.ret = self.model.Return(results=0)
+            self.model.rets = self.model.Returness(results=0)
             return self.model
 
         def _log(self, message: str, level=None) -> None:

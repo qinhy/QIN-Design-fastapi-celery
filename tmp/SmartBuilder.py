@@ -37,7 +37,7 @@ class SmartBuilder:
         Parameters
         ----------
         source_class : ServiceOrientedArchitecture
-            The class with a .Model.ret schema to convert from.
+            The class with a .Model.rets schema to convert from.
         target_class : ServiceOrientedArchitecture
             The class with a .Model.args schema to convert to.
         prompt_template : str, optional
@@ -59,7 +59,7 @@ class SmartBuilder:
                 "```\n\n"
                 "```python\n"
                 "def {from_class_name}{from_class_version}_ret_to_{to_class_name}{from_class_version}_args_convertor(ret,args):\n"
-                "    # this function will convert {from_class_name}.ret into {to_class_name}.args\n"
+                "    # this function will convert {from_class_name}.rets into {to_class_name}.args\n"
                 "    # ...\n"
                 "    return args\n"
                 "```"
@@ -72,9 +72,9 @@ class SmartBuilder:
 
         prompt = prompt_template.format(
             from_class_name=from_class_name,
-            from_schema=source_class.Model.Return.model_json_schema(),
+            from_schema=source_class.Model.Returness.model_json_schema(),
             to_class_name=to_class_name,
-            to_schema=target_class.Model.Args.model_json_schema(),
+            to_schema=target_class.Model.Arguments.model_json_schema(),
             from_class_version=from_class_version,
             to_class_version=to_class_version,
         )
@@ -205,13 +205,13 @@ class SmartBuilder:
         # Fetch code and function from GPT
         code_snippet, conversion_func = self.get_code_from_gpt(prompt_text, function_name, model)
 
-        in_ret_data = in_model_instance.ret.model_dump()
+        in_ret_data = in_model_instance.rets.model_dump()
         out_args_data = out_model_instance.args.model_dump()
 
         # Execute the GPT-provided conversion function
         updated_args = conversion_func(in_ret_data, out_args_data)
 
-        out_model_instance.args = out_model_instance.Args(**updated_args)
+        out_model_instance.args = out_model_instance.Arguments(**updated_args)
         return out_model_instance, code_snippet, conversion_func 
 
 

@@ -27,13 +27,13 @@ Returns status code, response text, and JSON content if available.
             timeout: int = Field(30, description="Request timeout in seconds")
             verify_ssl: bool = Field(True, description="Whether to verify SSL certificates")
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             url: str = Field("", description="URL to send the request to")
             method: Literal['GET', 'POST', 'PUT', 'DELETE'] = Field("GET", description="HTTP method to use")
             headers: Dict[str, str] = Field(default_factory=dict, description="HTTP headers to include")
             data: Dict[str, Any] = Field(default_factory=dict, description="Data to send in the request body")
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             status_code: int = Field(-1, description="HTTP status code of the response")
             success: bool = Field(False, description="Whether the request was successful")
             response_text: str = Field("", description="Text content of the response")
@@ -59,8 +59,8 @@ Returns status code, response text, and JSON content if available.
         
         version:Version = Version()
         para: Parameter = Parameter()
-        args:Args = Args()
-        ret:Optional[Return] = Return()
+        args: Arguments = Arguments()
+        rets:Optional[Returness] = Returness()
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -96,13 +96,13 @@ Returns status code, response text, and JSON content if available.
                     if stop_flag.is_set():
                         return self.to_stop()
                     
-                    self.model.ret.status_code = response.status_code
-                    self.model.ret.success = 200 <= response.status_code < 300
-                    self.model.ret.response_text = response.text
+                    self.model.rets.status_code = response.status_code
+                    self.model.rets.success = 200 <= response.status_code < 300
+                    self.model.rets.response_text = response.text
                     
                     # Try to parse JSON response
                     try:
-                        self.model.ret.response_json = response.json()
+                        self.model.rets.response_json = response.json()
                     except ValueError:
                         self.log_and_send("Response is not valid JSON", SimpleWebRequest.Levels.WARNING)
                     
@@ -111,14 +111,14 @@ Returns status code, response text, and JSON content if available.
                 except Exception as e:
                     error_msg = f"Request failed: {str(e)}"
                     self.log_and_send(error_msg, SimpleWebRequest.Levels.ERROR)
-                    self.model.ret.success = False
-                    self.model.ret.error_message = error_msg
+                    self.model.rets.success = False
+                    self.model.rets.error_message = error_msg
 
             return self.model
 
         def to_stop(self):
             self.log_and_send("Stop flag detected, returning empty response.", SimpleWebRequest.Levels.WARNING)
-            self.model.ret.error_message = "Operation was stopped"
+            self.model.rets.error_message = "Operation was stopped"
             return self.model
 
         def log_and_send(self, message, level=None):
@@ -185,10 +185,10 @@ class TestSimpleWebRequest(unittest.TestCase):
         )
         
         # Verify response was processed correctly
-        self.assertEqual(result.ret.status_code, 200)
-        self.assertTrue(result.ret.success)
-        self.assertEqual(result.ret.response_text, '{"id": 1, "title": "Test Post", "body": "Content"}')
-        self.assertEqual(result.ret.response_json, {"id": 1, "title": "Test Post", "body": "Content"})
+        self.assertEqual(result.rets.status_code, 200)
+        self.assertTrue(result.rets.success)
+        self.assertEqual(result.rets.response_text, '{"id": 1, "title": "Test Post", "body": "Content"}')
+        self.assertEqual(result.rets.response_json, {"id": 1, "title": "Test Post", "body": "Content"})
         
     @patch('requests.post')
     def test_post_request(self, mock_post):
@@ -216,9 +216,9 @@ class TestSimpleWebRequest(unittest.TestCase):
         )
         
         # Verify response was processed correctly
-        self.assertEqual(result.ret.status_code, 201)
-        self.assertTrue(result.ret.success)
-        self.assertEqual(result.ret.response_json, {"id": 101, "title": "New Post", "body": "Post content", "userId": 1})
+        self.assertEqual(result.rets.status_code, 201)
+        self.assertTrue(result.rets.success)
+        self.assertEqual(result.rets.response_json, {"id": 101, "title": "New Post", "body": "Post content", "userId": 1})
         
     @patch('requests.get')
     def test_request_error(self, mock_get):
@@ -229,8 +229,8 @@ class TestSimpleWebRequest(unittest.TestCase):
         result = self.action()
         
         # Verify error handling
-        self.assertFalse(result.ret.success)
-        self.assertEqual(result.ret.error_message, "Request failed: Connection refused")
+        self.assertFalse(result.rets.success)
+        self.assertEqual(result.rets.error_message, "Request failed: Connection refused")
         
     @patch('requests.get')
     def test_invalid_json_response(self, mock_get):
@@ -245,9 +245,9 @@ class TestSimpleWebRequest(unittest.TestCase):
         result = self.action()
         
         # Verify handling of invalid JSON
-        self.assertTrue(result.ret.success)  # Request was still successful
-        self.assertEqual(result.ret.response_text, "Not JSON")
-        self.assertEqual(result.ret.response_json, {})
+        self.assertTrue(result.rets.success)  # Request was still successful
+        self.assertEqual(result.rets.response_text, "Not JSON")
+        self.assertEqual(result.rets.response_json, {})
         
     def test_stop_flag(self):
         # Create a mock stop flag that's already set
@@ -262,7 +262,7 @@ class TestSimpleWebRequest(unittest.TestCase):
         result = self.action()
         
         # Verify early return due to stop flag
-        self.assertEqual(result.ret.error_message, "Operation was stopped")
+        self.assertEqual(result.rets.error_message, "Operation was stopped")
         
     def test_unsupported_method(self):
         # Setup invalid method

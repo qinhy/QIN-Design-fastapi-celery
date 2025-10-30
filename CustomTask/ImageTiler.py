@@ -37,7 +37,7 @@ Can process images from URLs or local file paths.
             output_format: str = Field("jpg", description="Output image format (jpg, png, etc.)")
             output_path: Optional[str] = Field('tiled_image.jpg', description="Custom output path for the tiled image")
             
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             image_sources: List[str] = Field(
                 [],
                 description="List of image URLs or local file paths, depending on the mode parameter."
@@ -47,7 +47,7 @@ Can process images from URLs or local file paths.
                 description="List of normalized coordinates (x,y) in range -1.0 to 1.0 that to do slicing to sub each image , with: width * x, height * y"
             )
             
-        class Return(BaseModel):
+        class Returness(BaseModel):
             tiled_image_path: Optional[str] = Field(
                 None,
                 description="Path to the saved tiled image"
@@ -126,8 +126,8 @@ Can process images from URLs or local file paths.
 
         version: Version = Version()
         para: Parameter = Parameter()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -144,7 +144,7 @@ Can process images from URLs or local file paths.
                 
                 # Process images and create tiled image
                 if not self._validate_inputs():
-                    self.model.ret.tiled_image_path = ""
+                    self.model.rets.tiled_image_path = ""
                     
                     return self.model
                 
@@ -155,7 +155,7 @@ Can process images from URLs or local file paths.
                 
                 if not images:
                     self.log_and_send("No valid images were processed. Exiting.", ImageTiler.Levels.ERROR)
-                    self.model.ret.tiled_image_path = ""
+                    self.model.rets.tiled_image_path = ""
                     
                     return self.model                
                 
@@ -348,14 +348,14 @@ Can process images from URLs or local file paths.
                 self.log_and_send(
                     f"Tiled image saved at {output_path}. Final size: {tiled_image.size}"
                 )
-                self.model.ret.tiled_image_path = output_path
+                self.model.rets.tiled_image_path = output_path
             except Exception as e:
                 self.log_and_send(f"Error saving tiled image: {str(e)}", ImageTiler.Levels.ERROR)
-                self.model.ret.tiled_image_path = ""
+                self.model.rets.tiled_image_path = ""
 
         def to_stop(self):
             self.log_and_send("Stop flag detected, aborting image tiling process.", ImageTiler.Levels.WARNING)
-            self.model.ret.tiled_image_path = ""
+            self.model.rets.tiled_image_path = ""
             
             return self.model
 

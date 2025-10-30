@@ -28,13 +28,13 @@ Returns the status code and content of the response.
             method: Literal['GET', 'POST'] = Field("GET",
                                         description="HTTP method: GET or POST")
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             url: str = Field("https://httpbin.org/get",
                 description="Target URL for the HTTP request")
             data: Optional[Dict[str, Any]] = Field(None,    
                 description="Data for POST requests")
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             status_code: int = Field(-1, description="HTTP status code")
             content: Optional[str] = Field(None, description="Response content")
 
@@ -55,8 +55,8 @@ Returns the status code and content of the response.
 
         version: Version = Version()
         para: Parameter = Parameter()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -80,20 +80,20 @@ Returns the status code and content of the response.
                         response = requests.get(url)
                     else:
                         response = requests.post(url, json=data)
-                    self.model.ret.status_code = response.status_code
-                    self.model.ret.content = response.text
+                    self.model.rets.status_code = response.status_code
+                    self.model.rets.content = response.text
                     self.log_and_send(f"Received status {response.status_code}")
                 except Exception as e:
-                    self.model.ret.status_code = -1
-                    self.model.ret.content = str(e)
+                    self.model.rets.status_code = -1
+                    self.model.rets.content = str(e)
                     self.log_and_send(f"Request failed: {e}", HttpRequestTask.Levels.WARNING)
 
             return self.model
 
         def to_stop(self):
             self.log_and_send("Stop flag detected, aborting HTTP request.", HttpRequestTask.Levels.WARNING)
-            self.model.ret.status_code = 0
-            self.model.ret.content = None
+            self.model.rets.status_code = 0
+            self.model.rets.content = None
             return self.model
 
         def log_and_send(self, message, level=None):

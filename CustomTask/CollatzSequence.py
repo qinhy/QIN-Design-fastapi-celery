@@ -27,10 +27,10 @@ Continues until reaching 1 or the maximum number of steps (if specified).
                 None, description="Optional limit on number of steps to prevent infinite loops"
             )
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             n: int = Field(1, description="Starting number for the Collatz sequence (must be >= 1)")
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             sequence: List[int] = Field(default_factory=list, description="The Collatz sequence starting at n")
 
         
@@ -48,8 +48,8 @@ Continues until reaching 1 or the maximum number of steps (if specified).
 
         version:Version = Version()
         para: Parameter = Parameter()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -66,7 +66,7 @@ Continues until reaching 1 or the maximum number of steps (if specified).
                 max_steps = self.model.para.max_steps
                 if n < 1:
                     self.log_and_send("Input must be >= 1. Returning empty sequence.", CollatzSequence.Levels.WARNING)
-                    self.model.ret.sequence = []
+                    self.model.rets.sequence = []
                     return self.model
 
                 sequence = []
@@ -81,14 +81,14 @@ Continues until reaching 1 or the maximum number of steps (if specified).
                     steps += 1
 
                 sequence.append(1)  # Sequence always ends in 1 (unless max_steps cuts it early)
-                self.model.ret.sequence = sequence
+                self.model.rets.sequence = sequence
                 self.log_and_send(f"Collatz sequence: {sequence}")
 
                 return self.model
 
         def to_stop(self):
             self.log_and_send("Stop flag detected. Returning partial or empty sequence.", CollatzSequence.Levels.WARNING)
-            self.model.ret.sequence = []
+            self.model.rets.sequence = []
             return self.model
 
         def log_and_send(self, message, level=None):
@@ -114,10 +114,10 @@ if __name__ == "__main__":
     result = action()
     
     # Print the result
-    print(f"Collatz sequence: {result.ret.sequence}")
+    print(f"Collatz sequence: {result.rets.sequence}")
     
     # Test with a different number
     print("\nTesting with a different number...")
     model.args.n = 27
     result = action()
-    print(f"Collatz sequence for 27: {result.ret.sequence}")
+    print(f"Collatz sequence for 27: {result.rets.sequence}")

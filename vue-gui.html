@@ -514,7 +514,7 @@
             </div>
             <div v-if="data.result" class="mb-2">
             <span class="font-bold">Result:</span>
-            <p-recursivejson class="bg-gray-100" :data="data.result.ret" :level="1" />
+            <p-recursivejson class="bg-gray-100" :data="data.result.rets" :level="1" />
             </div>
             <div v-if="data.traceback" class="mb-2 text-red-600">
             <span class="font-bold">Traceback:</span>

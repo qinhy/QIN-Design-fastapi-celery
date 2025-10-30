@@ -13,7 +13,7 @@ def _string_similarity(a: str, b: str) -> float:
     return difflib.SequenceMatcher(None, _clean(a), _clean(b)).ratio()
 
 def auto_suggest_field_map(
-    prev_ret: BaseModel,
+    prev_rets: BaseModel,
     next_model_class: Type,
     alpha: float = 0.4,          # weight for name similarity
     beta: float = 0.4,           # weight for description similarity
@@ -106,11 +106,11 @@ class MockRet(BaseModel):
     result: int = Field(..., description="The doubled result of input number")
 
 class MockNextModel:
-    class Args(BaseModel):
+    class Arguments(BaseModel):
         n: int = Field(0, description="The number for computing Fibonacci")  # default = no validation error
 
     def __init__(self):
-        self.args = self.Args()
+        self.args = self.Arguments()
 
 # ---------------------
 # 🔬 Extended Test Suite
@@ -120,20 +120,20 @@ class MockRet(BaseModel):
     result: int = Field(0, description="The doubled result of input number")
 
 class MockNextModel:
-    class Args(BaseModel):
+    class Arguments(BaseModel):
         n: int = Field(0, description="The number for computing Fibonacci")
     def __init__(self):
-        self.args = self.Args()
+        self.args = self.Arguments()
 
 
 class MockRetA(BaseModel):
     value: float = Field(0.0, description="The temperature in Celsius")
 
 class MockNextModelA:
-    class Args(BaseModel):
+    class Arguments(BaseModel):
         temp: float = Field(0.0, description="Temperature in Celsius")
     def __init__(self):
-        self.args = self.Args()
+        self.args = self.Arguments()
 
 
 class MockRetB(BaseModel):
@@ -141,11 +141,11 @@ class MockRetB(BaseModel):
     name: str = Field("", description="Name of the user")
 
 class MockNextModelB:
-    class Args(BaseModel):
+    class Arguments(BaseModel):
         user_age: int = Field(0, description="Age in years")
         id_name: str = Field("", description="Identifier for something")
     def __init__(self):
-        self.args = self.Args()
+        self.args = self.Arguments()
 
 
 class Address(BaseModel):
@@ -156,84 +156,84 @@ class MockRetC(BaseModel):
     location: Address = Field(default_factory=Address, description="User location")
 
 class MockNextModelC:
-    class Args(BaseModel):
+    class Arguments(BaseModel):
         city: str = Field("", description="Name of the city")
         zip: int = Field(0, description="Zip code of user")
     def __init__(self):
-        self.args = self.Args()
+        self.args = self.Arguments()
 
 
 class MockRetD(BaseModel):
     user_id: int = Field(0, description="User ID as a number")
 
 class MockNextModelD:
-    class Args(BaseModel):
+    class Arguments(BaseModel):
         user_id: str = Field("", description="User ID as a string")
     def __init__(self):
-        self.args = self.Args()
+        self.args = self.Arguments()
 
 
 class MockRetE(BaseModel):
     success: bool = Field(False, description="Operation succeeded")
 
 class MockNextModelE:
-    class Args(BaseModel):
+    class Arguments(BaseModel):
         count: int = Field(0, description="Number of attempts")
     def __init__(self):
-        self.args = self.Args()
+        self.args = self.Arguments()
 
 class MockRetF(BaseModel):
     user_status: str = Field("active", description="The current status of the user")
     last_seen: str = Field("2025-03-28", description="Last seen timestamp")
 
 class MockNextModelF:
-    class Args(BaseModel):
+    class Arguments(BaseModel):
         status: str = Field("unknown", description="User status description")
         last_seen_date: str = Field("", description="Date user was last seen")
 
     def __init__(self):
-        self.args = self.Args()
+        self.args = self.Arguments()
         
 class MockRetG(BaseModel):
     is_admin: bool = Field(False, description="True if user is admin")
 
 class MockNextModelG:
-    class Args(BaseModel):
+    class Arguments(BaseModel):
         admin: bool = Field(False, description="Admin privileges")
 
     def __init__(self):
-        self.args = self.Args()
+        self.args = self.Arguments()
         
 class MockRetH(BaseModel):
     items: list[str] = Field(default_factory=list, description="List of purchased items")
 
 class MockNextModelH:
-    class Args(BaseModel):
+    class Arguments(BaseModel):
         purchased_items: list[str] = Field(default_factory=list, description="Items that were bought")
 
     def __init__(self):
-        self.args = self.Args()
+        self.args = self.Arguments()
         
 class MockRetI(BaseModel):
     score: float = Field(0.0, description="Final evaluation score")
 
 class MockNextModelI:
-    class Args(BaseModel):
+    class Arguments(BaseModel):
         final_score: float = Field(0.0, description="The score achieved at the end")
 
     def __init__(self):
-        self.args = self.Args()
+        self.args = self.Arguments()
         
 class MockRetJ(BaseModel):
     metrics: Dict[str, float] = Field(default_factory=lambda: {"accuracy": 0.98, "loss": 0.1})
 
 class MockNextModelJ:
-    class Args(BaseModel):
+    class Arguments(BaseModel):
         accuracy: float = Field(0.0, description="Model accuracy")
         loss: float = Field(0.0, description="Model loss")
 
     def __init__(self):
-        self.args = self.Args()
+        self.args = self.Arguments()
         
 from datetime import datetime
 
@@ -241,11 +241,11 @@ class MockRetK(BaseModel):
     timestamp: str = Field("2025-03-28T12:00:00Z", description="ISO datetime string")
 
 class MockNextModelK:
-    class Args(BaseModel):
+    class Arguments(BaseModel):
         event_time: datetime = Field(default_factory=datetime.utcnow, description="Time of the event")
 
     def __init__(self):
-        self.args = self.Args()
+        self.args = self.Arguments()
 
 if __name__ == "__main__":
     # --------------------
@@ -263,7 +263,7 @@ if __name__ == "__main__":
     # # Output results
     # print("🔧 Suggested Field Map:", suggested_map)
     # print("📊 Confusion Matrix:\n", confusion_df)
-    # print("🧾 Previous .ret dict:", ret_dict)
+    # print("🧾 Previous .rets dict:", ret_dict)
     # print("📦 Built .args:", next_model.args)
     # print("✅ Final value for 'n':", next_model.args.n)
         
@@ -294,5 +294,5 @@ if __name__ == "__main__":
         print("📊 Confusion Matrix:\n", matrix)
 
         model_instance = smart_build_by_ret(ret_dict, model_cls, field_map)
-        print("📦 Final Args:", model_instance.args)
+        print("📦 Final Arguments:", model_instance.args)
 

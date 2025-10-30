@@ -30,11 +30,11 @@ Optionally uploads downloaded files to Redis and removes local copies.
             chunk_size: int = Field(8192, description="Size of each data chunk in bytes")
             redis_url: Optional[str] = Field(None, description="Redis connection URL, e.g., redis://localhost:6379/0, if provided, the file will be uploaded to Redis and deleted from local storage.")
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             url: str = Field(default="http://example.com/sample.txt", description="The URL of the file to download")
             destination_path: str = Field(default="sample.txt", description="Where to temporarily save the file before uploading to Redis")
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             success: bool = Field(False, description="Whether the download and Redis upload succeeded")
             message: str = Field("", description="Status or error message")            
             file_path: str = Field("", description="Path to the downloaded file or Redis key if uploaded to Redis. Example: '/path/to/file.txt' for local file or 'redis://localhost:6379/0:web:example.com:sample.txt' for Redis key")
@@ -89,8 +89,8 @@ Optionally uploads downloaded files to Redis and removes local copies.
 
         version:Version = Version()
         para: Parameter = Parameter()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -199,20 +199,20 @@ Optionally uploads downloaded files to Redis and removes local copies.
                     self.log_and_send(f"Deleted local file: {dest_path}")
                 
                 # Set the file_path to the Redis key with redis_url prefix
-                self.model.ret.file_path = f"{redis_url}:{redis_key}"
+                self.model.rets.file_path = f"{redis_url}:{redis_key}"
             else:
                 # Set the file_path to the local file path
-                self.model.ret.file_path = dest_path
+                self.model.rets.file_path = dest_path
 
             # Update return values
-            self.model.ret.success = True
+            self.model.rets.success = True
             success_message = "Download complete"
 
             if redis_url:
                 success_message += f" and uploaded to Redis with key: {redis_key}"
                 
-            self.model.ret.message = success_message
-            self.log_and_send(self.model.ret.message)
+            self.model.rets.message = success_message
+            self.log_and_send(self.model.rets.message)
 
         def store_file_to_redis(self, redis_url: str, redis_key: str, file_path: str):
             """Store a file in Redis."""
@@ -278,16 +278,16 @@ Optionally uploads downloaded files to Redis and removes local copies.
         def handle_exception(self, message: str):
             """Handle exceptions by logging and updating the model."""
             self.log_and_send(message, Downloader.Levels.ERROR)
-            self.model.ret.success = False
-            self.model.ret.message = message
-            self.model.ret.file_path = ""
+            self.model.rets.success = False
+            self.model.rets.message = message
+            self.model.rets.file_path = ""
 
         def to_stop(self):
             """Handle stop flag being set."""
             self.log_and_send("Stop flag detected. Download halted.", Downloader.Levels.WARNING)
-            self.model.ret.success = False
-            self.model.ret.message = "Download stopped by user."
-            self.model.ret.file_path = ""
+            self.model.rets.success = False
+            self.model.rets.message = "Download stopped by user."
+            self.model.rets.file_path = ""
             return self.model
 
         def log_and_send(self, message: str, level=None):
@@ -315,14 +315,14 @@ if __name__ == "__main__":
     result = action()
     
     # Print the result
-    print(f"Download success: {result.ret.success}")
-    print(f"Message: {result.ret.message}")
-    print(f"File path: {result.ret.file_path}")
+    print(f"Download success: {result.rets.success}")
+    print(f"Message: {result.rets.message}")
+    print(f"File path: {result.rets.file_path}")
     
     # Test with Redis if available
     print("\nTesting with Redis...")
     model.para.redis_url = "redis://localhost:6379/0"
     result = action()
-    print(f"Redis upload success: {result.ret.success}")
-    print(f"Message: {result.ret.message}")
-    print(f"Redis key: {result.ret.file_path}")
+    print(f"Redis upload success: {result.rets.success}")
+    print(f"Message: {result.rets.message}")
+    print(f"Redis key: {result.rets.file_path}")

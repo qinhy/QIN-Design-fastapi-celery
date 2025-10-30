@@ -57,11 +57,11 @@ class BrowseWebLink(ServiceOrientedArchitecture):
             headless: bool = Field(False, description="Run browser in headless mode.")
             remove_tags: list[str] = Field(['script', 'style', 'data:image'], description="List of HTML tags to remove.")
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             link: str = Field(..., description="The URL to browse.")
             filename: Optional[str] = Field(None, description="Optional filename to save content.")
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             result: str = Field(..., description="Result message or error details.")
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
@@ -81,8 +81,8 @@ class BrowseWebLink(ServiceOrientedArchitecture):
 
         version: Version = Version()
         para: Parameter = Parameter()
-        args: Args
-        ret: Optional[Return] = Return(result="")
+        args: Arguments
+        rets: Optional[Returness] = Returness(result="")
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -109,11 +109,11 @@ class BrowseWebLink(ServiceOrientedArchitecture):
                         filename = folder / f'link_{self.date()}.txt'
                         with self._fs(filename, 'w', encoding='utf-8', errors='ignore') as f:
                             f.write(result_text)
-                        self.model.ret.result = f"Saved information to {filename}"
+                        self.model.rets.result = f"Saved information to {filename}"
                     else:
-                        self.model.ret.result = result_text
+                        self.model.rets.result = result_text
                 except Exception as e:
-                    self.model.ret.result = f"Error: {str(e)}"
+                    self.model.rets.result = f"Error: {str(e)}"
                 
                 if hasattr(self.model.para,'user'):
                     self.model.para.user = None
@@ -126,7 +126,7 @@ class BrowseWebLink(ServiceOrientedArchitecture):
             return fs
         
         def to_stop(self):
-            self.model.ret.result = "Execution stopped by flag."
+            self.model.rets.result = "Execution stopped by flag."
             return self.model
 
         def browse_website(self, link: str) -> str:

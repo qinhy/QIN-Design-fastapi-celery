@@ -27,10 +27,10 @@ Returns the binary representation as a list of bits.
                 None, description="Optional bit length for output (pads with leading zeros if set)"
             )
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             n: int = Field(0, description="The integer to convert to binary")
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             binary: List[int] = Field(default_factory=list, description="The binary representation as a list of bits")
 
         
@@ -48,8 +48,8 @@ Returns the binary representation as a list of bits.
 
         version:Version = Version()
         para: Parameter = Parameter()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -72,13 +72,13 @@ Returns the binary representation as a list of bits.
                     padding = max(0, bit_length - len(binary_bits))
                     binary_bits = [0] * padding + binary_bits
 
-                self.model.ret.binary = binary_bits
+                self.model.rets.binary = binary_bits
                 self.log_and_send(f"Binary representation: {binary_bits}")
                 return self.model
 
         def to_stop(self):
             self.log_and_send("Stop flag detected. Returning empty result.", BinaryRepresentation.Levels.WARNING)
-            self.model.ret.binary = []
+            self.model.rets.binary = []
             return self.model
 
         def log_and_send(self, message, level=None):
@@ -104,17 +104,17 @@ if __name__ == "__main__":
     result = action()
     
     # Print the result
-    print(f"Binary representation: {result.ret.binary}")
+    print(f"Binary representation: {result.rets.binary}")
     
     # Test with a different number
     print("\nTesting with a different number...")
     model.args.n = 42
     result = action()
-    print(f"Binary representation for 42: {result.ret.binary}")
+    print(f"Binary representation for 42: {result.rets.binary}")
     
     # Test without bit length padding
     print("\nTesting without bit length padding...")
     model.args.n = 255
     model.para.bit_length = None
     result = action()
-    print(f"Binary representation for 255 (no padding): {result.ret.binary}")
+    print(f"Binary representation for 255 (no padding): {result.rets.binary}")

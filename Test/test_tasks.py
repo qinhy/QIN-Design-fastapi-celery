@@ -32,7 +32,7 @@ def test_fibonacci_fast():
     data = response.json()
     res = json.loads(get_task_res(data['task_id']))
     # You may need to adjust this key based on the actual API response
-    assert res["ret"]["n"] == 233  # Fibonacci(13) = 233
+    assert res["rets"]["n"] == 233  # Fibonacci(13) = 233
 
 def test_http_request_task_get(url,execution_time="NOW"):
     url = "http://localhost:8000/httprequesttask/"
@@ -59,8 +59,8 @@ def test_http_request_task_get(url,execution_time="NOW"):
     res = json.loads(get_task_res(task_id))
 
     # Ensure the request was successfully performed
-    assert res["ret"]["status_code"] == 200
-    assert "httpbin.org" in res["ret"]["content"]
+    assert res["rets"]["status_code"] == 200
+    assert "httpbin.org" in res["rets"]["content"]
 
     return task_id
 
@@ -135,7 +135,7 @@ def test_pipeline_FiboPrime(
     data = response.json()
     res = json.loads(get_task_res(data['task_id']))
     # You may need to adjust this key based on the actual API response
-    assert res["ret"]["is_prime"] == True  # Fibonacci(13) = 233 , is prime
+    assert res["rets"]["is_prime"] == True  # Fibonacci(13) = 233 , is prime
 
 
 # def wait_until(t:str, tz='Asia/Tokyo', offset=-10):
