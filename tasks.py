@@ -431,7 +431,7 @@ def build_my_app(dependencies=[],ACTION_REGISTRY=ACTION_REGISTRY):
     def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
         m = Fibonacci.Model()
         m.para = Fibonacci.Model.Parameter(mode=mode)
-        m.args = Fibonacci.Model.Args(n=n)
+        m.args = Fibonacci.Model.Arguments(n=n)
         return my_app.api_perform_action('Fibonacci', m.model_dump(),0)
 
     my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
