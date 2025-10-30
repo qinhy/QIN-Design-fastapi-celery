@@ -508,24 +508,24 @@ class Book(BaseModel):
     
 class BookService(ServiceOrientedArchitecture):
     class Model(ServiceOrientedArchitecture.Model):
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             account:MT5Account
             book:Book
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             p:float=-1.0 #price
             tp:float=0.0
             sl:float=0.0
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             books:list[Book] = []
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
             pass
         
-        param:Param
-        args:Args = Args()
-        ret:Return = Return()
+        para: Parameter
+        args: Arguments = Arguments()
+        rets: Returness = Returness()
         logger:Logger = Logger(name='BookService')
 
         @staticmethod
@@ -544,7 +544,7 @@ class BookService(ServiceOrientedArchitecture):
             res = MT5Manager().get_singleton().do(self)
             if isinstance(res,Book):
                 res = [res]
-            self.model.ret.books = res
+            self.model.rets.books = res
             return self.model
         
         def __init__(self,model:'BookService.Model',BasicApp:AppInterface,level = 'INFO', retry_times_on_error=3):
@@ -562,7 +562,7 @@ class BookService(ServiceOrientedArchitecture):
             self.listen_data_of_task_uuids = []
 
             self.uuid = uuid.uuid4()
-            self._account: MT5Account = self.model.param.account
+            self._account: MT5Account = self.model.para. account
             self.retry_times_on_error = retry_times_on_error
 
             if isinstance(model, dict):
@@ -574,7 +574,7 @@ class BookService(ServiceOrientedArchitecture):
                 model = BookService.Model(**model)
             # Store the model instance
             self.model: BookService.Model = model
-            self.book = self.model.param.book
+            self.book = self.model.para. book
         
         def log_and_send(self,info:str):
             self.logger.log(self.logger.level,info)
@@ -582,7 +582,7 @@ class BookService(ServiceOrientedArchitecture):
 
         def change_run(self, func_name, kwargs):
             self.log_and_send(f'change run: {func_name}, {kwargs}')
-            self.model.args = BookService.Model.Args(**kwargs)
+            self.model.args = BookService.Model.Arguments(**kwargs)
             self.book_run = lambda: getattr(self.book, func_name)(**kwargs)
             return self
 
@@ -602,17 +602,17 @@ class BookService(ServiceOrientedArchitecture):
 #             )
 class MT5CopyLastRatesService:
     class Model(ServiceOrientedArchitecture.Model):
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             account: MT5Account = None
         
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             symbol: str = "null"
             timeframe: str = "H1"
             count: int = 10
             debug: bool = False
             retry_times_on_error: int = 3
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             symbol: str = "null"
             timeframe: str = "H1"
             count: int = 10
@@ -649,9 +649,9 @@ class MT5CopyLastRatesService:
                 )
 
         # Set default instances for Param, Args, and Return to enable easy initialization
-        param: Param = Param()
-        args: Args = Args()
-        ret: Return = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Returness = Returness()
 
         @staticmethod
         def build(acc:MT5Account):
@@ -673,7 +673,7 @@ class MT5CopyLastRatesService:
                 model = {k: v for k, v in model.items() if v is not None}
                 model = MT5CopyLastRatesService.Model(**model)
             self.model: MT5CopyLastRatesService.Model = model
-            account = self.model.param.account
+            account = self.model.para. account
             super().__init__(account)
 
         def _update_args(self, symbol: str = None, timeframe: str = None, count: int = None, debug: bool = None):
@@ -688,9 +688,9 @@ class MT5CopyLastRatesService:
             self._update_args(symbol, timeframe, count, debug)
             # Perform the MT5 action
             res: MT5CopyLastRatesService.Model = MT5Manager().get_singleton().do(self)
-            self.model.ret.symbol = symbol
-            self.model.ret.timeframe = timeframe
-            self.model.ret.count = count
+            self.model.rets.symbol = symbol
+            self.model.rets.timeframe = timeframe
+            self.model.rets.count = count
             return res
 
         def run(self, symbol: str = None, timeframe: str = None, count: int = None, debug: bool = None):
@@ -698,8 +698,8 @@ class MT5CopyLastRatesService:
 
             if self.model.args.debug:
                 # For debugging, return simple mock values
-                self.model.ret.rates = None
-                self.model.ret.digitsnum = 3  # Mock value for digits
+                self.model.rets.rates = None
+                self.model.rets.digitsnum = 3  # Mock value for digits
                 return self.model
 
             # Simplified timeframe mapping using getattr with a fallback
@@ -716,9 +716,9 @@ class MT5CopyLastRatesService:
                 raise ValueError(f"Failed to retrieve rates: {error_msg} (Error code: {error_code})")
 
             # Populate the return model with results
-            self.model.ret.rates = rates.tolist()
-            self.model.ret.digitsnum = digitsnum
-            self.model.ret.error = None
+            self.model.rets.rates = rates.tolist()
+            self.model.rets.digitsnum = digitsnum
+            self.model.rets.error = None
 
             return self.model
 

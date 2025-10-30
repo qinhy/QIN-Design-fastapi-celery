@@ -51,13 +51,13 @@ class BookCloseService(ServiceOrientedArchitecture):
 
     class Model(ServiceOrientedArchitecture.Model):
             
-        class Param(MT5Account):
+        class Parameter(MT5Account):
             pass
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             ticket: int = -1
             
-        class Return(BaseModel):
+        class Returness(BaseModel):
             ok:bool=False
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
@@ -67,9 +67,9 @@ class BookCloseService(ServiceOrientedArchitecture):
             pass
         
         version:Version = Version()
-        param:Param = Param()
-        args:Args = Args()
-        ret:Return = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Returness = Returness()
         logger:Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action, MT5Action):
@@ -89,11 +89,11 @@ class BookCloseService(ServiceOrientedArchitecture):
                 if self.model.args.ticket==b.ticket:
                     try:
                         b.close()
-                        self.model.ret.ok=True
+                        self.model.rets.ok=True
                     except:
-                        self.model.ret.ok=False
+                        self.model.rets.ok=False
             
-            self.model.param = MT5Account()
+            self.model.para = MT5Account()
             return self.model
 
 
@@ -101,17 +101,17 @@ class BookSendService(ServiceOrientedArchitecture):
 
     class Model(ServiceOrientedArchitecture.Model):
             
-        class Param(MT5Account):
+        class Parameter(MT5Account):
             pass
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             symbol: str = 'USDJPY'
             volume:  float = -1
             price_open:  float = -1
             tp: float = -1
             sl: float = -1
             
-        class Return(BaseModel):
+        class Returness(BaseModel):
             ok:bool=False
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
@@ -121,9 +121,9 @@ class BookSendService(ServiceOrientedArchitecture):
             pass
         
         version:Version = Version()
-        param:Param = Param()
-        args:Args = Args()
-        ret:Return = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Returness = Returness()
         logger:Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action, MT5Action):
@@ -145,12 +145,12 @@ class BookSendService(ServiceOrientedArchitecture):
                       sl=self.model.args.sl).as_plan()
             try:
                 bs.send()
-                self.model.ret.ok=True
+                self.model.rets.ok=True
             except:
-                self.model.ret.ok=False
+                self.model.rets.ok=False
 
-            self.model.param = MT5Account()
-            self.model.param = MT5Account()
+            self.model.para = MT5Account()
+            self.model.para = MT5Account()
             return self.model
        
 
@@ -158,13 +158,13 @@ class MT5AccountInfo(ServiceOrientedArchitecture):
 
     class Model(ServiceOrientedArchitecture.Model):
             
-        class Param(MT5Account):
+        class Parameter(MT5Account):
             pass
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             pass
             
-        class Return(BaseModel):
+        class Returness(BaseModel):
             info:dict={}
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
@@ -174,9 +174,9 @@ class MT5AccountInfo(ServiceOrientedArchitecture):
             pass
         
         version:Version = Version()
-        param:Param = Param()
-        args:Args = Args()
-        ret:Return = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Returness = Returness()
         logger:Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action, MT5Action):
@@ -191,23 +191,23 @@ class MT5AccountInfo(ServiceOrientedArchitecture):
             return MT5Manager().get_singleton().do(self)
 
         def run(self):
-            self.model.ret.info = Book().account_info()
-            self.model.param = MT5Account()
+            self.model.rets.info = Book().account_info()
+            self.model.para = MT5Account()
             return self.model
        
 # class BookService(ServiceOrientedArchitecture):
 
 #     class Model(ServiceOrientedArchitecture.Model):
             
-#         class Param(Book,MT5Account):
+#         class Parameter(Book,MT5Account):
 #             action:str = BookServiceActionTypes.account_info
 
-#         class Args(BaseModel):
+#         class Arguments(BaseModel):
 #             p:float=-1.0 #price
 #             tp:float=0.0
 #             sl:float=0.0
 
-#         class Return(BaseModel):
+#         class Returness(BaseModel):
 #             first_book:Optional[Book] = None
 #             books:list[Book] = []
 #             books_dict:dict[str,Book] = {}
@@ -219,9 +219,9 @@ class MT5AccountInfo(ServiceOrientedArchitecture):
 #             pass
         
 #         version:Version = Version()
-#         param:Param = Param()
-#         args:Args = Args()
-#         ret:Return = Return()
+#         para: Parameter = Parameter()
+#         args: Arguments = Arguments()
+#         rets: Returness = Returness()
 #         logger:Logger = Logger(name=Version().class_name)
 
 #         @staticmethod
@@ -238,7 +238,7 @@ class MT5AccountInfo(ServiceOrientedArchitecture):
 
 #         def __call__(self, *args, **kwargs):
 #             super().__call__(*args, **kwargs)
-#             action = self.model.param.action
+#             action = self.model.para. action
 #             acc = self.model.param
 #             book = self.model.param
 #             task_id = self.model.task_id
@@ -246,10 +246,10 @@ class MT5AccountInfo(ServiceOrientedArchitecture):
 #             self.model.task_id = task_id
 #             self.change_run(action, kwargs)
 #             first_book,books,books_dict = MT5Manager().get_singleton().do(self)
-#             self.model.ret.first_book = first_book
-#             self.model.ret.books = books
-#             self.model.ret.books_dict = books_dict
-#             self.model.param.password = ''
+#             self.model.rets.first_book = first_book
+#             self.model.rets.books = books
+#             self.model.rets.books_dict = books_dict
+#             self.model.para. password = ''
 #             return self.model
 
 #         def __init__(self, model,BasicApp:AppInterface,level=None):            
@@ -266,13 +266,13 @@ class MT5AccountInfo(ServiceOrientedArchitecture):
 
 #         def change_run(self, func_name, kwargs):
 #             self.log_and_send(f'change run: {func_name}, {kwargs}')
-#             self.model.args = BookService.Model.Args(**kwargs)
+#             self.model.args = BookService.Model.Arguments(**kwargs)
 #             self.book_run = lambda: getattr(self.book, func_name)(**kwargs)
 #             return self
 
 #         def run(self):
 #             # tbs = {f'{b.symbol}-{b.price_open}-{b.volume}':b.model_dump() for b in Book().getBooks()}
-#             action = self.model.param.action            
+#             action = self.model.para. action            
 #             first_book = None
 #             books = []
 #             books_dict = {}
@@ -292,9 +292,9 @@ class MT5AccountInfo(ServiceOrientedArchitecture):
             
 #             return first_book,books,books_dict
 #             # res = BookService.Model()
-#             # res.ret.first_book = first_book
-#             # res.ret.books = books
-#             # res.ret.books_dict = books_dict
+#             # res.rets.first_book = first_book
+#             # res.rets.books = books
+#             # res.rets.books_dict = books_dict
 #             # return res
         
 
@@ -326,17 +326,17 @@ class MT5AccountInfo(ServiceOrientedArchitecture):
 # }
 class MT5CopyLastRatesService(ServiceOrientedArchitecture):
     class Model(ServiceOrientedArchitecture.Model):
-        class Param(MT5Account):
+        class Parameter(MT5Account):
             pass
         
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             symbol: str = "USDJPY"
             timeframe: str = "H1"
             count: int = 10
             debug: bool = False
             retry_times_on_error: int = 3
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             symbol: str = "NULL"
             timeframe: str = "H1"
             count: int = 10
@@ -379,9 +379,9 @@ class MT5CopyLastRatesService(ServiceOrientedArchitecture):
             pass
         
         version:Version = Version()
-        param:Param = Param()
-        args:Args = Args()
-        ret:Return = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Returness = Returness()
         logger:Logger = Logger(name=Version().class_name)
         
     class Action(ServiceOrientedArchitecture.Action, MT5Action):
@@ -415,10 +415,10 @@ class MT5CopyLastRatesService(ServiceOrientedArchitecture):
             self._update_args(symbol, timeframe, count, debug)
             # Perform the MT5 action
             self.model: MT5CopyLastRatesService.Model = MT5Manager().get_singleton().do(self)
-            self.model.ret.symbol = symbol
-            self.model.ret.timeframe = timeframe
-            self.model.ret.count = count
-            self.model.param = MT5Account()
+            self.model.rets.symbol = symbol
+            self.model.rets.timeframe = timeframe
+            self.model.rets.count = count
+            self.model.para = MT5Account()
             return self.model
 
         def run(self, symbol: str = None, timeframe: str = None, count: int = None, debug: bool = None):
@@ -426,8 +426,8 @@ class MT5CopyLastRatesService(ServiceOrientedArchitecture):
 
             if self.model.args.debug:
                 # For debugging, return simple mock values
-                self.model.ret.rates = None
-                self.model.ret.digitsnum = 3  # Mock value for digits
+                self.model.rets.rates = None
+                self.model.rets.digitsnum = 3  # Mock value for digits
                 return self.model
 
             # Simplified timeframe mapping using getattr with a fallback
@@ -444,9 +444,9 @@ class MT5CopyLastRatesService(ServiceOrientedArchitecture):
                 raise ValueError(f"Failed to retrieve rates: {error_msg} (Error code: {error_code})")
 
             # Populate the return model with results
-            self.model.ret.rates = rates.tolist()
-            self.model.ret.digitsnum = digitsnum
-            self.model.ret.error = None
+            self.model.rets.rates = rates.tolist()
+            self.model.rets.digitsnum = digitsnum
+            self.model.rets.error = None
 
             return self.model
 

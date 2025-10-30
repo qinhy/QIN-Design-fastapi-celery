@@ -20,15 +20,15 @@ class MT5RatesDownloader(ServiceOrientedArchitecture):
         pass
 
     class Model(ServiceOrientedArchitecture.Model):
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             data_path: str = Field("./", description="Directory path where downloaded data files will be saved")
             
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             pair: str = Field("EURUSD", description="Currency pair symbol (e.g. EURUSD, GBPJPY) to download rates for")
             time_frame: str = Field("H1", description="MT5 timeframe identifier (e.g. M1, H1, D1) representing the bar interval")
             bar_count: int = Field(1000, description="Number of historical bars to retrieve, starting from most recent")
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             data_file: Optional[str] = Field(None, description="Path to downloaded data file")
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
@@ -42,9 +42,9 @@ class MT5RatesDownloader(ServiceOrientedArchitecture):
             return [{"args": {"pair": "EURJPY", "time_frame": "M1", "bar_count": 1000}}]
 
         version: Version = Version()
-        param: Param = Param()
-        args: Args = Args()
-        ret: Optional[Return] = None
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = None
         logger: Logger = Logger(name=Version().class_name)
     class Action(ServiceOrientedArchitecture.Action):
         def __init__(self, model, BasicApp, level=None):
@@ -80,7 +80,7 @@ class MT5RatesDownloader(ServiceOrientedArchitecture):
 
         def _save_data(self, rates: np.ndarray, pair: str, time_frame: str) -> str:
             """Save downloaded data to file and return filename"""
-            data_path = self.model.param.data_path
+            data_path = self.model.para. data_path
             os.makedirs(data_path, exist_ok=True)
             filename = os.path.join(data_path, f'{pair}_{time_frame}.npy')
             np.save(filename, rates)
@@ -93,7 +93,7 @@ class MT5RatesDownloader(ServiceOrientedArchitecture):
 
                 try:
                     if not self._initialize_mt5():
-                        self.model.ret = None
+                        self.model.rets = None
                         return self.model
                         
                     pair = self.model.args.pair
@@ -103,10 +103,10 @@ class MT5RatesDownloader(ServiceOrientedArchitecture):
                     rates = self._download_data(pair, time_frame, bar_count)
                     if rates is not None and len(rates) > 0:
                         filename = self._save_data(rates, pair, time_frame)
-                        self.model.ret = self.model.Return(data_file=filename)
+                        self.model.rets = self.model.Returness(data_file=filename)
                         self.log_and_send(f"Saved {filename} with {len(rates)} bars")
                     else:
-                        self.model.ret = None
+                        self.model.rets = None
                 finally:
                     if self._mt5_initialized:
                         # mt5.shutdown()
@@ -116,7 +116,7 @@ class MT5RatesDownloader(ServiceOrientedArchitecture):
 
         def to_stop(self):
             self.log_and_send("Stop flag detected, aborting download.", MT5RatesDownloader.Levels.WARNING)
-            self.model.ret = None
+            self.model.rets = None
             return self.model
 
         def log_and_send(self, message, level=None):
@@ -142,7 +142,7 @@ class TestMT5RatesDownloader(unittest.TestCase):
         
         # Create model instance with test parameters
         self.model = MT5RatesDownloader.Model()
-        self.model.param.data_path = self.test_dir
+        self.model.para. data_path = self.test_dir
         
         # Create action instance
         self.action = MT5RatesDownloader.Action(self.model, self.mock_basic_app)
@@ -210,8 +210,8 @@ class TestMT5RatesDownloader(unittest.TestCase):
         result = self.action()
         
         self.assertIsNotNone(result.ret)
-        self.assertIsNotNone(result.ret.data_file)
-        self.assertTrue(os.path.exists(result.ret.data_file))
+        self.assertIsNotNone(result.rets.data_file)
+        self.assertTrue(os.path.exists(result.rets.data_file))
     
     def test_full_download_invalid_symbol(self):
         # Test full download with invalid symbol
