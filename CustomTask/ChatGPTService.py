@@ -118,8 +118,8 @@ Supports text + multimodal input, streaming, and customization of model paramete
 
     class Model(ServiceOrientedArchitecture.Model):
         
-        class Param(BaseModel):
-            class ReasoningParam(BaseModel):
+        class Parameter(BaseModel):
+            class ReasoningParameter(BaseModel):
                 """Controls the model's chain-of-thought *style* (not the content you receive)."""
                 effort: Literal["low", "medium", "high"] = Field(
                     "low",description="How much reasoning effort to spend (latency/$$ trade-off).")
@@ -135,7 +135,7 @@ Supports text + multimodal input, streaming, and customization of model paramete
             system_prompt: Optional[str] = Field(None, description="Optional system prompt (sent as 'instructions')")
             base_url: str = Field("https://api.openai.com/v1/responses", description="OpenAI Responses API endpoint")
             previous_response_id: Optional[str] = Field(None, description="Chain context across turns (optional).")
-            reasoning: Optional[ReasoningParam] = Field(
+            reasoning: Optional[ReasoningParameter] = Field(
                 None,
                 description="Optional reasoning controls for the Responses API."
             )
@@ -190,7 +190,7 @@ Supports text + multimodal input, streaming, and customization of model paramete
             ]
 
         version: Version = Version()
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
         logger: Logger = Logger(name=Version().class_name)
@@ -207,7 +207,7 @@ Supports text + multimodal input, streaming, and customization of model paramete
                     return self.to_stop()
 
                 try:
-                    param = self.model.param
+                    param = self.model.para
                     args_obj = self.model.args
 
                     api_key: str = self._get_api_key(param.api_key)
@@ -343,8 +343,8 @@ Supports text + multimodal input, streaming, and customization of model paramete
                 "max_output_tokens": max_output_tokens,
                 "stream": stream,
             }
-            if self.model.param.reasoning:
-                payload["reasoning"] = self.model.param.reasoning.model_dump()
+            if self.model.para.reasoning:
+                payload["reasoning"] = self.model.para.reasoning.model_dump()
 
             # system prompt becomes 'instructions' for Responses API
             if system_prompt:
@@ -357,7 +357,7 @@ Supports text + multimodal input, streaming, and customization of model paramete
 
         def _send_request(self, headers: Dict[str, str], payload: Dict[str, Any]) -> requests.Response:
             response = requests.post(
-                url=self.model.param.base_url,
+                url=self.model.para.base_url,
                 headers=headers,
                 data=json.dumps(payload),
                 stream=True  # keep stream open even if not streaming; ok for .json() too
@@ -537,7 +537,7 @@ Provides an interface to interact with deepseek models.
         pass
 
     class Model(ChatGPTService.Model):
-        class Param(ChatGPTService.Model.Param):
+        class Parameter(ChatGPTService.Model.Parameter):
             model: str = Field("deepseek-reasoner", description="Deepseek model to use")
             base_url: str = Field("https://api.deepseek.com/v1/chat/completions", description="Deepseek API endpoint")
 
@@ -554,7 +554,7 @@ Provides an interface to interact with deepseek models.
             pass
 
         version:Version = Version()
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
         logger: Logger = Logger(name=Version().class_name)
@@ -573,7 +573,7 @@ Provides an interface to interact with deepseek models.
                     return self.to_stop()
 
                 try:
-                    param = self.model.param
+                    param = self.model.para
                     args_obj = self.model.args
 
                     api_key: str = self._get_api_key(param.api_key)
@@ -660,10 +660,10 @@ def test_chatgpt_service():
     model = ChatGPTService.Model()
     
     # Configure parameters
-    model.param.model = "gpt-5-nano"  # Use a smaller model for testing
-    model.param.api_key = os.environ.get('OPENAI_API_KEY')
-    model.param.max_output_tokens = 256  # Limit response size
-    model.param.stream = False  # Disable streaming for simpler testing
+    model.para.model = "gpt-5-nano"  # Use a smaller model for testing
+    model.para.api_key = os.environ.get('OPENAI_API_KEY')
+    model.para.max_output_tokens = 256  # Limit response size
+    model.para.stream = False  # Disable streaming for simpler testing
     
     # Set the user prompt
     model.args.user_prompt = "Hi what is your name?"
@@ -696,10 +696,10 @@ def test_chatgpt_service_with_image():
 
     # Create service model
     model = ChatGPTService.Model()
-    model.param.model = "gpt-4.1-nano"  # Make sure to use a vision-capable model
-    model.param.api_key = os.environ.get('OPENAI_API_KEY')
-    model.param.stream = False
-    model.param.max_output_tokens = 100
+    model.para.model = "gpt-4.1-nano"  # Make sure to use a vision-capable model
+    model.para.api_key = os.environ.get('OPENAI_API_KEY')
+    model.para.stream = False
+    model.para.max_output_tokens = 100
 
     # Set messages from PromptBuilder
     model.args.history_messages = prompt.build()
@@ -724,11 +724,11 @@ def test_deepseek_service():
     model = DeepseekService.Model()
 
     # Configure parameters
-    model.param.model = "deepseek-reasoner"
-    model.param.api_key = os.environ.get('DEEPSEEK_API_KEY')  # Make sure this is set
-    model.param.max_output_tokens = 50
-    model.param.stream = True
-    model.param.system_prompt = "You are a logical assistant."
+    model.para.model = "deepseek-reasoner"
+    model.para.api_key = os.environ.get('DEEPSEEK_API_KEY')  # Make sure this is set
+    model.para.max_output_tokens = 50
+    model.para.stream = True
+    model.para.system_prompt = "You are a logical assistant."
 
     # Set the user prompt
     model.args.user_prompt = "Which is greater, 3.14 or 2.718?"

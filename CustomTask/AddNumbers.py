@@ -19,7 +19,7 @@ Sums a list of numbers and returns the total.
 
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             # Placeholder for possible future parameters
             pass
 
@@ -44,7 +44,7 @@ Sums a list of numbers and returns the total.
             ]
 
         version: Version = Version()
-        param: Param = Param()
+        param: Parameter = Parameter()
         args: Args
         ret: Optional[Return] = Return(sum=0)
         logger: Logger = Logger(name=Version().class_name)

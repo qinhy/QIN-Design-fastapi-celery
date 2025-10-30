@@ -24,7 +24,7 @@ Supports two checking modes:
 
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             mode: Literal['basic', 'smart'] = Field("smart", description="Check mode: 'basic' (brute-force) or 'smart' (optimized)")
 
             def is_smart(self):
@@ -50,8 +50,8 @@ Supports two checking modes:
             ]
         
         version:Version = Version()
-        param: Param = Param()
-        args: Args = Param()
+        para: Parameter = Parameter()
+        args: Args = Parameter()
         ret: Optional[Return] = Return()
         logger: Logger = Logger(name=Version().class_name)
 
@@ -68,7 +68,7 @@ Supports two checking modes:
                     self.model.ret.is_prime = False
                     return self.model
 
-                is_smart = self.model.param.is_smart()
+                is_smart = self.model.para.is_smart()
                 mode = "smart" if is_smart else "basic"
                 self.log_and_send(f"Checking if {number} is prime using {mode} mode.")
 

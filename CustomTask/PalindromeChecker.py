@@ -23,7 +23,7 @@ Supports two checking modes:
 
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             mode: Literal['basic', 'smart'] = Field("smart", description="Mode: 'basic' (simple reverse) or 'smart' (efficient comparison)")
 
             def is_smart(self):
@@ -49,7 +49,7 @@ Supports two checking modes:
             ]
         
         version:Version = Version()
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args
         ret: Optional[Return] = Return()
         logger: Logger = Logger(name=Version().class_name)
@@ -62,7 +62,7 @@ Supports two checking modes:
         def __call__(self, *args, **kwargs):
             with self.listen_stop_flag() as stop_flag:
                 text = self.model.args.text.strip().lower()
-                is_smart = self.model.param.is_smart()
+                is_smart = self.model.para.is_smart()
                 mode = "smart" if is_smart else "basic"
 
                 self.log_and_send(f"Checking if '{text}' is a palindrome using {mode} mode.")

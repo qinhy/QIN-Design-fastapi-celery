@@ -22,7 +22,7 @@ Continues until reaching 1 or the maximum number of steps (if specified).
 
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             max_steps: Optional[int] = Field(
                 None, description="Optional limit on number of steps to prevent infinite loops"
             )
@@ -47,7 +47,7 @@ Continues until reaching 1 or the maximum number of steps (if specified).
             }]
 
         version:Version = Version()
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
         logger: Logger = Logger(name=Version().class_name)
@@ -63,7 +63,7 @@ Continues until reaching 1 or the maximum number of steps (if specified).
                     return self.to_stop()
 
                 n = self.model.args.n
-                max_steps = self.model.param.max_steps
+                max_steps = self.model.para.max_steps
                 if n < 1:
                     self.log_and_send("Input must be >= 1. Returning empty sequence.", CollatzSequence.Levels.WARNING)
                     self.model.ret.sequence = []
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     
     # Configure the model
     model.args.n = 6
-    model.param.max_steps = 100
+    model.para.max_steps = 100
     
     action = CollatzSequence.Action(model, None)
     

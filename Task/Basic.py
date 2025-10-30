@@ -1022,7 +1022,7 @@ class ServiceOrientedArchitecture:
             def __str__(self):
                 return f'_v{self.major}{self.minor}{self.patch}_'
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             pass
         class Args(BaseModel):
             pass
@@ -1123,7 +1123,7 @@ class ServiceOrientedArchitecture:
                     self._logger.removeHandler(handler)
 
         version:Version
-        param:Param = Param()
+        para: Parameter = Parameter()
         args:Args = Args()
         ret:Optional[Return] = Return()
         logger: Logger = Logger()
@@ -1132,7 +1132,7 @@ class ServiceOrientedArchitecture:
             if json_data is not None:
                 # Update all model components from prior model
                 if 'param' in json_data:
-                    self.param = self.param.model_copy(update=json_data['param'])
+                    self.para = self.para.model_copy(update=json_data['param'])
                 if 'args' in json_data:
                     self.args = self.args.model_copy(update=json_data['args'])
                 if 'ret' in json_data:
@@ -1159,7 +1159,7 @@ class ServiceOrientedArchitecture:
     def as_mcp_tool(cls):
         "https://modelcontextprotocol.io/docs/concepts/tools"
         "To be used in MCP tools"
-        param_schema = cls.replace_refs(cls.Model.Param.model_json_schema())
+        param_schema = cls.replace_refs(cls.Model.Parameter.model_json_schema())
         args_schema = cls.replace_refs(cls.Model.Args.model_json_schema())
         ret_schema = cls.replace_refs(cls.Model.Return.model_json_schema())
 

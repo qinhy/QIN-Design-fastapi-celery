@@ -159,7 +159,7 @@ class CeleryTask:
                                 'error': f'stream of [streams:{stream_key}] has created'})
 
         CCModel = VisonService.CvCameraSharedMemoryService.Model
-        data_model = CCModel(param=CCModel.Param(
+        data_model = CCModel(param=CCModel.Parameter(
             mode='write', stream_key=stream_key, array_shape=(h, w)))
         act = dict(name='CvCameraSharedMemoryService',
                    data=data_model.model_dump())
@@ -175,7 +175,7 @@ class CeleryTask:
                                 'error': f'not such stream of [streams:{stream_key}]'})
 
         CCModel = VisonService.CvCameraSharedMemoryService.Model
-        data_model = CCModel(param=CCModel.Param(
+        data_model = CCModel(param=CCModel.Parameter(
             mode='read', stream_key=stream_key, array_shape=info['array_shape']))
         act = dict(name='CvCameraSharedMemoryService',
                    data=data_model.model_dump())

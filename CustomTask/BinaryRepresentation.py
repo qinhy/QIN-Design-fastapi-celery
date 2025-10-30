@@ -22,7 +22,7 @@ Returns the binary representation as a list of bits.
 
     class Model(ServiceOrientedArchitecture.Model):
         
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             bit_length: Optional[int] = Field(
                 None, description="Optional bit length for output (pads with leading zeros if set)"
             )
@@ -47,7 +47,7 @@ Returns the binary representation as a list of bits.
             }]
 
         version:Version = Version()
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
         logger: Logger = Logger(name=Version().class_name)
@@ -63,7 +63,7 @@ Returns the binary representation as a list of bits.
                     return self.to_stop()
 
                 n = self.model.args.n
-                bit_length = self.model.param.bit_length
+                bit_length = self.model.para.bit_length
                 self.log_and_send(f"Converting {n} to binary with bit_length={bit_length}")
 
                 binary_bits = list(map(int, bin(n)[2:]))  # Remove '0b' prefix
@@ -95,7 +95,7 @@ if __name__ == "__main__":
     
     # Configure the model
     model.args.n = 13
-    model.param.bit_length = 8
+    model.para.bit_length = 8
     
     action = BinaryRepresentation.Action(model, None)
     
@@ -115,6 +115,6 @@ if __name__ == "__main__":
     # Test without bit length padding
     print("\nTesting without bit length padding...")
     model.args.n = 255
-    model.param.bit_length = None
+    model.para.bit_length = None
     result = action()
     print(f"Binary representation for 255 (no padding): {result.ret.binary}")

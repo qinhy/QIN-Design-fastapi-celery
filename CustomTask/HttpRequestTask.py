@@ -24,7 +24,7 @@ Returns the status code and content of the response.
 
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             method: Literal['GET', 'POST'] = Field("GET",
                                         description="HTTP method: GET or POST")
 
@@ -54,7 +54,7 @@ Returns the status code and content of the response.
             ]
 
         version: Version = Version()
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
         logger: Logger = Logger(name=Version().class_name)
@@ -70,7 +70,7 @@ Returns the status code and content of the response.
                     return self.to_stop()
 
                 url = self.model.args.url
-                method = self.model.param.method
+                method = self.model.para.method
                 data = self.model.args.data
 
                 self.log_and_send(f"Performing {method} request to {url}")

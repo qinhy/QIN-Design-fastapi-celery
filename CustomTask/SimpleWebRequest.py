@@ -23,7 +23,7 @@ Returns status code, response text, and JSON content if available.
 
     class Model(ServiceOrientedArchitecture.Model):
         
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             timeout: int = Field(30, description="Request timeout in seconds")
             verify_ssl: bool = Field(True, description="Whether to verify SSL certificates")
 
@@ -58,7 +58,7 @@ Returns status code, response text, and JSON content if available.
             }]
         
         version:Version = Version()
-        param:Param = Param()
+        para: Parameter = Parameter()
         args:Args = Args()
         ret:Optional[Return] = Return()
         logger: Logger = Logger(name=Version().class_name)
@@ -77,8 +77,8 @@ Returns status code, response text, and JSON content if available.
                 method = self.model.args.method
                 headers = self.model.args.headers
                 data = self.model.args.data
-                timeout = self.model.param.timeout
-                verify_ssl = self.model.param.verify_ssl
+                timeout = self.model.para.timeout
+                verify_ssl = self.model.para.verify_ssl
 
                 self.log_and_send(f"Sending {method} request to {url}")
                 
@@ -157,8 +157,8 @@ class TestSimpleWebRequest(unittest.TestCase):
         self.model.args.method = "GET"
         self.model.args.headers = {"Content-Type": "application/json"}
         self.model.args.data = {"userId": 1}
-        self.model.param.timeout = 10
-        self.model.param.verify_ssl = True
+        self.model.para.timeout = 10
+        self.model.para.verify_ssl = True
         
         self.basic_app_mock = MagicMock()
         self.action = SimpleWebRequest.Action(self.model, self.basic_app_mock)

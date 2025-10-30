@@ -26,7 +26,7 @@ Optionally uploads downloaded files to Redis and removes local copies.
         pass
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(ServiceOrientedArchitecture.Model.Param):
+        class Parameter(ServiceOrientedArchitecture.Model.Parameter):
             chunk_size: int = Field(8192, description="Size of each data chunk in bytes")
             redis_url: Optional[str] = Field(None, description="Redis connection URL, e.g., redis://localhost:6379/0, if provided, the file will be uploaded to Redis and deleted from local storage.")
 
@@ -88,7 +88,7 @@ Optionally uploads downloaded files to Redis and removes local copies.
             }]
 
         version:Version = Version()
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
         logger: Logger = Logger(name=Version().class_name)
@@ -105,8 +105,8 @@ Optionally uploads downloaded files to Redis and removes local copies.
 
                 url = self.model.args.url
                 dest_path = self.model.args.destination_path
-                chunk_size = self.model.param.chunk_size
-                redis_url = self.model.param.redis_url
+                chunk_size = self.model.para.chunk_size
+                redis_url = self.model.para.redis_url
 
                 self.log_and_send(f"Starting download from {url} to {dest_path}")
 
@@ -122,14 +122,14 @@ Optionally uploads downloaded files to Redis and removes local copies.
                 except Exception as e:
                     self._handle_specific_exception(e, url, dest_path)
                 
-                if hasattr(self.model.param,'user'):
-                    self.model.param.user = None
+                if hasattr(self.model.para,'user'):
+                    self.model.para.user = None
                 return self.model
             
         def _fs(self)->FileSystem:
             fs = FileSystem()
-            if hasattr(self.model.param,'user') and hasattr(self.model.param.user,'file_system'):
-                fs = self.model.param.user.file_system
+            if hasattr(self.model.para,'user') and hasattr(self.model.para.user,'file_system'):
+                fs = self.model.para.user.file_system
             return fs
 
         def _download_file(
@@ -306,7 +306,7 @@ if __name__ == "__main__":
     # Configure the model
     model.args.url = "https://www.python.org/static/img/python-logo.png"
     model.args.destination_path = "python-logo.png"
-    model.param.chunk_size = 4096
+    model.para.chunk_size = 4096
     
     action = Downloader.Action(model)
     
@@ -321,7 +321,7 @@ if __name__ == "__main__":
     
     # Test with Redis if available
     print("\nTesting with Redis...")
-    model.param.redis_url = "redis://localhost:6379/0"
+    model.para.redis_url = "redis://localhost:6379/0"
     result = action()
     print(f"Redis upload success: {result.ret.success}")
     print(f"Message: {result.ret.message}")

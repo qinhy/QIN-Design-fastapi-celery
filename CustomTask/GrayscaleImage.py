@@ -26,7 +26,7 @@ RGB images are converted using luminance averaging.
         pass
 
     class Model(ServiceOrientedArchitecture.Model):
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             pass  # No configurable parameters needed yet
 
         class Args(BaseModel):
@@ -49,7 +49,7 @@ RGB images are converted using luminance averaging.
             ]
 
         version: Version = Version()
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args
         ret: Optional[Return] = None
         logger: Logger = Logger(name=Version().class_name)

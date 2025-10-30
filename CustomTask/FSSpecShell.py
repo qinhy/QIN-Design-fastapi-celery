@@ -24,7 +24,7 @@ Performs filesystem operations using `fsspec`, simulating basic shell commands:
         pass
 
     class Model(ServiceOrientedArchitecture.Model):
-        class Param(ServiceOrientedArchitecture.Model.Param):
+        class Parameter(ServiceOrientedArchitecture.Model.Parameter):
             pass
 
         class Args(BaseModel):
@@ -50,7 +50,7 @@ Performs filesystem operations using `fsspec`, simulating basic shell commands:
             ]
 
         version: Version = Version()
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args
         ret: Optional[Return] = Return()
         logger: Logger = Logger(name=Version().class_name)
@@ -61,7 +61,7 @@ Performs filesystem operations using `fsspec`, simulating basic shell commands:
             self.model: FSSpecShell.Model = self.model
             self.fs_config = FileSystem()
 
-            # self.user:User = self.model.param.user
+            # self.user:User = self.model.para.user
             # if self.user and self.user.file_system:
             #     self.fs_config = self.user.file_system
                 
@@ -96,7 +96,7 @@ Performs filesystem operations using `fsspec`, simulating basic shell commands:
                     )
                     self.model.ret.result = str(e)
 
-                self.model.param.user = None
+                self.model.para.user = None
                 return self.model
 
         def to_stop(self):

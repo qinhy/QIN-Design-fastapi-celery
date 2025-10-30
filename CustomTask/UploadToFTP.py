@@ -24,7 +24,7 @@ Can create files from base64-encoded content if they don't exist locally.
 
     class Model(ServiceOrientedArchitecture.Model):
         
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             passive_mode: bool = Field(True, description="Whether to use passive mode for FTP connection")
 
         class Args(BaseModel):
@@ -74,7 +74,7 @@ Can create files from base64-encoded content if they don't exist locally.
             }]
         
         version: Version = Version()
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
         logger: Logger = Logger(name=Version().class_name)
@@ -131,7 +131,7 @@ Can create files from base64-encoded content if they don't exist locally.
                 
                 try:
                     with ftplib.FTP(ftp_config['host'], ftp_config['username'], ftp_config['password']) as ftp:
-                        ftp.set_pasv(self.model.param.passive_mode)
+                        ftp.set_pasv(self.model.para.passive_mode)
                         
                         # Create remote directory if it doesn't exist
                         try:
@@ -202,7 +202,7 @@ def test_upload_to_ftp():
         
         # Create model instance for a successful upload using an existing file
         model = UploadToFTP.Model()
-        model.param.passive_mode = True
+        model.para.passive_mode = True
         model.args.local_file = temp_file_path
         model.args.remote_dir = "/test_uploads"
         model.args.host = "ftp.example.com"
@@ -274,7 +274,7 @@ def test_upload_with_local_file_content_b64():
 
     # Create model instance for upload using base64 content
     model = UploadToFTP.Model()
-    model.param.passive_mode = True
+    model.para.passive_mode = True
     model.args.local_file = temp_file_path
     model.args.remote_dir = "/test_uploads_base64"
     model.args.host = "ftp.example.com"

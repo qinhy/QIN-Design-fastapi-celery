@@ -37,7 +37,7 @@ class ServiceOrientedArchitecture:
             def __str__(self):
                 return f'_v{self.major}{self.minor}{self.patch}_'
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             pass
             
         class Args(BaseModel):
@@ -138,7 +138,7 @@ class ServiceOrientedArchitecture:
 
                 
         version:Version = Version()
-        param:Param = Param()
+        para: Parameter = Parameter()
         args:Args = Args()
         ret:Optional[Return] = Return()
         logger: Logger = Logger()
@@ -153,7 +153,7 @@ class ServiceOrientedArchitecture:
     def as_mcp_tool(cls):
         "https://modelcontextprotocol.io/docs/concepts/tools"
         "To be used in MCP tools"
-        param_schema = cls.Model.Param.schema()
+        param_schema = cls.Model.Parameter.schema()
         args_schema = cls.Model.Args.schema()
 
         # Determine if "param" and/or "args" should be required at the top level

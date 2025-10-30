@@ -28,7 +28,7 @@ Can process images from URLs or local file paths.
 
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             img_size_limit: int = Field(250000000, description="Maximum image size limit in pixels")
             cols: int = Field(2, description="Number of columns for tiling images")
             rows: int = Field(2, description="Number of rows for tiling images")
@@ -125,7 +125,7 @@ Can process images from URLs or local file paths.
             ]
 
         version: Version = Version()
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
         logger: Logger = Logger(name=Version().class_name)
@@ -170,11 +170,11 @@ Can process images from URLs or local file paths.
                 self.log_and_send("No image sources provided. Please provide at least one image source.", ImageTiler.Levels.ERROR)
                 return False
                 
-            if self.model.param.cols <= 0 or self.model.param.rows <= 0:
+            if self.model.para.cols <= 0 or self.model.para.rows <= 0:
                 self.log_and_send("Columns and rows must be positive integers.", ImageTiler.Levels.ERROR)
                 return False
                 
-            if self.model.param.final_width <= 0 or self.model.param.final_height <= 0:
+            if self.model.para.final_width <= 0 or self.model.para.final_height <= 0:
                 self.log_and_send("Final width and height must be positive integers.", ImageTiler.Levels.ERROR)
                 return False
                 
@@ -183,10 +183,10 @@ Can process images from URLs or local file paths.
         def _process_images(self, stop_flag):
             """Process all image sources and return a list of processed images."""
             sources = self.model.args.image_sources
-            cols = self.model.param.cols
-            rows = self.model.param.rows
-            final_width = self.model.param.final_width
-            final_height = self.model.param.final_height
+            cols = self.model.para.cols
+            rows = self.model.para.rows
+            final_width = self.model.para.final_width
+            final_height = self.model.para.final_height
             
             # Calculate dimensions for each cell in the grid
             cell_width = final_width // cols
@@ -227,7 +227,7 @@ Can process images from URLs or local file paths.
             """Load an image from a URL or local file path."""
             try:
                 # Set PIL's maximum image size limit to prevent decompression bomb attacks
-                Image.MAX_IMAGE_PIXELS = self.model.param.img_size_limit
+                Image.MAX_IMAGE_PIXELS = self.model.para.img_size_limit
 
                 if source.startswith(("http://", "https://")):
                     self.log_and_send(
@@ -299,10 +299,10 @@ Can process images from URLs or local file paths.
             
         def _create_tiled_image(self, images):
             """Create and save the final tiled image."""
-            cols = self.model.param.cols
-            rows = self.model.param.rows
-            final_width = self.model.param.final_width
-            final_height = self.model.param.final_height
+            cols = self.model.para.cols
+            rows = self.model.para.rows
+            final_width = self.model.para.final_width
+            final_height = self.model.para.final_height
             cell_width = final_width // cols
             cell_height = final_height // rows
             
@@ -330,12 +330,12 @@ Can process images from URLs or local file paths.
             """Save the tiled image to disk."""
             try:
                 # Determine output path
-                if self.model.param.output_path:
-                    output_path = self.model.param.output_path
+                if self.model.para.output_path:
+                    output_path = self.model.para.output_path
                     # Ensure directory exists
                     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
                 else:
-                    output_format = self.model.param.output_format.lower()
+                    output_format = self.model.para.output_format.lower()
                     if not output_format.startswith('.'):
                         output_format = f".{output_format}"
                     
@@ -383,11 +383,11 @@ if __name__ == "__main__":
     model = ImageTiler.Model()
     
     # Set parameters
-    model.param.cols = 2
-    model.param.rows = 2
-    model.param.final_width = 600
-    model.param.final_height = 600
-    model.param.output_path = os.path.join(test_dir, "tiled_output.jpg")
+    model.para.cols = 2
+    model.para.rows = 2
+    model.para.final_width = 600
+    model.para.final_height = 600
+    model.para.output_path = os.path.join(test_dir, "tiled_output.jpg")
     
     # Set arguments
     model.args.image_sources = [

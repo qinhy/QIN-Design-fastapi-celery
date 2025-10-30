@@ -20,7 +20,7 @@ class ServiceOrientedArchitecture(BaseModel):
             def __str__(self):
                 return f'_v{self.major}{self.minor}{self.patch}_'
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             pass
 
         class Args(BaseModel):
@@ -29,7 +29,7 @@ class ServiceOrientedArchitecture(BaseModel):
         class Return(BaseModel):
             pass
 
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
 
@@ -39,7 +39,7 @@ class Fibonacci(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
         
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             mode: Literal['fast', 'slow'] = Field(
                 default="fast", 
                 description="Execution mode, either 'fast' or 'slow'."
@@ -66,7 +66,7 @@ class Fibonacci(ServiceOrientedArchitecture):
                 {"param": {"mode": "fast"}, "args": {"n": 13}}
             ]
 
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
 
@@ -76,7 +76,7 @@ class PrimeNumberChecker(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             mode: Literal['basic', 'smart'] = Field(
                 default="smart", 
                 description="Check mode: 'basic' (brute force) or 'smart' (optimized)."
@@ -105,7 +105,7 @@ class PrimeNumberChecker(ServiceOrientedArchitecture):
                 {"param": {"mode": "smart"}, "args": {"number": 1}},
             ]
 
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
 
@@ -115,9 +115,9 @@ class AddTwoNumbers(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             """
-            Example Param: might control how the addition is performed (e.g., integer vs. float).
+            Example Para: might control how the addition is performed (e.g., integer vs. float).
             """
             type: Literal['int', 'float'] = Field(
                 default='int',
@@ -153,7 +153,7 @@ class AddTwoNumbers(ServiceOrientedArchitecture):
                 {"param": {"type": "float"}, "args": {"a": 3, "b": 4}}
             ]
 
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
         
@@ -163,9 +163,9 @@ class MultiplyTwoNumbers(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             """
-            Example Param: might specify integer vs. float multiplication, or some advanced mode.
+            Example Para: might specify integer vs. float multiplication, or some advanced mode.
             """
             mode: Literal['basic', 'extended'] = Field(
                 default='basic',
@@ -200,7 +200,7 @@ class MultiplyTwoNumbers(ServiceOrientedArchitecture):
                 {"param": {"mode": "extended"}, "args": {"x": 5, "y": 10}},
             ]
 
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
         
@@ -210,7 +210,7 @@ class Factorial(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             mode: Literal['iterative', 'recursive'] = Field(
                 default='iterative',
                 description="Computation mode: 'iterative' or 'recursive'."
@@ -237,7 +237,7 @@ class Factorial(ServiceOrientedArchitecture):
                 {"param": {"mode": "recursive"}, "args": {"n": 6}},
             ]
 
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
 
@@ -247,7 +247,7 @@ class SumOfSequence(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             inclusive: bool = Field(
                 default=True,
                 description="Whether the sequence is inclusive at the ends."
@@ -275,7 +275,7 @@ class SumOfSequence(ServiceOrientedArchitecture):
                 {"param": {"inclusive": False}, "args": {"start": 1, "end": 5}}
             ]
 
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
 
@@ -285,7 +285,7 @@ class CircleAreaCalculator(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             units: Literal['cm', 'm'] = Field(
                 default='cm',
                 description="Units of measurement (centimeters or meters)."
@@ -312,7 +312,7 @@ class CircleAreaCalculator(ServiceOrientedArchitecture):
                 {"param": {"units": "m"}, "args": {"radius": 2}},
             ]
 
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
 
@@ -322,7 +322,7 @@ class TriangleAreaCalculator(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             formula: Literal['basic', 'herons'] = Field(
                 default='basic',
                 description="Which formula to use: 'basic' (1/2 * base * height) or 'herons' formula."
@@ -371,7 +371,7 @@ class TriangleAreaCalculator(ServiceOrientedArchitecture):
                 },
             ]
 
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
 
@@ -381,7 +381,7 @@ class DataSorter(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             order: Literal['asc', 'desc'] = Field(
                 default='asc',
                 description="Sorting order: 'asc' or 'desc'."
@@ -408,7 +408,7 @@ class DataSorter(ServiceOrientedArchitecture):
                 {"param": {"order": "desc"}, "args": {"data": [1, 2, 3, 4]}},
             ]
 
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
 
@@ -418,7 +418,7 @@ class StatisticsCalculator(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             calc_mode: Literal['all', 'mean-only', 'median-only', 'mode-only'] = Field(
                 default='all',
                 description="Specifies which statistic(s) to compute."
@@ -459,7 +459,7 @@ class StatisticsCalculator(ServiceOrientedArchitecture):
                 {"param": {"calc_mode": "mean-only"}, "args": {"data": [10, 20, 30, 40]}},
             ]
 
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
 
@@ -469,7 +469,7 @@ class DatabaseInsert(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             table_name: str = Field(
                 default='default_table',
                 description="Name of the table into which data will be inserted."
@@ -503,7 +503,7 @@ class DatabaseInsert(ServiceOrientedArchitecture):
                 }
             ]
 
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
 
@@ -513,7 +513,7 @@ class DatabaseQuery(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             table_name: str = Field(
                 default='default_table',
                 description="Name of the table to query."
@@ -551,7 +551,7 @@ class DatabaseQuery(ServiceOrientedArchitecture):
                 }
             ]
 
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
 

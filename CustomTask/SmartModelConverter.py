@@ -21,7 +21,7 @@ Generates conversion functions between source and target classes.
 Supports customizable prompt templates for the conversion process.
 """
     class Model(ServiceOrientedArchitecture.Model):
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             model: str = Field("gpt-4.1-nano", description="The model to use for conversion.")
             api_key: Optional[str] = Field(None, description="API key for authentication, if required.")
 
@@ -58,7 +58,7 @@ Supports customizable prompt templates for the conversion process.
             pass
 
         version:Version = Version()
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args = Args()
         ret: Optional[Return] = Return()
         logger: Logger = Logger(name=Version().class_name)
@@ -78,8 +78,8 @@ Supports customizable prompt templates for the conversion process.
                 
                 self.log_and_send("Starting SmartModelConverter execution", self.Levels.INFO)
                 
-                self.model.param.api_key = self.model.param.api_key or os.environ.get('OPENAI_API_KEY')
-                if not self.model.param.api_key:
+                self.model.para.api_key = self.model.para.api_key or os.environ.get('OPENAI_API_KEY')
+                if not self.model.para.api_key:
                     self.log_and_send("API key not found in environment or parameters", self.Levels.ERROR)
                     raise ValueError("API key not found in environment variable 'OPENAI_API_KEY' and not provided")
 
@@ -93,11 +93,11 @@ Supports customizable prompt templates for the conversion process.
                 )
                 self.log_and_send(f"Generated function name: {function_name}", self.Levels.DEBUG)
 
-                self.log_and_send(f"Requesting code generation using model: {self.model.param.model}", self.Levels.INFO)
+                self.log_and_send(f"Requesting code generation using model: {self.model.para.model}", self.Levels.INFO)
                 code_snippet, conversion_func = self.get_code_from_gpt(
                     prompt_text,
                     function_name,
-                    self.model.param.model
+                    self.model.para.model
                 )
                 self.log_and_send("Successfully generated conversion function", self.Levels.INFO)
                 self.model.ret.function_name = function_name
@@ -155,11 +155,11 @@ Supports customizable prompt templates for the conversion process.
                 raise
 
         def get_code_from_gpt(self, prompt: str, function_name: str, model: str = None):
-            model = model or self.model.param.model
+            model = model or self.model.para.model
             url = 'https://api.openai.com/v1/chat/completions'
             headers = {
                 'Content-Type': 'application/json',
-                'Authorization': f'Bearer {self.model.param.api_key}'
+                'Authorization': f'Bearer {self.model.para.api_key}'
             }
             data = {
                 "model": model,
@@ -227,7 +227,7 @@ if __name__ == "__main__":
         model = SmartModelConverter.Model()
         model.args.source_class_name = source_class_name
         model.args.target_class_name = target_class_name
-        model.param.api_key = os.environ.get('OPENAI_API_KEY')
+        model.para.api_key = os.environ.get('OPENAI_API_KEY')
         
         model = SmartModelConverter.Action(model, None)()
         if model.ret.function_name in code_snippets:

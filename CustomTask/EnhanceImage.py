@@ -26,7 +26,7 @@ The adjusted image is saved to a new file and its path is returned.
 
     class Model(ServiceOrientedArchitecture.Model):
         
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             brightness: float = Field(1.0, description="Brightness factor (1.0 is original)")
             contrast: float = Field(1.0, description="Contrast factor (1.0 is original)")
             saturation: float = Field(1.0, description="Saturation factor (1.0 is original)")
@@ -51,7 +51,7 @@ The adjusted image is saved to a new file and its path is returned.
             }]
 
         version: Version = Version()
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args
         ret: Optional[Return] = None
         logger: Logger = Logger(name=Version().class_name)
@@ -82,7 +82,7 @@ The adjusted image is saved to a new file and its path is returned.
             return self.model
 
         def _adjust_image(self, img):
-            param = self.model.param
+            param = self.model.para
             if param.brightness != 1.0:
                 self.log_and_send(f"Adjusting brightness: {param.brightness}")
                 img = ImageEnhance.Brightness(img).enhance(param.brightness)

@@ -53,7 +53,7 @@ class BrowseWebLink(ServiceOrientedArchitecture):
 
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(ServiceOrientedArchitecture.Model.Param):
+        class Parameter(ServiceOrientedArchitecture.Model.Parameter):
             headless: bool = Field(False, description="Run browser in headless mode.")
             remove_tags: list[str] = Field(['script', 'style', 'data:image'], description="List of HTML tags to remove.")
 
@@ -80,7 +80,7 @@ class BrowseWebLink(ServiceOrientedArchitecture):
             ]
 
         version: Version = Version()
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args
         ret: Optional[Return] = Return(result="")
         logger: Logger = Logger(name=Version().class_name)
@@ -115,14 +115,14 @@ class BrowseWebLink(ServiceOrientedArchitecture):
                 except Exception as e:
                     self.model.ret.result = f"Error: {str(e)}"
                 
-                if hasattr(self.model.param,'user'):
-                    self.model.param.user = None
+                if hasattr(self.model.para,'user'):
+                    self.model.para.user = None
                 return self.model
 
         def _fs(self)->FileSystem:
             fs = FileSystem()
-            if hasattr(self.model.param,'user') and hasattr(self.model.param.user,'file_system'):
-                fs = self.model.param.user.file_system
+            if hasattr(self.model.para,'user') and hasattr(self.model.para.user,'file_system'):
+                fs = self.model.para.user.file_system
             return fs
         
         def to_stop(self):
@@ -142,7 +142,7 @@ class BrowseWebLink(ServiceOrientedArchitecture):
 
 
         def _fetch_page_content(self, link: str) -> str:
-            if not self.model.param.headless:
+            if not self.model.para.headless:
                 return self._fetch_with_selenium(link)
             else:
                 return self._fetch_with_requests(link)
@@ -189,7 +189,7 @@ class BrowseWebLink(ServiceOrientedArchitecture):
             elif 'aws.amazon.com' in link:
                 return self._parse_aws(html)
             else:
-                cleaned_html = self.remove_tags_using_bs(html, tags=self.model.param.remove_tags)
+                cleaned_html = self.remove_tags_using_bs(html, tags=self.model.para.remove_tags)
                 return md(cleaned_html)
 
         def _parse_youtube_video(self, url: str) -> str:

@@ -71,7 +71,7 @@ class TaskDAGRunner(ServiceOrientedArchitecture):
         pass
 
     class Model(ServiceOrientedArchitecture.Model):
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             str_customize_separator: str = Field(
                 default=",", description="Customize the separator used when joining multiple values for a field.")
 
@@ -130,7 +130,7 @@ graph TD
 ]
 
         version: Version = Version()
-        param: Param = Param()
+        para: Parameter = Parameter()
         args: Args
         ret: Optional[Return] = Return()
         logger: Logger = Logger(name=Version().class_name)
@@ -265,7 +265,7 @@ graph TD
             if schema["type"] == "array":
                 return {field: self._convert_array(values, schema["items"]["type"])}
             elif schema["type"] == "string":
-                return {field: self.model.param.str_customize_separator.join(map(str, values))}
+                return {field: self.model.para.str_customize_separator.join(map(str, values))}
             else:
                 print(f"Warning: 'many2one' mapping for field '{field}' with unsupported type '{schema['type']}', used last value.")
                 return {field: values[-1]} if values else {}

@@ -23,7 +23,7 @@ Supports two computation modes:
 
     class Model(ServiceOrientedArchitecture.Model):
         
-        class Param(ServiceOrientedArchitecture.Model.Param):
+        class Parameter(ServiceOrientedArchitecture.Model.Parameter):
             mode: Literal['fast', 'slow'] = Field("fast", description="Execution mode, either 'fast' or 'slow'")
 
             def is_fast(self):
@@ -46,7 +46,7 @@ Supports two computation modes:
         
             
         version:Version = Version()
-        param:Param = Param()
+        para: Parameter = Parameter()
         args:Args
         ret:Optional[Return] = Return()
         logger: Logger = Logger(name=Version().class_name)
@@ -68,7 +68,7 @@ Supports two computation modes:
                     return self.model
 
                 # Determine which mode to use
-                is_fast = self.model.param.is_fast()
+                is_fast = self.model.para.is_fast()
                 mode = "fast" if is_fast else "slow"
                 self.log_and_send(f"Entering {mode} mode.")
 
