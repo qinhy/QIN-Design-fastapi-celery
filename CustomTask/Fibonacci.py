@@ -23,16 +23,16 @@ Supports two computation modes:
 
     class Model(ServiceOrientedArchitecture.Model):
         
-        class Param(ServiceOrientedArchitecture.Model.Param):
+        class Parameter(ServiceOrientedArchitecture.Model.Parameter):
             mode: Literal['fast', 'slow'] = Field("fast", description="Execution mode, either 'fast' or 'slow'")
 
             def is_fast(self):
                 return self.mode == 'fast'
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             n: int = Field(..., description="The position of the Fibonacci number to compute")
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             n: int = Field(-1, description="The computed Fibonacci number at position n")
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
@@ -46,9 +46,9 @@ Supports two computation modes:
         
             
         version:Version = Version()
-        param:Param = Param()
-        args:Args
-        ret:Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments
+        rets:Optional[Returness] = Returness()
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -64,11 +64,11 @@ Supports two computation modes:
                 n = self.model.args.n
                 if n <= 1:
                     self.log_and_send(f"n = {n}, returning it directly.")
-                    self.model.ret.n = n
+                    self.model.rets.n = n
                     return self.model
 
                 # Determine which mode to use
-                is_fast = self.model.param.is_fast()
+                is_fast = self.model.para.is_fast()
                 mode = "fast" if is_fast else "slow"
                 self.log_and_send(f"Entering {mode} mode.")
 
@@ -77,13 +77,13 @@ Supports two computation modes:
                     return self.to_stop()
 
                 self.log_and_send(f"{mode} mode result for n={n} is {result}")
-                self.model.ret.n = result
+                self.model.rets.n = result
 
             return self.model
 
         def to_stop(self):
             self.log_and_send("Stop flag detected, returning 0.", Fibonacci.Levels.WARNING)
-            self.model.ret.n = 0
+            self.model.rets.n = 0
             return self.model
 
         def log_and_send(self, message, level=None):

@@ -226,7 +226,7 @@
                       <h2 class="text-xl font-bold mb-4">Calculate Fibonacci</h2>
                       <form @submit.prevent="submitFibonacciTask">
                         <!-- Input for Fibonacci Model -->
-                        <p-inputtext v-model="fibTask.param.mode" placeholder="Enter Fibonacci mode fast or slow"
+                        <p-inputtext v-model="fibTask.para.mode" placeholder="Enter Fibonacci mode fast or slow"
                             class="border p-2 rounded w-full mb-2" ></p-inputtext>
                         <p-inputtext v-model="fibTask.args.n" placeholder="Enter Fibonacci number"
                           class="border p-2 rounded w-full mb-2" ></p-inputtext>
@@ -395,7 +395,7 @@ class APIClient {
                             "args": {
                                 "n": 1
                             },
-                            "ret": {
+                            "rets": {
                                 "n": -1
                             }
                             });

@@ -24,16 +24,16 @@ Supports two checking modes:
 
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             mode: Literal['basic', 'smart'] = Field("smart", description="Check mode: 'basic' (brute-force) or 'smart' (optimized)")
 
             def is_smart(self):
                 return self.mode == 'smart'
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             number: int = Field(13, description="The number to check for primality")
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             is_prime: Optional[bool] = Field(None, description="Whether the number is prime")
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
@@ -50,9 +50,9 @@ Supports two checking modes:
             ]
         
         version:Version = Version()
-        param: Param = Param()
-        args: Args = Param()
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Parameter()
+        rets: Optional[Returness] = Returness()
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -65,10 +65,10 @@ Supports two checking modes:
                 number = self.model.args.number
                 if number < 2:
                     self.log_and_send(f"{number} is not prime (less than 2).")
-                    self.model.ret.is_prime = False
+                    self.model.rets.is_prime = False
                     return self.model
 
-                is_smart = self.model.param.is_smart()
+                is_smart = self.model.para.is_smart()
                 mode = "smart" if is_smart else "basic"
                 self.log_and_send(f"Checking if {number} is prime using {mode} mode.")
 
@@ -77,12 +77,12 @@ Supports two checking modes:
                     return self.to_stop()
 
                 self.log_and_send(f"{number} is {'prime' if result else 'not prime'}.")
-                self.model.ret.is_prime = result
+                self.model.rets.is_prime = result
                 return self.model
 
         def to_stop(self):
             self.log_and_send("Stop flag triggered. Aborting prime check.", PrimeNumberChecker.Levels.WARNING)
-            self.model.ret.is_prime = False
+            self.model.rets.is_prime = False
             return self.model
 
         def log_and_send(self, message, level=None):

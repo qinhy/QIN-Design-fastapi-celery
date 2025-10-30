@@ -24,10 +24,10 @@ Can create files from base64-encoded content if they don't exist locally.
 
     class Model(ServiceOrientedArchitecture.Model):
         
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             passive_mode: bool = Field(True, description="Whether to use passive mode for FTP connection")
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             local_file: str = Field("", description="Path to the local file to upload")
             remote_dir: str = Field("", description="Remote directory path on the FTP server")
             host: str = Field("", description="FTP server hostname")
@@ -38,7 +38,7 @@ Can create files from base64-encoded content if they don't exist locally.
                 "", description="Base64 encoded content to create local_file if it does not exist",
                 json_schema_extra={"x-pv-widget": "file"})
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             success: bool = Field(False, description="Whether the upload was successful")
             remote_path: str = Field("", description="Full path where the file was uploaded")
             error_message: str = Field("", description="Error message if upload failed")
@@ -74,9 +74,9 @@ Can create files from base64-encoded content if they don't exist locally.
             }]
         
         version: Version = Version()
-        param: Param = Param()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -107,13 +107,13 @@ Can create files from base64-encoded content if they don't exist locally.
                         except Exception as e:
                             error_msg = f"Failed to create local file from base64 content: {str(e)}"
                             self.log_and_send(error_msg, UploadToFTP.Levels.ERROR)
-                            self.model.ret.success = False
-                            self.model.ret.error_message = error_msg
+                            self.model.rets.success = False
+                            self.model.rets.error_message = error_msg
                             return self.model
                     else:
                         self.log_and_send(f"Error: Local file {local_file} not found", UploadToFTP.Levels.ERROR)
-                        self.model.ret.success = False
-                        self.model.ret.error_message = f"Local file {local_file} not found"
+                        self.model.rets.success = False
+                        self.model.rets.error_message = f"Local file {local_file} not found"
                         return self.model
 
                 # Prepare FTP configuration
@@ -125,13 +125,13 @@ Can create files from base64-encoded content if they don't exist locally.
                 
                 # Calculate remote path
                 remote_path = f"{remote_dir}/{os.path.basename(local_file)}"
-                self.model.ret.remote_path = remote_path
+                self.model.rets.remote_path = remote_path
                 
                 self.log_and_send(f"Uploading {local_file} to {remote_path}")
                 
                 try:
                     with ftplib.FTP(ftp_config['host'], ftp_config['username'], ftp_config['password']) as ftp:
-                        ftp.set_pasv(self.model.param.passive_mode)
+                        ftp.set_pasv(self.model.para.passive_mode)
                         
                         # Create remote directory if it doesn't exist
                         try:
@@ -148,14 +148,14 @@ Can create files from base64-encoded content if they don't exist locally.
                             ftp.storbinary(f'STOR {os.path.basename(local_file)}', file)
                     
                     self.log_and_send(f"File uploaded successfully to {remote_path}")
-                    self.model.ret.success = True
+                    self.model.rets.success = True
                     return self.model
                     
                 except Exception as e:
                     error_msg = f"FTP upload failed: {str(e)}"
                     self.log_and_send(error_msg, UploadToFTP.Levels.ERROR)
-                    self.model.ret.success = False
-                    self.model.ret.error_message = error_msg
+                    self.model.rets.success = False
+                    self.model.rets.error_message = error_msg
                 finally:
                     # Clean up the temporary file if it was created from base64 content
                     if temp_created and os.path.exists(local_file):
@@ -169,8 +169,8 @@ Can create files from base64-encoded content if they don't exist locally.
 
         def to_stop(self):
             self.log_and_send("Stop flag detected, canceling upload.", UploadToFTP.Levels.WARNING)
-            self.model.ret.success = False
-            self.model.ret.error_message = "Upload canceled by user"
+            self.model.rets.success = False
+            self.model.rets.error_message = "Upload canceled by user"
             return self.model
 
         def log_and_send(self, message, level=None):
@@ -202,7 +202,7 @@ def test_upload_to_ftp():
         
         # Create model instance for a successful upload using an existing file
         model = UploadToFTP.Model()
-        model.param.passive_mode = True
+        model.para.passive_mode = True
         model.args.local_file = temp_file_path
         model.args.remote_dir = "/test_uploads"
         model.args.host = "ftp.example.com"
@@ -218,9 +218,9 @@ def test_upload_to_ftp():
             action = UploadToFTP.Action(model, mock_basic_app)
             result = action()
             
-            assert result.ret.success is True
-            assert result.ret.remote_path == f"/test_uploads/{os.path.basename(temp_file_path)}"
-            assert result.ret.error_message == ""
+            assert result.rets.success is True
+            assert result.rets.remote_path == f"/test_uploads/{os.path.basename(temp_file_path)}"
+            assert result.rets.error_message == ""
             mock_ftp.set_pasv.assert_called_once_with(True)
             mock_ftp.cwd.assert_called_once_with("/test_uploads")
             mock_ftp.storbinary.assert_called_once()
@@ -230,8 +230,8 @@ def test_upload_to_ftp():
         model.args.local_file_content_b64 = ""
         action = UploadToFTP.Action(model, mock_basic_app)
         result = action()
-        assert result.ret.success is False
-        assert "not found" in result.ret.error_message.lower()
+        assert result.rets.success is False
+        assert "not found" in result.rets.error_message.lower()
         
         # Test FTP error handling (simulate permission errors)
         model.args.local_file = temp_file_path
@@ -244,8 +244,8 @@ def test_upload_to_ftp():
             action = UploadToFTP.Action(model, mock_basic_app)
             result = action()
             
-            assert result.ret.success is False
-            assert "ftp upload failed" in result.ret.error_message.lower()
+            assert result.rets.success is False
+            assert "ftp upload failed" in result.rets.error_message.lower()
         
         print("Standard tests passed!")
     
@@ -274,7 +274,7 @@ def test_upload_with_local_file_content_b64():
 
     # Create model instance for upload using base64 content
     model = UploadToFTP.Model()
-    model.param.passive_mode = True
+    model.para.passive_mode = True
     model.args.local_file = temp_file_path
     model.args.remote_dir = "/test_uploads_base64"
     model.args.host = "ftp.example.com"
@@ -292,8 +292,8 @@ def test_upload_with_local_file_content_b64():
         result = action()
 
         # Assert that the upload was successful and the remote path is calculated correctly
-        assert result.ret.success is True
-        assert result.ret.remote_path == f"/test_uploads_base64/{os.path.basename(temp_file_path)}"
+        assert result.rets.success is True
+        assert result.rets.remote_path == f"/test_uploads_base64/{os.path.basename(temp_file_path)}"
         # Check that the FTP upload method was called
         mock_ftp.storbinary.assert_called_once()
         # Verify that the temporary file has been deleted after the upload

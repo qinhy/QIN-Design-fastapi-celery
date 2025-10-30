@@ -51,6 +51,10 @@ class SingletonFileSystemStorage:
         self.storage_dir: Path = self.storage_dir
         self.ext: str = self.ext
 
+    @staticmethod
+    def build(storage_dir=None, ext='.json'):
+        return SingletonFileSystemStorageController(SingletonFileSystemStorage(storage_dir, ext))
+
 class SingletonFileSystemStorageController(AbstractStorageController):
     def __init__(self, model: SingletonFileSystemStorage):
         self.model:SingletonFileSystemStorage = model
@@ -83,6 +87,3 @@ class SingletonFileSystemStorageController(AbstractStorageController):
     def keys(self, pattern: str = '*') -> list[str]:
         all_keys = [f.stem for f in self.model.storage_dir.glob(f'*{self.model.ext}')]
         return fnmatch.filter(all_keys, pattern)
-
-SingletonKeyValueStorage.backs['file']=lambda *args,**kwargs:SingletonFileSystemStorageController(SingletonFileSystemStorage(*args,**kwargs))
-

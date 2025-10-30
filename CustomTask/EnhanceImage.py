@@ -26,15 +26,15 @@ The adjusted image is saved to a new file and its path is returned.
 
     class Model(ServiceOrientedArchitecture.Model):
         
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             brightness: float = Field(1.0, description="Brightness factor (1.0 is original)")
             contrast: float = Field(1.0, description="Contrast factor (1.0 is original)")
             saturation: float = Field(1.0, description="Saturation factor (1.0 is original)")
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             path: str = Field(..., description="Path (file path, URL, or base64) to the input image")
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             path: str = Field(..., description="Path to the adjusted image")
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
@@ -51,9 +51,9 @@ The adjusted image is saved to a new file and its path is returned.
             }]
 
         version: Version = Version()
-        param: Param = Param()
-        args: Args
-        ret: Optional[Return] = None
+        para: Parameter = Parameter()
+        args: Arguments
+        rets: Optional[Returness] = None
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -75,14 +75,14 @@ The adjusted image is saved to a new file and its path is returned.
                 output_path = f"{os.path.splitext(input_path)[0]}_adjusted.jpg"
                 img.save(output_path)
                 self.log_and_send(f"Image saved to {output_path}")
-                self.model.ret = self.model.Return(path=output_path)
+                self.model.rets = self.model.Returness(path=output_path)
             except Exception as e:
                 self.log_and_send(f"AdjustImage failed: {e}", EnhanceImage.Levels.ERROR)
-                self.model.ret = self.model.Return(path="")
+                self.model.rets = self.model.Returness(path="")
             return self.model
 
         def _adjust_image(self, img):
-            param = self.model.param
+            param = self.model.para
             if param.brightness != 1.0:
                 self.log_and_send(f"Adjusting brightness: {param.brightness}")
                 img = ImageEnhance.Brightness(img).enhance(param.brightness)

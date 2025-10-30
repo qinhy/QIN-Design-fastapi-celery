@@ -28,7 +28,7 @@ Can process images from URLs or local file paths.
 
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             img_size_limit: int = Field(250000000, description="Maximum image size limit in pixels")
             cols: int = Field(2, description="Number of columns for tiling images")
             rows: int = Field(2, description="Number of rows for tiling images")
@@ -37,7 +37,7 @@ Can process images from URLs or local file paths.
             output_format: str = Field("jpg", description="Output image format (jpg, png, etc.)")
             output_path: Optional[str] = Field('tiled_image.jpg', description="Custom output path for the tiled image")
             
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             image_sources: List[str] = Field(
                 [],
                 description="List of image URLs or local file paths, depending on the mode parameter."
@@ -47,7 +47,7 @@ Can process images from URLs or local file paths.
                 description="List of normalized coordinates (x,y) in range -1.0 to 1.0 that to do slicing to sub each image , with: width * x, height * y"
             )
             
-        class Return(BaseModel):
+        class Returness(BaseModel):
             tiled_image_path: Optional[str] = Field(
                 None,
                 description="Path to the saved tiled image"
@@ -125,9 +125,9 @@ Can process images from URLs or local file paths.
             ]
 
         version: Version = Version()
-        param: Param = Param()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -144,7 +144,7 @@ Can process images from URLs or local file paths.
                 
                 # Process images and create tiled image
                 if not self._validate_inputs():
-                    self.model.ret.tiled_image_path = ""
+                    self.model.rets.tiled_image_path = ""
                     
                     return self.model
                 
@@ -155,7 +155,7 @@ Can process images from URLs or local file paths.
                 
                 if not images:
                     self.log_and_send("No valid images were processed. Exiting.", ImageTiler.Levels.ERROR)
-                    self.model.ret.tiled_image_path = ""
+                    self.model.rets.tiled_image_path = ""
                     
                     return self.model                
                 
@@ -170,11 +170,11 @@ Can process images from URLs or local file paths.
                 self.log_and_send("No image sources provided. Please provide at least one image source.", ImageTiler.Levels.ERROR)
                 return False
                 
-            if self.model.param.cols <= 0 or self.model.param.rows <= 0:
+            if self.model.para.cols <= 0 or self.model.para.rows <= 0:
                 self.log_and_send("Columns and rows must be positive integers.", ImageTiler.Levels.ERROR)
                 return False
                 
-            if self.model.param.final_width <= 0 or self.model.param.final_height <= 0:
+            if self.model.para.final_width <= 0 or self.model.para.final_height <= 0:
                 self.log_and_send("Final width and height must be positive integers.", ImageTiler.Levels.ERROR)
                 return False
                 
@@ -183,10 +183,10 @@ Can process images from URLs or local file paths.
         def _process_images(self, stop_flag):
             """Process all image sources and return a list of processed images."""
             sources = self.model.args.image_sources
-            cols = self.model.param.cols
-            rows = self.model.param.rows
-            final_width = self.model.param.final_width
-            final_height = self.model.param.final_height
+            cols = self.model.para.cols
+            rows = self.model.para.rows
+            final_width = self.model.para.final_width
+            final_height = self.model.para.final_height
             
             # Calculate dimensions for each cell in the grid
             cell_width = final_width // cols
@@ -227,7 +227,7 @@ Can process images from URLs or local file paths.
             """Load an image from a URL or local file path."""
             try:
                 # Set PIL's maximum image size limit to prevent decompression bomb attacks
-                Image.MAX_IMAGE_PIXELS = self.model.param.img_size_limit
+                Image.MAX_IMAGE_PIXELS = self.model.para.img_size_limit
 
                 if source.startswith(("http://", "https://")):
                     self.log_and_send(
@@ -299,10 +299,10 @@ Can process images from URLs or local file paths.
             
         def _create_tiled_image(self, images):
             """Create and save the final tiled image."""
-            cols = self.model.param.cols
-            rows = self.model.param.rows
-            final_width = self.model.param.final_width
-            final_height = self.model.param.final_height
+            cols = self.model.para.cols
+            rows = self.model.para.rows
+            final_width = self.model.para.final_width
+            final_height = self.model.para.final_height
             cell_width = final_width // cols
             cell_height = final_height // rows
             
@@ -330,12 +330,12 @@ Can process images from URLs or local file paths.
             """Save the tiled image to disk."""
             try:
                 # Determine output path
-                if self.model.param.output_path:
-                    output_path = self.model.param.output_path
+                if self.model.para.output_path:
+                    output_path = self.model.para.output_path
                     # Ensure directory exists
                     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
                 else:
-                    output_format = self.model.param.output_format.lower()
+                    output_format = self.model.para.output_format.lower()
                     if not output_format.startswith('.'):
                         output_format = f".{output_format}"
                     
@@ -348,14 +348,14 @@ Can process images from URLs or local file paths.
                 self.log_and_send(
                     f"Tiled image saved at {output_path}. Final size: {tiled_image.size}"
                 )
-                self.model.ret.tiled_image_path = output_path
+                self.model.rets.tiled_image_path = output_path
             except Exception as e:
                 self.log_and_send(f"Error saving tiled image: {str(e)}", ImageTiler.Levels.ERROR)
-                self.model.ret.tiled_image_path = ""
+                self.model.rets.tiled_image_path = ""
 
         def to_stop(self):
             self.log_and_send("Stop flag detected, aborting image tiling process.", ImageTiler.Levels.WARNING)
-            self.model.ret.tiled_image_path = ""
+            self.model.rets.tiled_image_path = ""
             
             return self.model
 
@@ -383,11 +383,11 @@ if __name__ == "__main__":
     model = ImageTiler.Model()
     
     # Set parameters
-    model.param.cols = 2
-    model.param.rows = 2
-    model.param.final_width = 600
-    model.param.final_height = 600
-    model.param.output_path = os.path.join(test_dir, "tiled_output.jpg")
+    model.para.cols = 2
+    model.para.rows = 2
+    model.para.final_width = 600
+    model.para.final_height = 600
+    model.para.output_path = os.path.join(test_dir, "tiled_output.jpg")
     
     # Set arguments
     model.args.image_sources = [

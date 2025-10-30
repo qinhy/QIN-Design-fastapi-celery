@@ -24,15 +24,15 @@ Performs filesystem operations using `fsspec`, simulating basic shell commands:
         pass
 
     class Model(ServiceOrientedArchitecture.Model):
-        class Param(ServiceOrientedArchitecture.Model.Param):
+        class Parameter(ServiceOrientedArchitecture.Model.Parameter):
             pass
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             command: Literal['ls', 'mkdir', 'rm'] = Field("ls", description="Filesystem command to execute")
 
             path: str = Field(".", description="Target path for the command")
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             result: Union[str, List[str]] = Field(default="", description="Result of the command")
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
@@ -50,9 +50,9 @@ Performs filesystem operations using `fsspec`, simulating basic shell commands:
             ]
 
         version: Version = Version()
-        param: Param = Param()
-        args: Args
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments
+        rets: Optional[Returness] = Returness()
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -61,7 +61,7 @@ Performs filesystem operations using `fsspec`, simulating basic shell commands:
             self.model: FSSpecShell.Model = self.model
             self.fs_config = FileSystem()
 
-            # self.user:User = self.model.param.user
+            # self.user:User = self.model.para.user
             # if self.user and self.user.file_system:
             #     self.fs_config = self.user.file_system
                 
@@ -87,21 +87,21 @@ Performs filesystem operations using `fsspec`, simulating basic shell commands:
                     else:
                         raise ValueError(f"Unsupported command: {command}")
 
-                    self.model.ret.result = result
+                    self.model.rets.result = result
 
                 except Exception as e:
                     self.log_and_send(
                         f"Error executing command '{command}' on '{path}': {e}",
                         level=FSSpecShell.Levels.ERROR
                     )
-                    self.model.ret.result = str(e)
+                    self.model.rets.result = str(e)
 
-                self.model.param.user = None
+                self.model.para.user = None
                 return self.model
 
         def to_stop(self):
             self.log_and_send("Stop flag triggered. Aborting command.", FSSpecShell.Levels.WARNING)
-            self.model.ret.result = "Command stopped."
+            self.model.rets.result = "Command stopped."
             return self.model
 
         def log_and_send(self, message, level=None):

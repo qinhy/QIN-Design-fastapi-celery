@@ -357,7 +357,7 @@ class BasicCeleryTask:
     
     def _map_fields_between_models(self, action_data, previous_to_current_map:dict):
         """Map specific fields from previous return to current args"""
-        previous_ret_data = action_data['ret']
+        previous_ret_data = action_data['rets']
         current_args_data = {}
         for k, v in previous_to_current_map.items():
             current_args_data[k] = previous_ret_data[v]
@@ -397,7 +397,7 @@ class BasicCeleryTask:
         """
         Wait until the specified execution time.
         
-        Args:
+        Arguments:
             execution_time_str: Execution time string in ISO format
             timezone_str: Timezone string
             offset_seconds: Offset in seconds to add to the execution time

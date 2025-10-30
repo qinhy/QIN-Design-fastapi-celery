@@ -37,12 +37,12 @@ class ServiceOrientedArchitecture:
             def __str__(self):
                 return f'_v{self.major}{self.minor}{self.patch}_'
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             pass
             
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             pass
-        class Return(BaseModel):
+        class Returness(BaseModel):
             pass
 
         class Logger(BaseModel):
@@ -138,9 +138,9 @@ class ServiceOrientedArchitecture:
 
                 
         version:Version = Version()
-        param:Param = Param()
-        args:Args = Args()
-        ret:Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets:Optional[Returness] = Returness()
         logger: Logger = Logger()
 
         @classmethod
@@ -153,12 +153,12 @@ class ServiceOrientedArchitecture:
     def as_mcp_tool(cls):
         "https://modelcontextprotocol.io/docs/concepts/tools"
         "To be used in MCP tools"
-        param_schema = cls.Model.Param.schema()
-        args_schema = cls.Model.Args.schema()
+        para_schema = cls.Model.Parameter.schema()
+        args_schema = cls.Model.Arguments.schema()
 
         # Determine if "param" and/or "args" should be required at the top level
         top_level_required = []
-        if param_schema.get("required"):
+        if para_schema.get("required"):
             top_level_required.append("param")
         if args_schema.get("required"):
             top_level_required.append("args")
@@ -169,7 +169,7 @@ class ServiceOrientedArchitecture:
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "param": param_schema,
+                    "param": para_schema,
                     "args": args_schema,
                 },
                 "required": top_level_required

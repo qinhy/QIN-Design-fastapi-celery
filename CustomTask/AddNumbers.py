@@ -19,14 +19,14 @@ Sums a list of numbers and returns the total.
 
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             # Placeholder for possible future parameters
             pass
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             numbers: List[int] = Field(..., description="List of numbers to add")
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             sum: int = Field(..., description="The sum of the input numbers")
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
@@ -44,9 +44,9 @@ Sums a list of numbers and returns the total.
             ]
 
         version: Version = Version()
-        param: Param = Param()
-        args: Args
-        ret: Optional[Return] = Return(sum=0)
+        para: Parameter = Parameter()
+        args: Arguments
+        rets: Optional[Returness] = Returness(sum=0)
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -61,12 +61,12 @@ Sums a list of numbers and returns the total.
                 numbers = self.model.args.numbers
                 result = sum(numbers)
                 self.log_and_send(f"Summing {numbers} = {result}")
-                self.model.ret.sum = result
+                self.model.rets.sum = result
             return self.model
 
         def to_stop(self):
             self.log_and_send("Stop flag detected, returning sum = 0.", AddNumbers.Levels.WARNING)
-            self.model.ret.sum = 0
+            self.model.rets.sum = 0
             return self.model
 
         def log_and_send(self, message, level=None):

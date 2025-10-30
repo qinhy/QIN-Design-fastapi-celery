@@ -118,8 +118,8 @@ Supports text + multimodal input, streaming, and customization of model paramete
 
     class Model(ServiceOrientedArchitecture.Model):
         
-        class Param(BaseModel):
-            class ReasoningParam(BaseModel):
+        class Parameter(BaseModel):
+            class ReasoningParameter(BaseModel):
                 """Controls the model's chain-of-thought *style* (not the content you receive)."""
                 effort: Literal["low", "medium", "high"] = Field(
                     "low",description="How much reasoning effort to spend (latency/$$ trade-off).")
@@ -135,12 +135,12 @@ Supports text + multimodal input, streaming, and customization of model paramete
             system_prompt: Optional[str] = Field(None, description="Optional system prompt (sent as 'instructions')")
             base_url: str = Field("https://api.openai.com/v1/responses", description="OpenAI Responses API endpoint")
             previous_response_id: Optional[str] = Field(None, description="Chain context across turns (optional).")
-            reasoning: Optional[ReasoningParam] = Field(
+            reasoning: Optional[ReasoningParameter] = Field(
                 None,
                 description="Optional reasoning controls for the Responses API."
             )
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             class SimpleTextMsg(BaseModel):
                 role: str = Field("user", description="The role of the msg")
                 content: str = Field("hi", description="The content of the msg")
@@ -150,7 +150,7 @@ Supports text + multimodal input, streaming, and customization of model paramete
             )
             user_prompt: str = Field("Hi", description="The user prompt to send to the model")
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             response: str = Field("", description="The full model response text")
             response_id: Optional[str] = Field(None, description="The response.id from the API (for chaining).")
 
@@ -190,9 +190,9 @@ Supports text + multimodal input, streaming, and customization of model paramete
             ]
 
         version: Version = Version()
-        param: Param = Param()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -207,7 +207,7 @@ Supports text + multimodal input, streaming, and customization of model paramete
                     return self.to_stop()
 
                 try:
-                    param = self.model.param
+                    param = self.model.para
                     args_obj = self.model.args
 
                     api_key: str = self._get_api_key(param.api_key)
@@ -236,12 +236,12 @@ Supports text + multimodal input, streaming, and customization of model paramete
                             # capture the final response id on completion
                             if evt and evt.get("type") == "response.completed":
                                 response_id = (evt.get("response") or {}).get("id")
-                        self.model.ret.response = full_text
-                        self.model.ret.response_id = response_id
+                        self.model.rets.response = full_text
+                        self.model.rets.response_id = response_id
                     else:
                         full_text,reasoning, response_id = self._handle_non_stream_response(response)
-                        self.model.ret.response = full_text
-                        self.model.ret.response_id = response_id
+                        self.model.rets.response = full_text
+                        self.model.rets.response_id = response_id
 
                     self.log_and_send("Response completed.")
 
@@ -252,8 +252,8 @@ Supports text + multimodal input, streaming, and customization of model paramete
 
         # --- utils ---
 
-        def _get_api_key(self, param_key: Optional[str], env_key: Optional[str]='OPENAI_API_KEY') -> str:
-            api_key: Optional[str] = param_key or os.environ.get(env_key)
+        def _get_api_key(self, para_key: Optional[str], env_key: Optional[str]='OPENAI_API_KEY') -> str:
+            api_key: Optional[str] = para_key or os.environ.get(env_key)
             if not api_key:
                 raise ValueError(f"API key is missing. Provide via param.api_key or '{env_key}' env var.")
             return api_key
@@ -343,8 +343,8 @@ Supports text + multimodal input, streaming, and customization of model paramete
                 "max_output_tokens": max_output_tokens,
                 "stream": stream,
             }
-            if self.model.param.reasoning:
-                payload["reasoning"] = self.model.param.reasoning.model_dump()
+            if self.model.para.reasoning:
+                payload["reasoning"] = self.model.para.reasoning.model_dump()
 
             # system prompt becomes 'instructions' for Responses API
             if system_prompt:
@@ -357,7 +357,7 @@ Supports text + multimodal input, streaming, and customization of model paramete
 
         def _send_request(self, headers: Dict[str, str], payload: Dict[str, Any]) -> requests.Response:
             response = requests.post(
-                url=self.model.param.base_url,
+                url=self.model.para.base_url,
                 headers=headers,
                 data=json.dumps(payload),
                 stream=True  # keep stream open even if not streaming; ok for .json() too
@@ -460,15 +460,15 @@ Supports text + multimodal input, streaming, and customization of model paramete
             error_message: str = f"Error occurred: {str(e)}"
             self.log_and_send(error_message, ChatGPTService.Levels.ERROR)
             # Also propagate into return container
-            if self.model.ret is None:
-                self.model.ret = ChatGPTService.Model.Return()
-            self.model.ret.response = f"Error: {str(e)}"
+            if self.model.rets is None:
+                self.model.rets = ChatGPTService.Model.Returness()
+            self.model.rets.response = f"Error: {str(e)}"
 
         def to_stop(self):
             self.log_and_send("Stop flag detected. Streaming halted.", ChatGPTService.Levels.WARNING)
-            if self.model.ret is None:
-                self.model.ret = ChatGPTService.Model.Return()
-            self.model.ret.response = "[Stream stopped by user]"
+            if self.model.rets is None:
+                self.model.rets = ChatGPTService.Model.Returness()
+            self.model.rets.response = "[Stream stopped by user]"
             return self.model
 
         def log_and_send(self, message, level=None):
@@ -537,14 +537,14 @@ Provides an interface to interact with deepseek models.
         pass
 
     class Model(ChatGPTService.Model):
-        class Param(ChatGPTService.Model.Param):
+        class Parameter(ChatGPTService.Model.Parameter):
             model: str = Field("deepseek-reasoner", description="Deepseek model to use")
             base_url: str = Field("https://api.deepseek.com/v1/chat/completions", description="Deepseek API endpoint")
 
-        class Args(ChatGPTService.Model.Args):
+        class Arguments(ChatGPTService.Model.Arguments):
             pass
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             response: str = Field("", description="The assistant's final response")
             reasoning: Optional[str] = Field(None, description="The model's internal reasoning process")
 
@@ -554,9 +554,9 @@ Provides an interface to interact with deepseek models.
             pass
 
         version:Version = Version()
-        param: Param = Param()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ChatGPTService.Action):
@@ -564,8 +564,8 @@ Provides an interface to interact with deepseek models.
             super().__init__(model, BasicApp, level)
             self.model: DeepseekService.Model = self.model
 
-        def _get_api_key(self, param_key: Optional[str], env_key: Optional[str]='DEEPSEEK_API_KEY') -> str:
-            return super()._get_api_key(param_key, env_key)
+        def _get_api_key(self, para_key: Optional[str], env_key: Optional[str]='DEEPSEEK_API_KEY') -> str:
+            return super()._get_api_key(para_key, env_key)
         
         def __call__(self, *args, **kwargs) -> Any:
             with self.listen_stop_flag() as stop_flag:
@@ -573,7 +573,7 @@ Provides an interface to interact with deepseek models.
                     return self.to_stop()
 
                 try:
-                    param = self.model.param
+                    param = self.model.para
                     args_obj = self.model.args
 
                     api_key: str = self._get_api_key(param.api_key)
@@ -595,10 +595,10 @@ Provides an interface to interact with deepseek models.
                         content, reasoning = self._stream_response_chunks(response, stop_flag)
                     else:
                         content = self._handle_non_stream_response(response)
-                        reasoning = self.model.ret.reasoning or ""
+                        reasoning = self.model.rets.reasoning or ""
 
-                    self.model.ret.response = content
-                    self.model.ret.reasoning = reasoning
+                    self.model.rets.response = content
+                    self.model.rets.reasoning = reasoning
 
                     if reasoning:
                         self.log_and_send("Full reasoning:\n" + reasoning)
@@ -648,7 +648,7 @@ Provides an interface to interact with deepseek models.
                 message = data['choices'][0]['message']
                 content = message.get('content', '')
                 reasoning = message.get('reasoning_content')
-                self.model.ret.reasoning = reasoning
+                self.model.rets.reasoning = reasoning
                 return content
             except (KeyError, ValueError, json.JSONDecodeError) as e:
                 raise RuntimeError(f"Failed to parse non-stream response: {str(e)}")
@@ -660,10 +660,10 @@ def test_chatgpt_service():
     model = ChatGPTService.Model()
     
     # Configure parameters
-    model.param.model = "gpt-5-nano"  # Use a smaller model for testing
-    model.param.api_key = os.environ.get('OPENAI_API_KEY')
-    model.param.max_output_tokens = 256  # Limit response size
-    model.param.stream = False  # Disable streaming for simpler testing
+    model.para.model = "gpt-5-nano"  # Use a smaller model for testing
+    model.para.api_key = os.environ.get('OPENAI_API_KEY')
+    model.para.max_output_tokens = 256  # Limit response size
+    model.para.stream = False  # Disable streaming for simpler testing
     
     # Set the user prompt
     model.args.user_prompt = "Hi what is your name?"
@@ -673,7 +673,7 @@ def test_chatgpt_service():
         result = ChatGPTService.Action(model,None)()
         print("\nTest Result:")
         print(f"Prompt: {model.args.user_prompt}")
-        print(f"Response: {result.ret.response}")
+        print(f"Response: {result.rets.response}")
         print("Test end!")
         return True
     except Exception as e:
@@ -696,10 +696,10 @@ def test_chatgpt_service_with_image():
 
     # Create service model
     model = ChatGPTService.Model()
-    model.param.model = "gpt-4.1-nano"  # Make sure to use a vision-capable model
-    model.param.api_key = os.environ.get('OPENAI_API_KEY')
-    model.param.stream = False
-    model.param.max_output_tokens = 100
+    model.para.model = "gpt-4.1-nano"  # Make sure to use a vision-capable model
+    model.para.api_key = os.environ.get('OPENAI_API_KEY')
+    model.para.stream = False
+    model.para.max_output_tokens = 100
 
     # Set messages from PromptBuilder
     model.args.history_messages = prompt.build()
@@ -709,7 +709,7 @@ def test_chatgpt_service_with_image():
     try:
         result = ChatGPTService.Action(model, None)()
         print("\nTest with Image Result:")
-        print(f"Response: {result.ret.response}")
+        print(f"Response: {result.rets.response}")
         print("Image test end!")
         return True
     except Exception as e:
@@ -724,11 +724,11 @@ def test_deepseek_service():
     model = DeepseekService.Model()
 
     # Configure parameters
-    model.param.model = "deepseek-reasoner"
-    model.param.api_key = os.environ.get('DEEPSEEK_API_KEY')  # Make sure this is set
-    model.param.max_output_tokens = 50
-    model.param.stream = True
-    model.param.system_prompt = "You are a logical assistant."
+    model.para.model = "deepseek-reasoner"
+    model.para.api_key = os.environ.get('DEEPSEEK_API_KEY')  # Make sure this is set
+    model.para.max_output_tokens = 50
+    model.para.stream = True
+    model.para.system_prompt = "You are a logical assistant."
 
     # Set the user prompt
     model.args.user_prompt = "Which is greater, 3.14 or 2.718?"
@@ -738,8 +738,8 @@ def test_deepseek_service():
         result = DeepseekService.Action(model, None)()
         print("\nTest Result:")
         print(f"Prompt: {model.args.user_prompt}")
-        print(f"Reasoning: {result.ret.reasoning}")
-        print(f"Response: {result.ret.response}")
+        print(f"Reasoning: {result.rets.reasoning}")
+        print(f"Response: {result.rets.response}")
         print("Test end!")
         return True
     except Exception as e:

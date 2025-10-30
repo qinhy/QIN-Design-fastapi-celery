@@ -26,13 +26,13 @@ RGB images are converted using luminance averaging.
         pass
 
     class Model(ServiceOrientedArchitecture.Model):
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             pass  # No configurable parameters needed yet
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             path: str = Field(..., description="Path (file path, URL, or base64) to the input image")
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             path: str = Field(..., description="Path to the saved grayscale image")
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
@@ -49,9 +49,9 @@ RGB images are converted using luminance averaging.
             ]
 
         version: Version = Version()
-        param: Param = Param()
-        args: Args
-        ret: Optional[Return] = None
+        para: Parameter = Parameter()
+        args: Arguments
+        rets: Optional[Returness] = None
         logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
@@ -84,7 +84,7 @@ RGB images are converted using luminance averaging.
                 img_gray.save(output_path)
 
                 self.log_and_send(f"Grayscale image saved to: {output_path}")
-                self.model.ret = self.model.Return(path=output_path)
+                self.model.rets = self.model.Returness(path=output_path)
 
             except Exception as e:
                 error_msg = f"GrayscaleImage failed: {e}"

@@ -28,17 +28,17 @@ from pydantic import BaseModel, Field, PrivateAttr
 
 
 try:
-    from ..Storages import EventDispatcherController, PythonDictStorage
+    from ..Storages import EventDispatcherController, DictStorage, SingletonRedisStorage, SingletonFileSystemStorage, SingletonMongoDBStorage
     from ..Storages.BasicModel import BasicStore    
 except Exception as e:
-    from Storages import EventDispatcherController, PythonDictStorage
+    from Storages import EventDispatcherController, DictStorage, SingletonRedisStorage, SingletonFileSystemStorage, SingletonMongoDBStorage
     from Storages.BasicModel import BasicStore
 
 class PubSubInterface:
     ROOT_KEY = 'PubSub'
 
     def __init__(self):
-        self._event_disp = EventDispatcherController(PythonDictStorage())
+        self._event_disp = EventDispatcherController(DictStorage())
     
     def subscribe(self, topic: str, callback, eternal=False, id: str = None):
         """Subscribe to a topic with a given callback."""
@@ -455,7 +455,7 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
         
     def store(self):
         if self._store is None:
-            self._store = BasicStore().mongo_backend(self.mongo_url)
+            self._store.switch_backend(SingletonMongoDBStorage.build(self.mongo_url))
         return self._store
 
     def get_celery_app(self):
@@ -496,7 +496,7 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
         """
         Get a paginated list of tasks.
         
-        Args:
+        Arguments:
             page: Page number (starting from 1)
             page_size: Number of items per page
             sort_by: Field to sort by (default: '_id' which is typically creation time)
@@ -574,7 +574,8 @@ class RedisApp(AppInterface, RedisPubSub):
 
     def store(self):
         if self._store is None:
-            self._store = BasicStore().redis_backend()
+            self._store = BasicStore()
+            self._store.switch_backend(SingletonRedisStorage.build(self.redis_url))
         return self._store
 
     def get_celery_app(self):
@@ -666,7 +667,8 @@ class FileSystemApp(AppInterface, FileSystemPubSub):
         
     def store(self):
         if self._store is None:
-            self._store = BasicStore().file_backend(self.backend_dir,ext='')
+            self._store = BasicStore()
+            self._store.switch_backend(SingletonFileSystemStorage.build(self.backend_dir,ext=''))
         return self._store
 
     def get_celery_app(self):
@@ -785,7 +787,7 @@ class SmartModelConverter(BaseModel):
         Parameters
         ----------
         source_class : ServiceOrientedArchitecture
-            The class with a .Model.ret schema to convert from.
+            The class with a .Model.rets schema to convert from.
         target_class : ServiceOrientedArchitecture
             The class with a .Model.args schema to convert to.
         prompt_template : str, optional
@@ -807,7 +809,7 @@ class SmartModelConverter(BaseModel):
                 "```\n\n"
                 "```python\n"
                 "def {from_class_name}{from_class_version}_ret_to_{to_class_name}{from_class_version}_args_convertor(ret,args):\n"
-                "    # this function will convert {from_class_name}.ret into {to_class_name}.args\n"
+                "    # this function will convert {from_class_name}.rets into {to_class_name}.args\n"
                 "    # ...\n"
                 "    return args\n"
                 "```"
@@ -820,9 +822,9 @@ class SmartModelConverter(BaseModel):
 
         prompt = prompt_template.format(
             from_class_name=from_class_name,
-            from_schema=source_class.Model.Return.model_json_schema(),
+            from_schema=source_class.Model.Returness.model_json_schema(),
             to_class_name=to_class_name,
-            to_schema=target_class.Model.Args.model_json_schema(),
+            to_schema=target_class.Model.Arguments.model_json_schema(),
             from_class_version=from_class_version,
             to_class_version=to_class_version,
         )
@@ -970,26 +972,26 @@ class SmartModelConverter(BaseModel):
         """
         Convert a model instance using a function code.
         """
-        in_ret_data = in_model_instance.ret.model_dump()
+        in_ret_data = in_model_instance.rets.model_dump()
         out_args_data = out_model_instance.args.model_dump() 
 
         conversion_func = self.get_func_from_code(function_code, function_name)
         # Execute the GPT-provided conversion function
         updated_args = conversion_func(in_ret_data, out_args_data)
 
-        out_model_instance.args = out_model_instance.Args(**updated_args)
+        out_model_instance.args = out_model_instance.Arguments(**updated_args)
         return out_model_instance, conversion_func
     
     def convert_by_function(self, conversion_func, in_model_instance, out_model_instance):
         """
         Convert a model instance using a function code.
         """
-        in_ret_data = in_model_instance.ret.model_dump()
+        in_ret_data = in_model_instance.rets.model_dump()
         out_args_data = out_model_instance.args.model_dump() 
         
         updated_args = conversion_func(in_ret_data, out_args_data)
 
-        out_model_instance.args = out_model_instance.Args(**updated_args)
+        out_model_instance.args = out_model_instance.Arguments(**updated_args)
         return out_model_instance, conversion_func
         
 
@@ -1020,11 +1022,11 @@ class ServiceOrientedArchitecture:
             def __str__(self):
                 return f'_v{self.major}{self.minor}{self.patch}_'
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             pass
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             pass
-        class Return(BaseModel):
+        class Returness(BaseModel):
             pass
 
         class Logger(BaseModel):
@@ -1121,20 +1123,20 @@ class ServiceOrientedArchitecture:
                     self._logger.removeHandler(handler)
 
         version:Version
-        param:Param = Param()
-        args:Args = Args()
-        ret:Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets:Optional[Returness] = Returness()
         logger: Logger = Logger()
 
         def update_model_data(self,json_data:dict):
             if json_data is not None:
                 # Update all model components from prior model
                 if 'param' in json_data:
-                    self.param = self.param.model_copy(update=json_data['param'])
+                    self.para = self.para.model_copy(update=json_data['param'])
                 if 'args' in json_data:
                     self.args = self.args.model_copy(update=json_data['args'])
-                if 'ret' in json_data:
-                    self.ret = self.ret.model_copy(update=json_data['ret'])
+                if 'rets' in json_data:
+                    self.rets = self.rets.model_copy(update=json_data['rets'])
             return self
 
         @classmethod
@@ -1157,13 +1159,13 @@ class ServiceOrientedArchitecture:
     def as_mcp_tool(cls):
         "https://modelcontextprotocol.io/docs/concepts/tools"
         "To be used in MCP tools"
-        param_schema = cls.replace_refs(cls.Model.Param.model_json_schema())
-        args_schema = cls.replace_refs(cls.Model.Args.model_json_schema())
-        ret_schema = cls.replace_refs(cls.Model.Return.model_json_schema())
+        para_schema = cls.replace_refs(cls.Model.Parameter.model_json_schema())
+        args_schema = cls.replace_refs(cls.Model.Arguments.model_json_schema())
+        rets_schema = cls.replace_refs(cls.Model.Returness.model_json_schema())
 
         # Determine if "param" and/or "args" should be required at the top level
         top_level_required = []
-        if param_schema.get("required"):
+        if para_schema.get("required"):
             top_level_required.append("param")
         if args_schema.get("required"):
             top_level_required.append("args")
@@ -1174,7 +1176,7 @@ class ServiceOrientedArchitecture:
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "param": param_schema,
+                    "param": para_schema,
                     "args": args_schema,
                 },
                 "required": top_level_required
@@ -1182,7 +1184,7 @@ class ServiceOrientedArchitecture:
             "outputSchema": {
                 "type": "object",
                 "properties": {
-                    "ret": ret_schema,
+                    "rets": rets_schema,
                 },
             },
             "annotations": {

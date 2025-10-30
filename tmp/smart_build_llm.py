@@ -20,18 +20,18 @@ class ServiceOrientedArchitecture(BaseModel):
             def __str__(self):
                 return f'_v{self.major}{self.minor}{self.patch}_'
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             pass
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             pass
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             pass
 
-        param: Param = Param()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
 
 class Fibonacci(ServiceOrientedArchitecture):
     """
@@ -39,19 +39,19 @@ class Fibonacci(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
         
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             mode: Literal['fast', 'slow'] = Field(
                 default="fast", 
                 description="Execution mode, either 'fast' or 'slow'."
             )
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             n: int = Field(
                 default=1, 
                 description="The position of the Fibonacci number to compute."
             )
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             n: int = Field(
                 default=-1, 
                 description="The computed Fibonacci number at position n."
@@ -66,9 +66,9 @@ class Fibonacci(ServiceOrientedArchitecture):
                 {"param": {"mode": "fast"}, "args": {"n": 13}}
             ]
 
-        param: Param = Param()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
 
 class PrimeNumberChecker(ServiceOrientedArchitecture):
     """
@@ -76,19 +76,19 @@ class PrimeNumberChecker(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             mode: Literal['basic', 'smart'] = Field(
                 default="smart", 
                 description="Check mode: 'basic' (brute force) or 'smart' (optimized)."
             )
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             number: int = Field(
                 default=13, 
                 description="The number to check for primality."
             )
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             is_prime: Optional[bool] = Field(
                 default=None, 
                 description="Whether the number is prime."
@@ -105,9 +105,9 @@ class PrimeNumberChecker(ServiceOrientedArchitecture):
                 {"param": {"mode": "smart"}, "args": {"number": 1}},
             ]
 
-        param: Param = Param()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
 
 class AddTwoNumbers(ServiceOrientedArchitecture):
     """
@@ -115,9 +115,9 @@ class AddTwoNumbers(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             """
-            Example Param: might control how the addition is performed (e.g., integer vs. float).
+            Example Para: might control how the addition is performed (e.g., integer vs. float).
             """
             type: Literal['int', 'float'] = Field(
                 default='int',
@@ -127,7 +127,7 @@ class AddTwoNumbers(ServiceOrientedArchitecture):
             def is_float(self) -> bool:
                 return self.type == 'float'
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             a: int = Field(
                 default=0,
                 description="First number to add."
@@ -137,7 +137,7 @@ class AddTwoNumbers(ServiceOrientedArchitecture):
                 description="Second number to add."
             )
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             result: float = Field(
                 default=0.0,
                 description="Sum of the two numbers."
@@ -153,9 +153,9 @@ class AddTwoNumbers(ServiceOrientedArchitecture):
                 {"param": {"type": "float"}, "args": {"a": 3, "b": 4}}
             ]
 
-        param: Param = Param()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
         
 class MultiplyTwoNumbers(ServiceOrientedArchitecture):
     """
@@ -163,9 +163,9 @@ class MultiplyTwoNumbers(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             """
-            Example Param: might specify integer vs. float multiplication, or some advanced mode.
+            Example Para: might specify integer vs. float multiplication, or some advanced mode.
             """
             mode: Literal['basic', 'extended'] = Field(
                 default='basic',
@@ -175,7 +175,7 @@ class MultiplyTwoNumbers(ServiceOrientedArchitecture):
             def is_extended(self) -> bool:
                 return self.mode == 'extended'
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             x: int = Field(
                 default=1,
                 description="First number to multiply."
@@ -185,7 +185,7 @@ class MultiplyTwoNumbers(ServiceOrientedArchitecture):
                 description="Second number to multiply."
             )
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             product: float = Field(
                 default=1.0,
                 description="Product of the two numbers."
@@ -200,9 +200,9 @@ class MultiplyTwoNumbers(ServiceOrientedArchitecture):
                 {"param": {"mode": "extended"}, "args": {"x": 5, "y": 10}},
             ]
 
-        param: Param = Param()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
         
 class Factorial(ServiceOrientedArchitecture):
     """
@@ -210,7 +210,7 @@ class Factorial(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             mode: Literal['iterative', 'recursive'] = Field(
                 default='iterative',
                 description="Computation mode: 'iterative' or 'recursive'."
@@ -219,13 +219,13 @@ class Factorial(ServiceOrientedArchitecture):
             def is_recursive(self) -> bool:
                 return self.mode == 'recursive'
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             n: int = Field(
                 default=1,
                 description="The number for which the factorial is computed."
             )
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             result: int = Field(
                 default=1,
                 description="The factorial of n."
@@ -237,9 +237,9 @@ class Factorial(ServiceOrientedArchitecture):
                 {"param": {"mode": "recursive"}, "args": {"n": 6}},
             ]
 
-        param: Param = Param()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
 
 class SumOfSequence(ServiceOrientedArchitecture):
     """
@@ -247,13 +247,13 @@ class SumOfSequence(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             inclusive: bool = Field(
                 default=True,
                 description="Whether the sequence is inclusive at the ends."
             )
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             start: int = Field(
                 default=1,
                 description="Start of the sequence."
@@ -263,7 +263,7 @@ class SumOfSequence(ServiceOrientedArchitecture):
                 description="End of the sequence."
             )
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             total: int = Field(
                 default=0,
                 description="Sum of the sequence's integers."
@@ -275,9 +275,9 @@ class SumOfSequence(ServiceOrientedArchitecture):
                 {"param": {"inclusive": False}, "args": {"start": 1, "end": 5}}
             ]
 
-        param: Param = Param()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
 
 class CircleAreaCalculator(ServiceOrientedArchitecture):
     """
@@ -285,7 +285,7 @@ class CircleAreaCalculator(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             units: Literal['cm', 'm'] = Field(
                 default='cm',
                 description="Units of measurement (centimeters or meters)."
@@ -294,13 +294,13 @@ class CircleAreaCalculator(ServiceOrientedArchitecture):
             def in_meters(self) -> bool:
                 return self.units == 'm'
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             radius: float = Field(
                 default=1.0,
                 description="Radius of the circle."
             )
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             area: float = Field(
                 default=0.0,
                 description="Calculated area of the circle."
@@ -312,9 +312,9 @@ class CircleAreaCalculator(ServiceOrientedArchitecture):
                 {"param": {"units": "m"}, "args": {"radius": 2}},
             ]
 
-        param: Param = Param()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
 
 class TriangleAreaCalculator(ServiceOrientedArchitecture):
     """
@@ -322,7 +322,7 @@ class TriangleAreaCalculator(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             formula: Literal['basic', 'herons'] = Field(
                 default='basic',
                 description="Which formula to use: 'basic' (1/2 * base * height) or 'herons' formula."
@@ -331,7 +331,7 @@ class TriangleAreaCalculator(ServiceOrientedArchitecture):
             def is_herons(self) -> bool:
                 return self.formula == 'herons'
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             base: float = Field(
                 default=1.0,
                 description="Base length of the triangle."
@@ -353,7 +353,7 @@ class TriangleAreaCalculator(ServiceOrientedArchitecture):
                 description="Side c for Heron's formula (if applicable)."
             )
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             area: float = Field(
                 default=0.0,
                 description="Calculated area of the triangle."
@@ -371,9 +371,9 @@ class TriangleAreaCalculator(ServiceOrientedArchitecture):
                 },
             ]
 
-        param: Param = Param()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
 
 class DataSorter(ServiceOrientedArchitecture):
     """
@@ -381,7 +381,7 @@ class DataSorter(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             order: Literal['asc', 'desc'] = Field(
                 default='asc',
                 description="Sorting order: 'asc' or 'desc'."
@@ -390,13 +390,13 @@ class DataSorter(ServiceOrientedArchitecture):
             def is_descending(self) -> bool:
                 return self.order == 'desc'
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             data: list[float] = Field(
                 default=[],
                 description="A list of numeric values to sort."
             )
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             sorted_data: list[float] = Field(
                 default=[],
                 description="The sorted list of numeric values."
@@ -408,9 +408,9 @@ class DataSorter(ServiceOrientedArchitecture):
                 {"param": {"order": "desc"}, "args": {"data": [1, 2, 3, 4]}},
             ]
 
-        param: Param = Param()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
 
 class StatisticsCalculator(ServiceOrientedArchitecture):
     """
@@ -418,7 +418,7 @@ class StatisticsCalculator(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             calc_mode: Literal['all', 'mean-only', 'median-only', 'mode-only'] = Field(
                 default='all',
                 description="Specifies which statistic(s) to compute."
@@ -433,13 +433,13 @@ class StatisticsCalculator(ServiceOrientedArchitecture):
             def compute_mode(self) -> bool:
                 return self.calc_mode in ('all', 'mode-only')
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             data: list[float] = Field(
                 default=[],
                 description="A list of numeric values to analyze."
             )
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             mean: Optional[float] = Field(
                 default=None,
                 description="Mean of the data."
@@ -459,9 +459,9 @@ class StatisticsCalculator(ServiceOrientedArchitecture):
                 {"param": {"calc_mode": "mean-only"}, "args": {"data": [10, 20, 30, 40]}},
             ]
 
-        param: Param = Param()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
 
 class DatabaseInsert(ServiceOrientedArchitecture):
     """
@@ -469,19 +469,19 @@ class DatabaseInsert(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             table_name: str = Field(
                 default='default_table',
                 description="Name of the table into which data will be inserted."
             )
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             record: dict = Field(
                 default_factory=dict,
                 description="The record (dictionary) to insert."
             )
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             success: bool = Field(
                 default=False,
                 description="Indicates if the insert operation was successful."
@@ -503,9 +503,9 @@ class DatabaseInsert(ServiceOrientedArchitecture):
                 }
             ]
 
-        param: Param = Param()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
 
 class DatabaseQuery(ServiceOrientedArchitecture):
     """
@@ -513,7 +513,7 @@ class DatabaseQuery(ServiceOrientedArchitecture):
     """
     class Model(ServiceOrientedArchitecture.Model):
 
-        class Param(BaseModel):
+        class Parameter(BaseModel):
             table_name: str = Field(
                 default='default_table',
                 description="Name of the table to query."
@@ -523,13 +523,13 @@ class DatabaseQuery(ServiceOrientedArchitecture):
                 description="Maximum number of records to return."
             )
 
-        class Args(BaseModel):
+        class Arguments(BaseModel):
             filters: dict = Field(
                 default_factory=dict,
                 description="Filters to apply to the query (e.g., {'age': 30})."
             )
 
-        class Return(BaseModel):
+        class Returness(BaseModel):
             records: list[dict] = Field(
                 default_factory=list,
                 description="List of records that match the query."
@@ -551,13 +551,13 @@ class DatabaseQuery(ServiceOrientedArchitecture):
                 }
             ]
 
-        param: Param = Param()
-        args: Args = Args()
-        ret: Optional[Return] = Return()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Optional[Returness] = Returness()
 
-def ret_to_args_convertor(ret: dict, args: dict) -> dict:
+def ret_to_args_convertor(rets: dict, args: dict) -> dict:
     """
-    Simple placeholder function that converts a Fibonacci 'ret' object
+    Simple placeholder function that converts a Fibonacci 'rets' object
     into a PrimeNumberChecker 'args' object. Extend or replace this logic
     as necessary.
 
@@ -573,7 +573,7 @@ def ret_to_args_convertor(ret: dict, args: dict) -> dict:
     dict
         An updated PrimeNumberChecker args dictionary.
     """
-    # Example: If Fibonacci.ret.n -> PrimeNumberChecker.args.number
+    # Example: If Fibonacci.rets.n -> PrimeNumberChecker.args.number
     # args['number'] = ret.get('n', 0)
     return args
 
@@ -593,7 +593,7 @@ def test_build(in_class = Fibonacci,out_class = PrimeNumberChecker):
     in_model_instance = in_class.Model()
     out_model_instance = out_class.Model()
 
-    # in_ret_data = in_model_instance.ret.model_dump()
+    # in_ret_data = in_model_instance.rets.model_dump()
     # out_args_data = out_model_instance.args.model_dump()
 
     # # Execute the GPT-provided conversion function
@@ -603,7 +603,7 @@ def test_build(in_class = Fibonacci,out_class = PrimeNumberChecker):
                                          out_class, out_model_instance)
     return out_model_instance.args.model_dump()
 
-    # print("Updated PrimeNumberChecker Args:", updated_args)
+    # print("Updated PrimeNumberChecker Arguments:", updated_args)
 
 def _test_build_multi(in_class:ServiceOrientedArchitecture,
                      out_class:ServiceOrientedArchitecture,
@@ -620,10 +620,10 @@ def _test_build_multi(in_class:ServiceOrientedArchitecture,
 
     # Generate default test data if none provided
     in_model_instance:ServiceOrientedArchitecture.Model = in_class.Model()
-    in_ret_list = [in_model_instance.Return(**i).model_dump() for i in in_ret_list]
+    in_ret_list = [in_model_instance.Returness(**i).model_dump() for i in in_ret_list]
 
     out_model_instance = out_class.Model()
-    out_args_list = [out_model_instance.Args(**i).model_dump() for i in out_args_list]
+    out_args_list = [out_model_instance.Arguments(**i).model_dump() for i in out_args_list]
     target_args_list = [dict(**i) for i in out_args_list]
 
     results = []
