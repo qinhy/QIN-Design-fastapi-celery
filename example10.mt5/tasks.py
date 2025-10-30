@@ -42,9 +42,9 @@ class CeleryTask(BasicCeleryTask):
             res = ba.change_run(action, kwargs)()
             
             if action == 'getBooks':
-                res = {f'{b.symbol}-{b.price_open}-{b.volume}-{b.ticket}': b.model_dump() for b in res.ret.books}
+                res = {f'{b.symbol}-{b.price_open}-{b.volume}-{b.ticket}': b.model_dump() for b in res.rets.books}
             elif action in ['send', 'changeP', 'changeTS', 'account_info']:
-                res = res.ret.books[0].model_dump()
+                res = res.rets.books[0].model_dump()
             else:
                 raise ValueError(f'no action of {action}')
                 # res = res.model_dump()
@@ -60,7 +60,7 @@ class CeleryTask(BasicCeleryTask):
             model.task_id = t.request.id
             act = MT5CopyLastRatesService.Action(model)
             res = act(symbol=symbol,timeframe=timeframe,count=count,debug=debug)
-            return res.ret.model_dump()
+            return res.rets.model_dump()
         
         self.celery_rates_copy = celery_rates_copy
     
