@@ -1,17 +1,7 @@
 # from https://github.com/qinhy/singleton-key-value-storage.git
-import base64
-import hashlib
-import math
-import os
-import re
-import sqlite3
-import threading
-import queue
-import time
+
 import uuid
-import fnmatch
 import json
-import unittest
 import urllib
 import urllib.parse
 from urllib.parse import urlparse
@@ -59,6 +49,10 @@ if redis_back:
         def __init__(self, redis_URL=None):#redis://127.0.0.1:6379
             self.uuid:str = self.uuid
             self.client:redis.Redis = self.client
+        
+        @staticmethod
+        def build(redis_URL=None):
+            return SingletonRedisStorageController(SingletonRedisStorage(redis_URL))
 
     class SingletonRedisStorageController(AbstractStorageController):
         def __init__(self, model: SingletonRedisStorage):
@@ -84,6 +78,3 @@ if redis_back:
             except Exception as e:
                 res = []
             return res
-
-SingletonKeyValueStorage.backs['redis']=lambda *args,**kwargs:SingletonRedisStorageController(SingletonRedisStorage(*args,**kwargs)) if redis_back else None
-

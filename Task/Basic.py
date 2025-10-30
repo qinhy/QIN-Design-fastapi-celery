@@ -28,17 +28,17 @@ from pydantic import BaseModel, Field, PrivateAttr
 
 
 try:
-    from ..Storages import EventDispatcherController, PythonDictStorage
+    from ..Storages import EventDispatcherController, DictStorage, SingletonRedisStorage, SingletonFileSystemStorage, SingletonMongoDBStorage
     from ..Storages.BasicModel import BasicStore    
 except Exception as e:
-    from Storages import EventDispatcherController, PythonDictStorage
+    from Storages import EventDispatcherController, DictStorage, SingletonRedisStorage, SingletonFileSystemStorage, SingletonMongoDBStorage
     from Storages.BasicModel import BasicStore
 
 class PubSubInterface:
     ROOT_KEY = 'PubSub'
 
     def __init__(self):
-        self._event_disp = EventDispatcherController(PythonDictStorage())
+        self._event_disp = EventDispatcherController(DictStorage())
     
     def subscribe(self, topic: str, callback, eternal=False, id: str = None):
         """Subscribe to a topic with a given callback."""
@@ -455,7 +455,7 @@ class RabbitmqMongoApp(AppInterface, RabbitmqPubSub):
         
     def store(self):
         if self._store is None:
-            self._store = BasicStore().mongo_backend(self.mongo_url)
+            self._store.switch_backend(SingletonMongoDBStorage.build(self.mongo_url))
         return self._store
 
     def get_celery_app(self):
@@ -574,7 +574,8 @@ class RedisApp(AppInterface, RedisPubSub):
 
     def store(self):
         if self._store is None:
-            self._store = BasicStore().redis_backend()
+            self._store = BasicStore()
+            self._store.switch_backend(SingletonRedisStorage.build(self.redis_url))
         return self._store
 
     def get_celery_app(self):
@@ -666,7 +667,8 @@ class FileSystemApp(AppInterface, FileSystemPubSub):
         
     def store(self):
         if self._store is None:
-            self._store = BasicStore().file_backend(self.backend_dir,ext='')
+            self._store = BasicStore()
+            self._store.switch_backend(SingletonFileSystemStorage.build(self.backend_dir,ext=''))
         return self._store
 
     def get_celery_app(self):

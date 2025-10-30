@@ -2,4 +2,4 @@
 from .RedisStorage import *
 from .MongoStorage import *
 from .FileSystemStorage import *
-from .Storage import SingletonKeyValueStorage, EventDispatcherController, PythonDictStorage
+from .Storage import SingletonKeyValueStorage, EventDispatcherController, DictStorage

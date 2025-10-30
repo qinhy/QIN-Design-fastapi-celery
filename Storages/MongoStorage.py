@@ -62,6 +62,11 @@ if mongo_back:
             self.db:database.Database = self.db
             self.collection:collection.Collection = self.collection
 
+        @staticmethod
+        def build(mongo_URL: str = "mongodb://127.0.0.1:27017/", 
+                        db_name: str = "SingletonDB", collection_name: str = "store"):
+            return SingletonMongoDBStorageController(SingletonMongoDBStorage(mongo_URL, db_name, collection_name))
+        
     class SingletonMongoDBStorageController(AbstractStorageController):
         
         def __init__(self, model: SingletonMongoDBStorage):
@@ -86,5 +91,3 @@ if mongo_back:
         def keys(self, pattern: str = '*')->list[str]:
             regex = '^'+pattern.replace('*', '.*')
             return [doc['_id'] for doc in self.model.collection.find({self._ID_KEY(): {"$regex": regex}})]
-
-SingletonKeyValueStorage.backs['mongodb']=lambda *args,**kwargs:SingletonMongoDBStorageController(SingletonMongoDBStorage(*args,**kwargs)) if mongo_back else None
