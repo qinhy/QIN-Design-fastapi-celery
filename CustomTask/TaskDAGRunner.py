@@ -76,7 +76,7 @@ class TaskDAGRunner(ServiceOrientedArchitecture):
                 default=",", description="Customize the separator used when joining multiple values for a field.")
 
         class Arguments(BaseModel):
-            mermaid_graph_text: str = Field(..., description="Mermaid graph text defining the DAG")
+            mermaid_graph_text: str = Field(...,max_length=20000,description="Mermaid graph text defining the DAG")
 
         class Returness(BaseModel):
             results: Dict[str, dict] = Field(
