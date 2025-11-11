@@ -116,11 +116,12 @@ class ImagePadding(ServiceOrientedArchitecture):
                 output_path = f"{os.path.splitext(self.model.args.path)[0]}_padded.jpg"
                 padded_img.save(output_path)
 
-                self.rets = self.model.Returness(path=output_path)
-                return self.rets
+                self.model.rets = self.model.Returness(path=output_path)
 
             except Exception as e:
-                raise ValueError(f"ImagePadding failed: {e}")
+                raise ValueError(f"ImagePadding failed: {e}")            
+            finally:                
+                return self.model
 
 # Simple test for ImageTiler
 if __name__ == "__main__":

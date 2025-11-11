@@ -48,7 +48,7 @@ Can process images from URLs or local file paths.
             )
             
         class Returness(BaseModel):
-            tiled_image_path: Optional[str] = Field(
+            path: Optional[str] = Field(
                 None,
                 description="Path to the saved tiled image"
             )
@@ -144,7 +144,7 @@ Can process images from URLs or local file paths.
                 
                 # Process images and create tiled image
                 if not self._validate_inputs():
-                    self.model.rets.tiled_image_path = ""
+                    self.model.rets.path = ""
                     
                     return self.model
                 
@@ -155,7 +155,7 @@ Can process images from URLs or local file paths.
                 
                 if not images:
                     self.log_and_send("No valid images were processed. Exiting.", ImageTiler.Levels.ERROR)
-                    self.model.rets.tiled_image_path = ""
+                    self.model.rets.path = ""
                     
                     return self.model                
                 
@@ -348,14 +348,14 @@ Can process images from URLs or local file paths.
                 self.log_and_send(
                     f"Tiled image saved at {output_path}. Final size: {tiled_image.size}"
                 )
-                self.model.rets.tiled_image_path = output_path
+                self.model.rets.path = output_path
             except Exception as e:
                 self.log_and_send(f"Error saving tiled image: {str(e)}", ImageTiler.Levels.ERROR)
-                self.model.rets.tiled_image_path = ""
+                self.model.rets.path = ""
 
         def to_stop(self):
             self.log_and_send("Stop flag detected, aborting image tiling process.", ImageTiler.Levels.WARNING)
-            self.model.rets.tiled_image_path = ""
+            self.model.rets.path = ""
             
             return self.model
 

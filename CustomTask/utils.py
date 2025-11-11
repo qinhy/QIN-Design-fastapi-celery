@@ -216,7 +216,7 @@ class MermaidGraph:
             try:
                 return json.loads(s.replace("'", '"'))
             except Exception as e:
-                print(s)
+                print('parse json error of',s)
                 raise e
 
         for l in lines:
