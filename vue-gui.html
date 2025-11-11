@@ -122,6 +122,21 @@
         </p-tabpanel>
       </p-tabpanels>
     </p-tabs>
+
+    
+    <div>
+      <p-dataview :value="all_schema">
+        <template #list="slotProps">
+          <div v-for="(item, index) in slotProps.items" :key="index">
+            <div class="flex flex-col sm:flex-row sm:items-center p-6 gap-4"
+              :class="{ 'border-t border-surface-200 dark:border-surface-700': index !== 0 }">              
+            {{item.name}}
+            </div>
+          </div>
+        </template>
+      </p-dataview>
+    </div>
+    
   </div>
 
   <p-toast />
