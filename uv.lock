@@ -1061,6 +1061,16 @@ wheels = [
 ]
 
 [[package]]
+name = "pywin32"
+version = "306"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/14/91/17e016d5923e178346aabda3dfec6629d1a26efe587d19667542105cf0a6/pywin32-306-cp312-cp312-win32.whl", hash = "sha256:383229d515657f4e3ed1343da8be101000562bf514591ff383ae940cad65458b", size = 8507705, upload-time = "2023-03-25T23:50:40.279Z" },
+    { url = "https://files.pythonhosted.org/packages/83/1c/25b79fc3ec99b19b0a0730cc47356f7e2959863bf9f3cd314332bddb4f68/pywin32-306-cp312-cp312-win_amd64.whl", hash = "sha256:37257794c1ad39ee9be652da0462dc2e394c8159dfd913a8a4e8eb6fd346da0e", size = 9227429, upload-time = "2023-03-25T23:50:50.222Z" },
+    { url = "https://files.pythonhosted.org/packages/1c/43/e3444dc9a12f8365d9603c2145d16bf0a2f8180f343cf87be47f5579e547/pywin32-306-cp312-cp312-win_arm64.whl", hash = "sha256:5821ec52f6d321aa59e2db7e0a35b997de60c201943557d108af9d4ae1ec7040", size = 10388145, upload-time = "2023-03-25T23:51:01.401Z" },
+]
+
+[[package]]
 name = "qin-design-fastapi-celery"
 version = "0.1.0"
 source = { virtual = "." }
@@ -1097,6 +1107,7 @@ dev = [
     { name = "aiohttp" },
     { name = "ipython" },
     { name = "jsonref" },
+    { name = "supervisor-win" },
 ]
 
 [package.metadata]
@@ -1133,6 +1144,7 @@ dev = [
     { name = "aiohttp", specifier = ">=3.12.15" },
     { name = "ipython", specifier = ">=9.4.0" },
     { name = "jsonref", specifier = ">=1.1.0" },
+    { name = "supervisor-win", specifier = ">=4.7.0" },
 ]
 
 [[package]]
@@ -1235,6 +1247,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/0a/69/662169fdb92fb96ec3eaee218cf540a629d629c86d7993d9651226a6789b/starlette-0.47.1.tar.gz", hash = "sha256:aef012dd2b6be325ffa16698f9dc533614fb1cebd593a906b90dc1025529a79b", size = 2583072, upload-time = "2025-06-21T04:03:17.337Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/82/95/38ef0cd7fa11eaba6a99b3c4f5ac948d8bc6ff199aabd327a29cc000840c/starlette-0.47.1-py3-none-any.whl", hash = "sha256:5e11c9f5c7c3f24959edbf2dffdc01bba860228acf657129467d8a7468591527", size = 72747, upload-time = "2025-06-21T04:03:15.705Z" },
+]
+
+[[package]]
+name = "supervisor-win"
+version = "4.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pywin32" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/98/48/5d6cd1b7492bf2c11452fd638de45519d2c103caed70c5bdb4ecebbac568/supervisor-win-4.7.0.tar.gz", hash = "sha256:c474d92edc7050b55adae2f7c7789d5d69f180dee7868a27673b1d38f8bea484", size = 397342, upload-time = "2023-08-03T15:17:53.568Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/69/4d/3a493f15f5b80608857ef157f382ace494f51d9031e6bee6082437dd1403/supervisor_win-4.7.0-py2.py3-none-any.whl", hash = "sha256:bd98554c2a0878704c3f3fd95e38965d9986eae6a2ad29f34d73d0aee138a481", size = 303996, upload-time = "2023-08-03T15:17:49.872Z" },
 ]
 
 [[package]]

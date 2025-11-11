@@ -1,22 +1,33 @@
-from .Fibonacci import Fibonacci
-from .PrimeNumberChecker import PrimeNumberChecker
-from .PalindromeChecker import PalindromeChecker
-from .ChatGPTService import ChatGPTService, DeepseekService
-from .Downloader import Downloader
-from .BinaryRepresentation import BinaryRepresentation
-from .CollatzSequence import CollatzSequence
-from .UploadToFTP import UploadToFTP
-from .HttpRequestTask import HttpRequestTask
-from .BrowseWebLink import BrowseWebLink
-from .EnhanceImage import EnhanceImage
+
 from .AddNumbers import AddNumbers
+from .AdjustImage import AdjustImage
+from .BinaryRepresentation import BinaryRepresentation
+from .BrowseWebLink import BrowseWebLink
+from .ChatGPTService import ChatGPTService, DeepseekService
+from .CollatzSequence import CollatzSequence
+from .Downloader import Downloader
+from .EnhanceImage import EnhanceImage
+from .Fibonacci import Fibonacci
 from .FSSpecShell import FSSpecShell
+from .GrayscaleImage import GrayscaleImage
+from .HttpRequestTask import HttpRequestTask
+from .ImagePadding import ImagePadding
+from .ImageTiler import ImageTiler
+from .PalindromeChecker import PalindromeChecker
+from .PrimeNumberChecker import PrimeNumberChecker
+from .SimpleWebRequest import SimpleWebRequest
+from .UploadToFTP import UploadToFTP
 
 # for advanced users
 from .TaskDAGRunner import TaskDAGRunner
 from .SmartModelConverter import SmartModelConverter
 
 ACTION_REGISTRY = {
+    'AdjustImage':AdjustImage,
+    'GrayscaleImage':GrayscaleImage,
+    'ImagePadding':ImagePadding,
+    'ImageTiler':ImageTiler,
+    'SimpleWebRequest':SimpleWebRequest,
     'Fibonacci': Fibonacci,
     'PrimeNumberChecker': PrimeNumberChecker,
     'PalindromeChecker': PalindromeChecker,
