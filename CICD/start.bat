@@ -1,2 +1,2 @@
 @echo off
-uv run supervisord
+start uv run supervisord

@@ -13,7 +13,7 @@ try:
     from Task.Basic import ServiceOrientedArchitecture
     from .utils import FileInputHelper
 except:
-    from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from mockServiceOrientedArchitecture import ServiceOrientedArchitecture
     from utils import FileInputHelper
 
 
@@ -164,7 +164,7 @@ Supports text + multimodal input, streaming, and customization of model paramete
         def examples():
             return [
                 {
-                    "param": {
+                    "para": {
                         "api_key": None,
                         "model": "gpt-4o-mini",
                         "system_prompt": "You are a helpful assistant.",
@@ -174,7 +174,7 @@ Supports text + multimodal input, streaming, and customization of model paramete
                     }
                 },
                 {
-                "param": {
+                "para": {
                     "api_key": None,
                     "max_output_tokens":1024,
                     "reasoning": {

@@ -7,7 +7,7 @@ try:
     from Task.Basic import ServiceOrientedArchitecture
     from .utils import FileInputHelper
 except:
-    from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from mockServiceOrientedArchitecture import ServiceOrientedArchitecture
     from utils import FileInputHelper
 
 
@@ -46,7 +46,7 @@ The adjusted image is saved to a new file and its path is returned.
         @staticmethod
         def examples():
             return [{
-                "param": {"brightness": 1.2, "contrast": 1.0, "saturation": 1.1},
+                "para": {"brightness": 1.2, "contrast": 1.0, "saturation": 1.1},
                 "args": {"path": "example.jpg"}
             }]
 

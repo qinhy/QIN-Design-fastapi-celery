@@ -18,7 +18,7 @@ try:
     from Task.Basic import ServiceOrientedArchitecture
     from .utils import FileInputHelper
 except:
-    from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from mockServiceOrientedArchitecture import ServiceOrientedArchitecture
     from utils import FileInputHelper
 
 class SeleniumDriverManager:
@@ -74,7 +74,7 @@ class BrowseWebLink(ServiceOrientedArchitecture):
         def examples():
             return [
                 {
-                    "param": {"headless": True},
+                    "para": {"headless": True},
                     "args": {"link": "https://www.example.com"},
                 }
             ]
@@ -281,7 +281,7 @@ class BrowseWebLink(ServiceOrientedArchitecture):
 
 if __name__ == "__main__":
     m = BrowseWebLink.Model(
-        **{ "param": {"headless": False},
+        **{ "para": {"headless": False},
             "args": {"link": "https://en.wikipedia.org/wiki/Apple"}}
     )
     res = BrowseWebLink.Action(m, None)()

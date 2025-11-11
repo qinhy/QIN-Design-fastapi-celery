@@ -8,7 +8,7 @@ try:
     from Task.Basic import ServiceOrientedArchitecture
     from .utils import MermaidGraph
 except:
-    from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from mockServiceOrientedArchitecture import ServiceOrientedArchitecture
     from utils import MermaidGraph
 
 
@@ -79,7 +79,7 @@ class TaskDAGRunner(ServiceOrientedArchitecture):
             mermaid_graph_text: str = Field(...,max_length=20000,description="Mermaid graph text defining the DAG")
 
         class Returness(BaseModel):
-            results: Dict[str, dict] = Field(
+            results: Dict = Field(
                     default_factory=dict, description="Final results (decoded from json string) of the DAG execution")
             execution_order: list = Field(
                     default_factory=list, description="Topological execution order")

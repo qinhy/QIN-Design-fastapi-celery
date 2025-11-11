@@ -5,7 +5,7 @@ try:
     from Task.Basic import ServiceOrientedArchitecture
     from .utils import FileInputHelper
 except:
-    from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from mockServiceOrientedArchitecture import ServiceOrientedArchitecture
     from utils import FileInputHelper
 
 class SimpleWebRequest(ServiceOrientedArchitecture):
@@ -48,7 +48,7 @@ Returns status code, response text, and JSON content if available.
         @staticmethod
         def examples():
             return [{ 
-                "param": {"timeout": 30, "verify_ssl": True},
+                "para": {"timeout": 30, "verify_ssl": True},
                 "args": {
                     "url": "https://jsonplaceholder.typicode.com/posts/1",
                     "method": "GET",

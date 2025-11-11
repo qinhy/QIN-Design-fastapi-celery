@@ -153,7 +153,7 @@ class CeleryTask(BasicCeleryTask):
         pipeline_config: list[dict|None] = [
             # 'Fibonacci'
             {
-                "param": {
+                "para": {
                     "mode": "slow"
                 }
             },
@@ -163,7 +163,7 @@ class CeleryTask(BasicCeleryTask):
             },
             # 'PrimeNumberChecker'
             {
-                "param": {
+                "para": {
                     "mode": "smart"
                 }
             }

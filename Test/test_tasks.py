@@ -15,7 +15,7 @@ def get_task_res(id,
 def test_fibonacci_fast():
     url = "http://localhost:8000/fibonacci/"  # Replace with actual host if different
     payload = {
-        "param": {
+        "para": {
             "mode": "fast"
         },
         "args": {
@@ -37,7 +37,7 @@ def test_fibonacci_fast():
 def test_http_request_task_get(url,execution_time="NOW"):
     url = "http://localhost:8000/httprequesttask/"
     payload = {
-        "param": {
+        "para": {
             "method": "GET"
         },
         "args": {
@@ -99,9 +99,9 @@ def test_configure_pipeline(
     """
     if config is None:
         config = [
-            {"param": {"mode": "slow"}},
+            {"para": {"mode": "slow"}},
             {"number": "n"},
-            {"param": {"mode": "smart"}}
+            {"para": {"mode": "smart"}}
         ]
 
     url = f"{base_url}/pipeline/config"

@@ -5,7 +5,7 @@ try:
     from Task.Basic import ServiceOrientedArchitecture
     from .utils import FileInputHelper
 except:
-    from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from mockServiceOrientedArchitecture import ServiceOrientedArchitecture
     from utils import FileInputHelper
 
 class BinaryRepresentation(ServiceOrientedArchitecture):
@@ -42,7 +42,7 @@ Returns the binary representation as a list of bits.
         @staticmethod
         def examples():
             return [{
-                "param": {"bit_length": 8},
+                "para": {"bit_length": 8},
                 "args": {"n": 13}
             }]
 

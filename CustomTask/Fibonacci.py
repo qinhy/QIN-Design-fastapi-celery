@@ -5,7 +5,7 @@ try:
     from Task.Basic import ServiceOrientedArchitecture
     from .utils import FileInputHelper
 except:
-    from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from mockServiceOrientedArchitecture import ServiceOrientedArchitecture
     from utils import FileInputHelper
 
 class Fibonacci(ServiceOrientedArchitecture):
@@ -42,7 +42,7 @@ Supports two computation modes:
 
         @staticmethod
         def examples():
-            return [{ "param": {"mode": "fast"},"args": {"n": 13}},]
+            return [{ "para": {"mode": "fast"},"args": {"n": 13}},]
         
             
         version:Version = Version()

@@ -63,7 +63,7 @@ class Fibonacci(ServiceOrientedArchitecture):
             Provide example input sets for the Fibonacci service.
             """
             return [
-                {"param": {"mode": "fast"}, "args": {"n": 13}}
+                {"para": {"mode": "fast"}, "args": {"n": 13}}
             ]
 
         para: Parameter = Parameter()
@@ -100,9 +100,9 @@ class PrimeNumberChecker(ServiceOrientedArchitecture):
             Provide example input sets for the prime checker service.
             """
             return [
-                {"param": {"mode": "smart"}, "args": {"number": 13}},
-                {"param": {"mode": "basic"}, "args": {"number": 10}},
-                {"param": {"mode": "smart"}, "args": {"number": 1}},
+                {"para": {"mode": "smart"}, "args": {"number": 13}},
+                {"para": {"mode": "basic"}, "args": {"number": 10}},
+                {"para": {"mode": "smart"}, "args": {"number": 1}},
             ]
 
         para: Parameter = Parameter()
@@ -149,8 +149,8 @@ class AddTwoNumbers(ServiceOrientedArchitecture):
             Return example input sets for the AddTwoNumbers service.
             """
             return [
-                {"param": {"type": "int"}, "args": {"a": 1, "b": 2}},
-                {"param": {"type": "float"}, "args": {"a": 3, "b": 4}}
+                {"para": {"type": "int"}, "args": {"a": 1, "b": 2}},
+                {"para": {"type": "float"}, "args": {"a": 3, "b": 4}}
             ]
 
         para: Parameter = Parameter()
@@ -196,8 +196,8 @@ class MultiplyTwoNumbers(ServiceOrientedArchitecture):
             Return example input sets for the MultiplyTwoNumbers service.
             """
             return [
-                {"param": {"mode": "basic"}, "args": {"x": 2, "y": 3}},
-                {"param": {"mode": "extended"}, "args": {"x": 5, "y": 10}},
+                {"para": {"mode": "basic"}, "args": {"x": 2, "y": 3}},
+                {"para": {"mode": "extended"}, "args": {"x": 5, "y": 10}},
             ]
 
         para: Parameter = Parameter()
@@ -233,8 +233,8 @@ class Factorial(ServiceOrientedArchitecture):
         @staticmethod
         def examples():
             return [
-                {"param": {"mode": "iterative"}, "args": {"n": 5}},
-                {"param": {"mode": "recursive"}, "args": {"n": 6}},
+                {"para": {"mode": "iterative"}, "args": {"n": 5}},
+                {"para": {"mode": "recursive"}, "args": {"n": 6}},
             ]
 
         para: Parameter = Parameter()
@@ -271,8 +271,8 @@ class SumOfSequence(ServiceOrientedArchitecture):
         @staticmethod
         def examples():
             return [
-                {"param": {"inclusive": True}, "args": {"start": 1, "end": 5}},
-                {"param": {"inclusive": False}, "args": {"start": 1, "end": 5}}
+                {"para": {"inclusive": True}, "args": {"start": 1, "end": 5}},
+                {"para": {"inclusive": False}, "args": {"start": 1, "end": 5}}
             ]
 
         para: Parameter = Parameter()
@@ -308,8 +308,8 @@ class CircleAreaCalculator(ServiceOrientedArchitecture):
         @staticmethod
         def examples():
             return [
-                {"param": {"units": "cm"}, "args": {"radius": 5}},
-                {"param": {"units": "m"}, "args": {"radius": 2}},
+                {"para": {"units": "cm"}, "args": {"radius": 5}},
+                {"para": {"units": "m"}, "args": {"radius": 2}},
             ]
 
         para: Parameter = Parameter()
@@ -362,11 +362,11 @@ class TriangleAreaCalculator(ServiceOrientedArchitecture):
         def examples():
             return [
                 {
-                    "param": {"formula": "basic"}, 
+                    "para": {"formula": "basic"}, 
                     "args": {"base": 10, "height": 5}
                 },
                 {
-                    "param": {"formula": "herons"}, 
+                    "para": {"formula": "herons"}, 
                     "args": {"side_a": 3, "side_b": 4, "side_c": 5}
                 },
             ]
@@ -404,8 +404,8 @@ class DataSorter(ServiceOrientedArchitecture):
         @staticmethod
         def examples():
             return [
-                {"param": {"order": "asc"}, "args": {"data": [3.1, 2.4, 10, 7]}},
-                {"param": {"order": "desc"}, "args": {"data": [1, 2, 3, 4]}},
+                {"para": {"order": "asc"}, "args": {"data": [3.1, 2.4, 10, 7]}},
+                {"para": {"order": "desc"}, "args": {"data": [1, 2, 3, 4]}},
             ]
 
         para: Parameter = Parameter()
@@ -455,8 +455,8 @@ class StatisticsCalculator(ServiceOrientedArchitecture):
         @staticmethod
         def examples():
             return [
-                {"param": {"calc_mode": "all"}, "args": {"data": [1, 2, 2, 3, 4]}},
-                {"param": {"calc_mode": "mean-only"}, "args": {"data": [10, 20, 30, 40]}},
+                {"para": {"calc_mode": "all"}, "args": {"data": [1, 2, 2, 3, 4]}},
+                {"para": {"calc_mode": "mean-only"}, "args": {"data": [10, 20, 30, 40]}},
             ]
 
         para: Parameter = Parameter()
@@ -494,11 +494,11 @@ class DatabaseInsert(ServiceOrientedArchitecture):
         def examples():
             return [
                 {
-                    "param": {"table_name": "users"}, 
+                    "para": {"table_name": "users"}, 
                     "args": {"record": {"name": "John", "age": 30}}
                 },
                 {
-                    "param": {"table_name": "orders"},
+                    "para": {"table_name": "orders"},
                     "args": {"record": {"user_id": 1, "product": "Book", "quantity": 2}}
                 }
             ]
@@ -542,11 +542,11 @@ class DatabaseQuery(ServiceOrientedArchitecture):
         def examples():
             return [
                 {
-                    "param": {"table_name": "users", "limit": 5},
+                    "para": {"table_name": "users", "limit": 5},
                     "args": {"filters": {"age": 30}}
                 },
                 {
-                    "param": {"table_name": "orders", "limit": 2},
+                    "para": {"table_name": "orders", "limit": 2},
                     "args": {"filters": {"product": "Book"}}
                 }
             ]

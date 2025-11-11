@@ -5,7 +5,7 @@ try:
     from Task.Basic import ServiceOrientedArchitecture
     from .utils import FileInputHelper
 except:
-    from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from mockServiceOrientedArchitecture import ServiceOrientedArchitecture
     from utils import FileInputHelper
 
 class PalindromeChecker(ServiceOrientedArchitecture):
@@ -43,9 +43,9 @@ Supports two checking modes:
         @staticmethod
         def examples():
             return [
-                {"param": {"mode": "smart"}, "args": {"text": "racecar"}},
-                {"param": {"mode": "basic"}, "args": {"text": "hello"}},
-                {"param": {"mode": "smart"}, "args": {"text": "A man a plan a canal Panama"}},
+                {"para": {"mode": "smart"}, "args": {"text": "racecar"}},
+                {"para": {"mode": "basic"}, "args": {"text": "hello"}},
+                {"para": {"mode": "smart"}, "args": {"text": "A man a plan a canal Panama"}},
             ]
         
         version:Version = Version()

@@ -5,7 +5,7 @@ try:
     from Task.Basic import ServiceOrientedArchitecture
     from .utils import FileInputHelper
 except:
-    from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from mockServiceOrientedArchitecture import ServiceOrientedArchitecture
     from utils import FileInputHelper
 
 class CollatzSequence(ServiceOrientedArchitecture):
@@ -42,7 +42,7 @@ Continues until reaching 1 or the maximum number of steps (if specified).
         @staticmethod
         def examples():
             return [{
-                "param": {"max_steps": 100},
+                "para": {"max_steps": 100},
                 "args": {"n": 6}
             }]
 

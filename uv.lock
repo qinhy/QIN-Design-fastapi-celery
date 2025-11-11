@@ -1150,6 +1150,7 @@ dev = [
     { name = "aiohttp" },
     { name = "ipython" },
     { name = "jsonref" },
+    { name = "supervisor-win" },
 ]
 
 [package.metadata]
@@ -1188,6 +1189,7 @@ dev = [
     { name = "aiohttp", specifier = ">=3.12.15" },
     { name = "ipython", specifier = ">=9.4.0" },
     { name = "jsonref", specifier = ">=1.1.0" },
+    { name = "supervisor-win", specifier = ">=4.7.0" },
 ]
 
 [[package]]
@@ -1290,6 +1292,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/15/b9/cc3017f9a9c9b6e27c5106cc10cc7904653c3eec0729793aec10479dd669/starlette-0.47.3.tar.gz", hash = "sha256:6bc94f839cc176c4858894f1f8908f0ab79dfec1a6b8402f6da9be26ebea52e9", size = 2584144, upload-time = "2025-08-24T13:36:42.122Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ce/fd/901cfa59aaa5b30a99e16876f11abe38b59a1a2c51ffb3d7142bb6089069/starlette-0.47.3-py3-none-any.whl", hash = "sha256:89c0778ca62a76b826101e7c709e70680a1699ca7da6b44d38eb0a7e61fe4b51", size = 72991, upload-time = "2025-08-24T13:36:40.887Z" },
+]
+
+[[package]]
+name = "supervisor-win"
+version = "4.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pywin32" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/98/48/5d6cd1b7492bf2c11452fd638de45519d2c103caed70c5bdb4ecebbac568/supervisor-win-4.7.0.tar.gz", hash = "sha256:c474d92edc7050b55adae2f7c7789d5d69f180dee7868a27673b1d38f8bea484", size = 397342, upload-time = "2023-08-03T15:17:53.568Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/69/4d/3a493f15f5b80608857ef157f382ace494f51d9031e6bee6082437dd1403/supervisor_win-4.7.0-py2.py3-none-any.whl", hash = "sha256:bd98554c2a0878704c3f3fd95e38965d9986eae6a2ad29f34d73d0aee138a481", size = 303996, upload-time = "2023-08-03T15:17:49.872Z" },
 ]
 
 [[package]]
