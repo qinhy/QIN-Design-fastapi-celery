@@ -52,7 +52,7 @@ Can create files from base64-encoded content if they don't exist locally.
         @staticmethod
         def examples():
             return [{ 
-                "param": {"passive_mode": True},
+                "para": {"passive_mode": True},
                 "args": {
                     "local_file": "example.txt",
                     "remote_dir": "/uploads",
@@ -62,7 +62,7 @@ Can create files from base64-encoded content if they don't exist locally.
                 }
             },
             {
-                "param": {"passive_mode": True},
+                "para": {"passive_mode": True},
                 "args": {
                     "local_file": "/tmp/image_upload.png",
                     "remote_dir": "/images",

@@ -1,4 +1,4 @@
-
+from .Fibonacci import Fibonacci
 from .AddNumbers import AddNumbers
 from .AdjustImage import AdjustImage
 from .BinaryRepresentation import BinaryRepresentation
@@ -7,7 +7,6 @@ from .ChatGPTService import ChatGPTService, DeepseekService
 from .CollatzSequence import CollatzSequence
 from .Downloader import Downloader
 from .EnhanceImage import EnhanceImage
-from .Fibonacci import Fibonacci
 from .FSSpecShell import FSSpecShell
 from .GrayscaleImage import GrayscaleImage
 from .HttpRequestTask import HttpRequestTask
@@ -23,12 +22,12 @@ from .TaskDAGRunner import TaskDAGRunner
 from .SmartModelConverter import SmartModelConverter
 
 ACTION_REGISTRY = {
+    'Fibonacci': Fibonacci,
     'AdjustImage':AdjustImage,
     'GrayscaleImage':GrayscaleImage,
     'ImagePadding':ImagePadding,
     'ImageTiler':ImageTiler,
     'SimpleWebRequest':SimpleWebRequest,
-    'Fibonacci': Fibonacci,
     'PrimeNumberChecker': PrimeNumberChecker,
     'PalindromeChecker': PalindromeChecker,
     'ChatGPTService': ChatGPTService,

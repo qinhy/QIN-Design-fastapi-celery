@@ -44,9 +44,9 @@ Supports two checking modes:
         @staticmethod
         def examples():
             return [
-                {"param": {"mode": "smart"}, "args": {"number": 13}},
-                {"param": {"mode": "basic"}, "args": {"number": 10}},
-                {"param": {"mode": "smart"}, "args": {"number": 1}},
+                {"para": {"mode": "smart"}, "args": {"number": 13}},
+                {"para": {"mode": "basic"}, "args": {"number": 10}},
+                {"para": {"mode": "smart"}, "args": {"number": 1}},
             ]
         
         version:Version = Version()

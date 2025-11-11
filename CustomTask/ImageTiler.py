@@ -64,7 +64,7 @@ Can process images from URLs or local file paths.
         def examples():
             return [
                 {
-                    "param": {
+                    "para": {
                         "cols": 2,
                         "rows": 2,
                         "final_width": 800,
@@ -81,7 +81,7 @@ Can process images from URLs or local file paths.
                     }
                 },
                 {
-                    "param": {
+                    "para": {
                         "cols": 3,
                         "rows": 2,
                         "final_width": 1200,
@@ -101,7 +101,7 @@ Can process images from URLs or local file paths.
                     }
                 },
                 {
-                    "param": {
+                    "para": {
                         "cols": 2,
                         "rows": 2,
                         "final_width": 1000,
@@ -398,5 +398,5 @@ if __name__ == "__main__":
     print(ImageTiler.Action(model,None)().model_dump())    
 
     # custom test    
-    model = ImageTiler.Model(**json.load(open("tmp/test_image_tiler.json")))
-    print(ImageTiler.Action(model,None)().model_dump())
+    # model = ImageTiler.Model(**json.load(open("tmp/test_image_tiler.json")))
+    # print(ImageTiler.Action(model,None)().model_dump())

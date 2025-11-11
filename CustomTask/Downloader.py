@@ -48,7 +48,7 @@ Optionally uploads downloaded files to Redis and removes local copies.
         @staticmethod
         def examples():
             return [{
-                "param": {
+                "para": {
                     "chunk_size": 4096,
                 },
                 "args": {
@@ -57,7 +57,7 @@ Optionally uploads downloaded files to Redis and removes local copies.
                 }
             },
             {
-                "param": {
+                "para": {
                     "chunk_size": 8192,
                     "redis_url": None
                 },
@@ -67,7 +67,7 @@ Optionally uploads downloaded files to Redis and removes local copies.
                 }
             },
             {
-                "param": {
+                "para": {
                     "chunk_size": 16384,
                     "redis_url": "redis://redis-server:6379/1"
                 },
@@ -77,7 +77,7 @@ Optionally uploads downloaded files to Redis and removes local copies.
                 }
             },
             {
-                "param": {
+                "para": {
                     "chunk_size": 2048,
                     "redis_url": None
                 },

@@ -46,9 +46,9 @@ Returns the status code and content of the response.
         @staticmethod
         def examples():
             return [
-                {"param": {"method": "GET"}, 
+                {"para": {"method": "GET"}, 
                     "args": {"url": "https://httpbin.org/get"}},
-                {"param": {"method": "POST"}, 
+                {"para": {"method": "POST"}, 
                     "args": {"url": "https://httpbin.org/post", 
                     "data": {"key": "value"}}}
             ]

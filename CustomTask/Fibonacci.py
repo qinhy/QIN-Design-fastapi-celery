@@ -42,7 +42,7 @@ Supports two computation modes:
 
         @staticmethod
         def examples():
-            return [{ "param": {"mode": "fast"},"args": {"n": 13}},]
+            return [{ "para": {"mode": "fast"},"args": {"n": 13}},]
         
             
         version:Version = Version()

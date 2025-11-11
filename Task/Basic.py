@@ -1163,10 +1163,10 @@ class ServiceOrientedArchitecture:
         args_schema = cls.replace_refs(cls.Model.Arguments.model_json_schema())
         rets_schema = cls.replace_refs(cls.Model.Returness.model_json_schema())
 
-        # Determine if "param" and/or "args" should be required at the top level
+        # Determine if "para" and/or "args" should be required at the top level
         top_level_required = []
         if para_schema.get("required"):
-            top_level_required.append("param")
+            top_level_required.append("para")
         if args_schema.get("required"):
             top_level_required.append("args")
 
@@ -1176,7 +1176,7 @@ class ServiceOrientedArchitecture:
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "param": para_schema,
+                    "para": para_schema,
                     "args": args_schema,
                 },
                 "required": top_level_required

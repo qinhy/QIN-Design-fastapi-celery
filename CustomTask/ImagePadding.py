@@ -20,12 +20,12 @@ class ImagePadding(ServiceOrientedArchitecture):
     class Model(ServiceOrientedArchitecture.Model):
         class Parameter(BaseModel):
             h_ratio: float = Field(
-                1.0,
+                1.1,
                 ge=1.0,
                 description="Height ratio to original (>=1.0; e.g., 1.1 means 10% more height)"
             )
             w_ratio: float = Field(
-                1.0,
+                1.1,
                 ge=1.0,
                 description="Width ratio to original (>=1.0; e.g., 1.2 means 20% more width)"
             )
@@ -50,11 +50,6 @@ class ImagePadding(ServiceOrientedArchitecture):
         def examples():
             return [
                 {
-                    # "desc": "Identity (no padding) — smoke test",
-                    "para": {"h_ratio": 1.0, "w_ratio": 1.0, "color": "white"},
-                    "args": {"path": "assets/sample.jpg"}
-                },
-                {
                     # "desc": "Taller only (letterbox bars top/bottom)",
                     "para": {"h_ratio": 1.1, "w_ratio": 1.0, "color": "black"},
                     "args": {"path": "assets/landscape.jpg"}
@@ -68,12 +63,19 @@ class ImagePadding(ServiceOrientedArchitecture):
                     # "desc": "Both height and width increased (light gray mat)",
                     "para": {"h_ratio": 1.25, "w_ratio": 1.25, "color": "#f5f5f5"},
                     "args": {"path": "assets/sample.jpg"}
-                }
+                },
+                {
+                    # "desc": "Identity (no padding) — smoke test",
+                    "para": {"h_ratio": 1.0, "w_ratio": 1.0, "color": "white"},
+                    "args": {"path": "assets/sample.jpg"}
+                },
             ]
 
+        version:Version = Version()
         para: Parameter = Parameter()
         args: Arguments = Arguments()
         rets: Optional[Returness] = None
+        logger: Logger = Logger(name=Version().class_name)
 
     class Action(ServiceOrientedArchitecture.Action):
         def __init__(self, model, BasicApp, level=None):
@@ -107,6 +109,8 @@ class ImagePadding(ServiceOrientedArchitecture):
                     delta_h - (delta_h // 2)           # bottom
                 )
 
+                print(img.size)
+                print(padding)
                 padded_img = ImageOps.expand(img, padding, fill=self.model.para.color)
 
                 output_path = f"{os.path.splitext(self.model.args.path)[0]}_padded.jpg"
@@ -117,3 +121,19 @@ class ImagePadding(ServiceOrientedArchitecture):
 
             except Exception as e:
                 raise ValueError(f"ImagePadding failed: {e}")
+
+# Simple test for ImageTiler
+if __name__ == "__main__":
+    # Create test images
+    test_dir = "tmp"
+    os.makedirs(test_dir, exist_ok=True)
+
+    # Initialize the model
+    model = ImagePadding.Model(**{
+                    "para": {"h_ratio": 1.1, "w_ratio": 1.1, "color": "white"},
+                    "args": {"path": "./tmp/Lenna_(test_image).png"}})
+    
+    
+    # Run the tiler
+    print(ImagePadding.Action(model,None)().model_dump())    
+

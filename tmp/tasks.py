@@ -222,7 +222,7 @@ class CeleryTask:
         # # Schema
         # # {
         # #   "task_id": "AUTO_SET_BUT_NULL_NOW",
-        # #   "param": {
+        # #   "para": {
         # #     "mode": "fast"
         # #   },
         # #   "args": {
