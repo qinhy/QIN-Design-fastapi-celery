@@ -8,7 +8,7 @@ try:
     from Task.Basic import ServiceOrientedArchitecture
     from .utils import MermaidGraph
 except:
-    from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from mockServiceOrientedArchitecture import ServiceOrientedArchitecture
     from utils import MermaidGraph
 
 

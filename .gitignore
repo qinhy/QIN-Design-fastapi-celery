@@ -163,3 +163,4 @@ tmp/private_key.pem
 /sh/control
 *.jpg
 tmp/test_image_tiler.json
+CICD/supervisord-local.conf

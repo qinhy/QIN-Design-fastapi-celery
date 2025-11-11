@@ -10,7 +10,7 @@ try:
     from Task.FileSystem import FileSystem
     from .utils import FileInputHelper
 except:
-    from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from mockServiceOrientedArchitecture import ServiceOrientedArchitecture
     from utils import FileInputHelper
 
 class Downloader(ServiceOrientedArchitecture):

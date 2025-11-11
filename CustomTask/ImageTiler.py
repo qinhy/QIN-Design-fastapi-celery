@@ -10,7 +10,7 @@ import tempfile
 try:
     from Task.Basic import ServiceOrientedArchitecture
 except ImportError:
-    from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from mockServiceOrientedArchitecture import ServiceOrientedArchitecture
 
 
 class ImageTiler(ServiceOrientedArchitecture):

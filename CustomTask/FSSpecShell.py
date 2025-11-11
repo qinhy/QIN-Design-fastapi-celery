@@ -7,7 +7,7 @@ try:
     from .utils import FileInputHelper
     from Task.FileSystem import FileSystem
 except:
-    from MockServiceOrientedArchitecture import ServiceOrientedArchitecture
+    from mockServiceOrientedArchitecture import ServiceOrientedArchitecture
     from utils import FileInputHelper
 
 class FSSpecShell(ServiceOrientedArchitecture):
