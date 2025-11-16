@@ -9,7 +9,7 @@ try:
     import MetaTrader5 as mt5
 except Exception as e:
     print(e)
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class MT5Account(BaseModel):
@@ -211,78 +211,18 @@ class MT5Manager:
             terminal_lock.release()
 
 class Book(BaseModel):
-    class Controller(BaseModel):
-
-        class Null(BaseModel):
-            type:str = 'Null'
-            def send(self,book):
-                raise ValueError(f'This is a {self.type} state')
-            def close(self,book):
-                raise ValueError(f'This is a {self.type} state')
-            def changeP(self,book,p):
-                raise ValueError(f'This is a {self.type} state')
-            def changeTS(self,book,tp,sl):
-                raise ValueError(f'This is a {self.type} state')
-
-        class Plan(Null):
-            type:str = 'Plan'
-            def send(self,book):
-                book:Book = book
-                res = book._make_order()
-                book._state = Book.Controller.Order() if res else Book.Controller.Plan()
-            def close(self,book):
-                raise ValueError('This is just a Plan')
-            def changeP(self,book,p):
-                book:Book = book
-                book.price_open = p
-            def changeTS(self,book,tp,sl):
-                book:Book = book
-                book.tp,book.sl=tp,sl
-            
-        class Order(Null):
-            type:str = 'Order'
-            def send(self,book):
-                raise ValueError('This is a exists Order')
-            def close(self,book):
-                book:Book = book
-                res = book._close_order()
-                if res : book._state = Book.Controller.Null()
-            def changeP(self,book,p):
-                book:Book = book
-                res = book._changeOrderP(p)
-                if res : book.price_open = p
-
-            def changeTS(self,book,tp,sl):
-                book:Book = book
-                res = book._changeOrderTPSL(tp,sl)
-                if res : book.tp,book.sl=tp,sl
-
-        class Position(Null):
-            type:str = 'Position'
-            def send(self,book):
-                raise ValueError('This is a exists Position')
-            def close(self,book):
-                book:Book = book
-                res = book._close_position()
-                if res : book._state = Book.Controller.Null()
-            def changeP(self,book,p):
-                raise ValueError('This is a exists Position, can not change price open')
-            def changeTS(self,book,tp,sl):
-                book:Book = book
-                res = book._changePositionTPSL(tp,sl)
-                if res : book.tp,book.sl=tp,sl
 
     @model_validator(mode='before')
     def check_state_type(cls, values:dict):
         state_data = values.get('state')
         if isinstance(state_data, dict):
             type_map = {
-                'Null':cls.Controller.Null,
-                'Plan':cls.Controller.Plan,
-                'Order':cls.Controller.Order,
-                'Position':cls.Controller.Position,
+                'Null':BookController.Null,
+                'Plan':BookController.Plan,
+                'Order':BookController.Order,
+                'Position':BookController.Position,
             }
-            state_class = type_map.get(state_data.get('type', 'NULL'), cls.Controller.Null)
+            state_class = type_map.get(state_data.get('type', 'NULL'), BookController.Null)
             values['state'] = state_class(**state_data)
         return values
     
@@ -296,15 +236,15 @@ class Book(BaseModel):
     is_order: bool = False
     is_position: bool = False
     
-    _state: Controller.Null = Controller.Plan()
+    _state: 'BookController.Null' = Field(default_factory=lambda:BookController.Plan())
     _acc_info: dict = {}
 
-    _book: Any = None# mt5_order_position
+    # _book: Any = None# mt5_order_position
     _type: str = ''
-    _swap: int = 0
+    swap: int = 0
 
     def as_plan(self):
-        self._state = Book.Controller.Plan()
+        self._state = BookController.Plan()
         return self
     
     def send(self):
@@ -334,35 +274,34 @@ class Book(BaseModel):
             res['books'] = [b.model_dump_json() for b in bs]
             return res
         
-    def set_mt5_book(self,book):
-        self._book = book
-        self.symbol = self._book.symbol
-        self.sl = self._book.sl
-        self.tp = self._book.tp
-        self.price_open = self._book.price_open
-        self.ticket = self._book.ticket
-        self._type = self._book.type
+    def set_mt5_book(self,_book):
+        self.symbol = _book.symbol
+        self.sl = _book.sl
+        self.tp = _book.tp
+        self.price_open = _book.price_open
+        self.ticket = _book.ticket
+        self._type = _book.type
         self.is_order=False
         self.is_position=False
-        self._swap = 0
+        self.swap = 0
         
-        if self._book.__class__.__name__ == "TradeOrder" : 
+        if _book.__class__.__name__ == "TradeOrder" : 
             self.is_order=True
-            self._state = Book.Controller.Order()
-        elif self._book.__class__.__name__ == "TradePosition": 
+            self._state = BookController.Order()
+        elif _book.__class__.__name__ == "TradePosition": 
             self.is_position=True
-            self._state = Book.Controller.Position()
-        if hasattr(self._book,'volume_current'):
+            self._state = BookController.Position()
+        if hasattr(_book,'volume_current'):
             self.is_order=True
-            self.volume=self._book.volume_current
-        elif hasattr(self._book,'volume'):
+            self.volume=_book.volume_current
+        elif hasattr(_book,'volume'):
             self.is_position=True
-            self.volume=self._book.volume
-            self._swap = self._book.swap
+            self.volume=_book.volume
+            self.swap = _book.swap
         else:
             raise 'Unkown type!'
         
-        self._book = ''
+        _book = ''
         return self
 
     def isBuy(self):
@@ -373,73 +312,82 @@ class Book(BaseModel):
                 return self._type == mt5.POSITION_TYPE_BUY
         return True
     
-    def _sendRequest(self, request):    
+
+class BookController(BaseModel):
+
+    @staticmethod
+    def _sendRequest(book:Book, request):    
         result=mt5.order_send(request)
         if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
             raise ValueError(f'Send request failed: {result}')
             # return False
         
         if result.__class__.__name__ == "OrderSendResult" :
-            self.ticket = result.order
-            self.is_order=True
-            self._state = Book.Controller.Order()
+            book.ticket = result.order
+            book.is_order=True
+            book._state = BookController.Order()
 
         return True
     
-    def _changeOrderP(self, p, auto_tpsl=True):
+    @staticmethod
+    def _changeOrderP(book:Book, p, auto_tpsl=True):
         if auto_tpsl:
-            tp = self.tp + self.price_open - p
-            sl = self.sl + self.price_open - p
+            tp = book.tp + book.price_open - p
+            sl = book.sl + book.price_open - p
         else:
-            tp,sl = self.tp, self.sl
+            tp,sl = book.tp, book.sl
         request = {
             "action": mt5.TRADE_ACTION_MODIFY,
-            "order": self.ticket,
+            "order": book.ticket,
             "price": p,
             "tp": tp,
             "sl": sl
         }
-        if self._sendRequest(request):
-            if auto_tpsl: self.tp, self.sl = tp,sl
+        if BookController._sendRequest(request):
+            if auto_tpsl: book.tp, book.sl = tp,sl
             return True
         else:
             return False
         
-    def _changeOrderTPSL(self, tp=0.0,sl=0.0):
+    @staticmethod
+    def _changeOrderTPSL(book:Book, tp=0.0,sl=0.0):
         request = {
             "action": mt5.TRADE_ACTION_MODIFY,
-            "order": self.ticket,
-            "price": self.price_open,
+            "order": book.ticket,
+            "price": book.price_open,
             "tp": tp,
             "sl": sl
         }
         print(request)
-        return self._sendRequest(request)
+        return BookController._sendRequest(request)
 
-    def _changePositionTPSL(self, tp=0.0,sl=0.0):
+    @staticmethod
+    def _changePositionTPSL(book:Book, tp=0.0,sl=0.0):
         request = {
             "action": mt5.TRADE_ACTION_SLTP,
-            "position": self.ticket,
-            "symbol": self.symbol,
+            "position": book.ticket,
+            "symbol": book.symbol,
             "tp": tp,
             "sl": sl
         }
-        return self._sendRequest(request)
+        return BookController._sendRequest(request)
 
-    def _changeTPSL(self, tp=0.0,sl=0.0):
-        if self.is_order: 
-            return self._changeOrderTPSL(tp,sl)
-        elif self.is_position: 
-            return self._changePositionTPSL(tp,sl)
+    @staticmethod
+    def _changeTPSL(book:Book, tp=0.0,sl=0.0):
+        if book.is_order: 
+            return book._changeOrderTPSL(tp,sl)
+        elif book.is_position: 
+            return book._changePositionTPSL(tp,sl)
         return False
     
-    def _close_position(self):
+    @staticmethod
+    def _close_position(book:Book):
         #https://www.mql5.com/ja/docs/constants/structures/mqltraderequest
-        if self._type == mt5.ORDER_TYPE_BUY:
-            price = mt5.symbol_info_tick(self.symbol).bid
+        if book._type == mt5.ORDER_TYPE_BUY:
+            price = mt5.symbol_info_tick(book.symbol).bid
             type_tmp = mt5.ORDER_TYPE_SELL
-        elif self._type == mt5.ORDER_TYPE_SELL:
-            price = mt5.symbol_info_tick(self.symbol).ask
+        elif book._type == mt5.ORDER_TYPE_SELL:
+            price = mt5.symbol_info_tick(book.symbol).ask
             type_tmp = mt5.ORDER_TYPE_BUY
         else:
             raise ValueError('unknow position type(nor buy or sell) error.')
@@ -447,67 +395,116 @@ class Book(BaseModel):
         deviation=20
         request={
             "action": mt5.TRADE_ACTION_DEAL,
-            "symbol": self.symbol,
-            "volume": self.volume,
+            "symbol": book.symbol,
+            "volume": book.volume,
             "type": type_tmp,
-            "position": self.ticket,
+            "position": book.ticket,
             "price": price,
             "deviation": deviation,
-            "magic": self.magic,
+            "magic": book.magic,
             "comment": "script close",
             "type_time": mt5.ORDER_TIME_GTC,
             #"type_filling": mt5.ORDER_FILLING_IOC,
         }
-        return self._sendRequest(request)
+        return BookController._sendRequest(request)
 
-    def _close_order(self):
+    @staticmethod
+    def _close_order(book:Book):
         #https://www.mql5.com/en/forum/365968
         request = {
             "action": mt5.TRADE_ACTION_REMOVE,
-            "order": self.ticket,
+            "order": book.ticket,
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": mt5.ORDER_FILLING_IOC,
         }
-        return self._sendRequest(request)
+        return BookController._sendRequest(request)
 
-    def _make_order(self, profit_risk_ratio: float=None):
-        # ProfitRiskRatio = self._ProfitRiskRatio
+    @staticmethod
+    def _make_order(book:Book, profit_risk_ratio: float=None):
+        # ProfitRiskRatio = book._ProfitRiskRatio
         # Determine order type and calculate stop loss based on parameters
-        going_long = self.tp > self.price_open
-        current_price_info = mt5.symbol_info_tick(self.symbol)
+        going_long = book.tp > book.price_open
+        current_price_info = mt5.symbol_info_tick(book.symbol)
         if current_price_info is None:
-            return f"Error getting current price for {self.symbol}"
+            return f"Error getting current price for {book.symbol}"
 
         if going_long:
             current_price = current_price_info.ask
-            order_type = mt5.ORDER_TYPE_BUY_STOP if self.price_open > current_price else mt5.ORDER_TYPE_BUY_LIMIT
+            order_type = mt5.ORDER_TYPE_BUY_STOP if book.price_open > current_price else mt5.ORDER_TYPE_BUY_LIMIT
         else:
             current_price = current_price_info.bid
-            order_type = mt5.ORDER_TYPE_SELL_STOP if self.price_open < current_price else mt5.ORDER_TYPE_SELL_LIMIT
+            order_type = mt5.ORDER_TYPE_SELL_STOP if book.price_open < current_price else mt5.ORDER_TYPE_SELL_LIMIT
 
         if profit_risk_ratio is not None:
-            self.sl = self.price_open + (self.price_open - self.tp) / profit_risk_ratio
+            book.sl = book.price_open + (book.price_open - book.tp) / profit_risk_ratio
 
-        digitsnum = mt5.symbol_info(self.symbol).digits
-        self.price_open,self.sl,self.tp = list(map(lambda x:round(x*10**digitsnum)/10**digitsnum,
-                                                        [self.price_open,self.sl,self.tp]))
+        digitsnum = mt5.symbol_info(book.symbol).digits
+        book.price_open,book.sl,book.tp = list(map(lambda x:round(x*10**digitsnum)/10**digitsnum,
+                                                        [book.price_open,book.sl,book.tp]))
         # Prepare trade request
         deviation=20
         request = {
             "action": mt5.TRADE_ACTION_PENDING,
-            "symbol": self.symbol,
-            "volume": self.volume,
+            "symbol": book.symbol,
+            "volume": book.volume,
             "type": order_type,
-            "price": self.price_open,
-            "sl": self.sl,
-            "tp": self.tp,
+            "price": book.price_open,
+            "sl": book.sl,
+            "tp": book.tp,
             "deviation": deviation,
-            "magic": self.magic,
+            "magic": book.magic,
             "comment": "auto order",
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": mt5.ORDER_FILLING_RETURN,
         }
-        return self._sendRequest(request)
+        return BookController._sendRequest(request)
 
+    class Null(BaseModel):
+        type:str = 'Null'
+        def send(self,book:Book):
+            raise ValueError(f'This is a {self.type} state')
+        def close(self,book:Book):
+            raise ValueError(f'This is a {self.type} state')
+        def changeP(self,book:Book,p):
+            raise ValueError(f'This is a {self.type} state')
+        def changeTS(self,book:Book,tp,sl):
+            raise ValueError(f'This is a {self.type} state')
 
+    class Plan(Null):
+        type:str = 'Plan'
+        def send(self,book:Book):
+            res = BookController._make_order()
+            book._state = BookController.Order() if res else BookController.Plan()
+        def close(self,book:Book):
+            raise ValueError('This is just a Plan')
+        def changeP(self,book:Book,p):
+            book.price_open = p
+        def changeTS(self,book:Book,tp,sl):
+            book.tp,book.sl=tp,sl
+        
+    class Order(Null):
+        type:str = 'Order'
+        def send(self,book:Book):
+            raise ValueError('This is a exists Order')
+        def close(self,book:Book):
+            res = BookController._close_order()
+            if res : book._state = BookController.Null()
+        def changeP(self,book:Book,p):
+            res = BookController._changeOrderP(p)
+            if res : book.price_open = p
+        def changeTS(self,book:Book,tp,sl):
+            res = BookController._changeOrderTPSL(tp,sl)
+            if res : book.tp,book.sl=tp,sl
 
+    class Position(Null):
+        type:str = 'Position'
+        def send(self,book:Book):
+            raise ValueError('This is a exists Position')
+        def close(self,book:Book):
+            res = BookController._close_position()
+            if res : book._state = BookController.Null()
+        def changeP(self,book:Book,p):
+            raise ValueError('This is a exists Position, can not change price open')
+        def changeTS(self,book:Book,tp,sl):
+            res = BookController._changePositionTPSL(tp,sl)
+            if res : book.tp,book.sl=tp,sl
