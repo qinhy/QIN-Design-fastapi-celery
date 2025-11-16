@@ -1,4 +1,6 @@
-from typing import Optional
+import math
+from typing import Literal
+from pydantic import Field
 import uuid
 from CustomTask.MT5Manager import Book, MT5Account, MT5Action, MT5Manager
 from Task.Basic import AppInterface, ServiceOrientedArchitecture
@@ -76,7 +78,7 @@ class BookCloseService(ServiceOrientedArchitecture):
         
         def __init__(self, model,BasicApp:AppInterface,level=None):            
             super().__init__(model,BasicApp,level)
-            MT5Action.__init__(self,self.model.param)
+            MT5Action.__init__(self,self.model.para)
             self.model:BookCloseService.Model = self.model
             
         def __call__(self, *args, **kwargs):
@@ -130,7 +132,7 @@ class BookSendService(ServiceOrientedArchitecture):
         
         def __init__(self, model,BasicApp:AppInterface,level=None):            
             super().__init__(model,BasicApp,level)
-            MT5Action.__init__(self,self.model.param)
+            MT5Action.__init__(self,self.model.para)
             self.model:BookSendService.Model = self.model
             
         def __call__(self, *args, **kwargs):
@@ -165,7 +167,7 @@ class MT5AccountInfo(ServiceOrientedArchitecture):
             pass
             
         class Returness(BaseModel):
-            info:dict={}
+            info: dict = Field(default_factory=dict)
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
             pass
@@ -183,7 +185,7 @@ class MT5AccountInfo(ServiceOrientedArchitecture):
         
         def __init__(self, model,BasicApp:AppInterface,level=None):            
             super().__init__(model,BasicApp,level)
-            MT5Action.__init__(self,self.model.param)
+            MT5Action.__init__(self,self.model.para)
             self.model:MT5AccountInfo.Model = self.model
             
         def __call__(self, *args, **kwargs):
@@ -194,117 +196,154 @@ class MT5AccountInfo(ServiceOrientedArchitecture):
             self.model.rets.info = Book().account_info()
             self.model.para = MT5Account()
             return self.model
-       
-# class BookService(ServiceOrientedArchitecture):
+ 
+class BookSplitService(ServiceOrientedArchitecture):
 
-#     class Model(ServiceOrientedArchitecture.Model):
-            
-#         class Parameter(Book,MT5Account):
-#             action:str = BookServiceActionTypes.account_info
+    class Model(ServiceOrientedArchitecture.Model):
 
-#         class Arguments(BaseModel):
-#             p:float=-1.0 #price
-#             tp:float=0.0
-#             sl:float=0.0
+        class Parameter(MT5Account):
+            # minimum lot size to respect when splitting (you can set this from outside)
+            min_lot: float = 0.01
+            mode: Literal["symmetric", "up", "down"] = "symmetric"
 
-#         class Returness(BaseModel):
-#             first_book:Optional[Book] = None
-#             books:list[Book] = []
-#             books_dict:dict[str,Book] = {}
+        class Arguments(BaseModel):
+            ticket: int = -1
+            n_parts: int = 3
+            price_range: int = 50  # the points range
 
-#         class Logger(ServiceOrientedArchitecture.Model.Logger):
-#             pass
+        class Returness(BaseModel):
+            ok: bool = False
+
+        class Logger(ServiceOrientedArchitecture.Model.Logger):
+            pass
+
+        class Version(ServiceOrientedArchitecture.Model.Version):
+            pass
+
+        version: Version = Version()
+        para: Parameter = Parameter()
+        args: Arguments = Arguments()
+        rets: Returness = Returness()
+        logger: Logger = Logger(name=Version().class_name)
+
+    class Action(ServiceOrientedArchitecture.Action, MT5Action):
+
+        def __init__(self, model, BasicApp: AppInterface, level=None):
+            super().__init__(model, BasicApp, level)
+            self.model: BookSplitService.Model = model
+            MT5Action.__init__(self, self.model.para)
+
+        def __call__(self, *args, **kwargs):
+            super().__call__(*args, **kwargs)
+            return MT5Manager().get_singleton().do(self)
         
-#         class Version(ServiceOrientedArchitecture.Model.Version):
-#             pass
-        
-#         version:Version = Version()
-#         para: Parameter = Parameter()
-#         args: Arguments = Arguments()
-#         rets: Returness = Returness()
-#         logger:Logger = Logger(name=Version().class_name)
+        def split_integer(self, total, parts):
+            base = total // parts          # minimum value for each part
+            remainder = total % parts      # how many parts get +1
+            return sorted([base + 1 if i < remainder else base for i in range(parts)])
+            # print(split_integer(5, 3))   # [2, 2, 1]
+            # print(split_integer(10, 4))  # [3, 3, 2, 2]
+            # print(split_integer(7, 7))   # [1, 1, 1, 1, 1, 1, 1]
 
-#         @staticmethod
-#         def build(acc:MT5Account,book:Book,plan=False):
-#             if isinstance(acc, dict):
-#                 acc = MT5Account(**acc)
-#             if isinstance(book, dict):
-#                 book = Book(**book)
-#             if plan:book = book.as_plan()
-#             param = BookService.Model.Param(**acc.model_dump(),**book.model_dump())
-#             return BookService.Model(param=param)
-        
-#     class Action(ServiceOrientedArchitecture.Action, MT5Action):
+        def _compute_price_bounds_int(self, center: int, price_range: int, n_parts: int, mode: str,
+        ) -> tuple[int, int]:
+            if n_parts <= 1 or price_range == 0:
+                return center, center
 
-#         def __call__(self, *args, **kwargs):
-#             super().__call__(*args, **kwargs)
-#             action = self.model.para. action
-#             acc = self.model.param
-#             book = self.model.param
-#             task_id = self.model.task_id
-#             self.model = BookService.Model.build(acc,book,action in ['send'])            
-#             self.model.task_id = task_id
-#             self.change_run(action, kwargs)
-#             first_book,books,books_dict = MT5Manager().get_singleton().do(self)
-#             self.model.rets.first_book = first_book
-#             self.model.rets.books = books
-#             self.model.rets.books_dict = books_dict
-#             self.model.para. password = ''
-#             return self.model
+            if mode == "symmetric":
+                low = center - int(math.ceil(price_range / 2.0))
+                high = center + int(math.floor(price_range / 2.0))
+            elif mode == "up":
+                low = center
+                high = center + price_range
+            elif mode == "down":
+                low = center - price_range
+                high = center
+            else:
+                raise ValueError(f"Unknown mode: {mode}")
 
-#         def __init__(self, model,BasicApp:AppInterface,level=None):            
-#             super().__init__(model,BasicApp,level)
-#             account = self.model.param
-#             self.book = self.model.param
-#             self.uuid = uuid.uuid4()
-#             self._account: MT5Account = MT5Account(account.account_id,account.password,account.account_server)
-#             self.retry_times_on_error = 3
-        
-#         def log_and_send(self,msg:str):
-#             self.logger.log(self.logger.level,msg)
-#             self.send_data_to_task(msg)
+            return low, high
 
-#         def change_run(self, func_name, kwargs):
-#             self.log_and_send(f'change run: {func_name}, {kwargs}')
-#             self.model.args = BookService.Model.Arguments(**kwargs)
-#             self.book_run = lambda: getattr(self.book, func_name)(**kwargs)
-#             return self
+        def run(self):
+            para = self.model.para
+            args = self.model.args
 
-#         def run(self):
-#             # tbs = {f'{b.symbol}-{b.price_open}-{b.volume}':b.model_dump() for b in Book().getBooks()}
-#             action = self.model.para. action            
-#             first_book = None
-#             books = []
-#             books_dict = {}
-#             if action == BookServiceActionTypes.getBooks:                
-#                 books:list[Book] = self.book_run()
-#                 books_dict = {f'{b.symbol}-{b.price_open}-{b.volume}-{b.ticket}': b for b in books}
-#                 books = []
-#             elif action in [BookServiceActionTypes.send,
-#                             BookServiceActionTypes.changeP,
-#                             BookServiceActionTypes.changeTS,
-#                             BookServiceActionTypes.account_info]:
-#                 books = [self.book_run()]
-#                 first_book = books[0]
-#                 books = []
-#             else:
-#                 raise ValueError(f'no action of {action}')
-            
-#             return first_book,books,books_dict
-#             # res = BookService.Model()
-#             # res.rets.first_book = first_book
-#             # res.rets.books = books
-#             # res.rets.books_dict = books_dict
-#             # return res
-        
+            if args.n_parts <= 0 or args.price_range < 0:
+                self.model.rets.ok = False
+                return self.model
 
-# @descriptions('Retrieve MT5 last N bars data in MetaTrader 5 terminal.',
-#             # account='MT5Account object for login.',
-#             # symbol='Financial instrument name (e.g., EURUSD).',
-#             # timeframe='Timeframe from which the bars are requested. {M1, H1, ...}',
-#             # # start_pos='Index of the first bar to retrieve.',
-#             # count='Number of bars to retrieve.'
-#             )
+            ticket = args.ticket
+
+            # Find the original order by ticket
+            original = None
+            for b in Book().getBooks():
+                if b.ticket == ticket:
+                    original = b
+                    break
+
+            if original is None:
+                self.model.rets.ok = False
+                return self.model
+
+            symbol = original.symbol
+            total_volume = original.volume
+            order_price = original.price_open
+            tp = original.tp
+            sl = original.sl
+
+            digits = int(mt5.symbol_info(original.symbol).digits)
+            unit:int = 10**digits
+
+            # Compute split prices
+            n_parts = self.model.args.n_parts
+            low, high = self._compute_price_bounds_int(
+                center=int(order_price*unit),
+                price_range=args.price_range,
+                n_parts=n_parts,
+                mode=para.mode,
+            )
+            # low, high = round(low*unit)/unit, round(high*unit)/unit
+
+            # Generate legs
+            ok = True
+            min_lot = para.min_lot
+
+            if n_parts == 1 or low == high:
+                prices_int = [int(order_price*unit)]
+                base_volumes_int = [int(total_volume/min_lot)]
+            else:
+                steps = self.split_integer(args.price_range, n_parts)
+                if 0 in steps:
+                    raise ValueError(f'price_range of {args.price_range} is too small to split into {n_parts} parts')
+                prices_int = [low+i for i in steps]
+                total_volume_int = int(total_volume/min_lot)
+                base_volumes_int = self.split_integer(total_volume_int, n_parts)
+                if 0 in base_volumes_int:
+                    raise ValueError(f'total_volume of {total_volume} is too small to split into {n_parts} parts')
+
+            # Send child orders
+            for price, volume in zip(prices_int, base_volumes_int):
+                try:
+                    price, volume = price/unit, volume*min_lot
+                    Book(
+                        symbol=symbol,
+                        volume=volume,
+                        price_open=price,
+                        tp=tp,
+                        sl=sl,
+                    ).as_plan().send()
+                except Exception:
+                    ok = False
+
+            # Close the original order
+            try:
+                original.close()
+            except Exception:
+                self.model.rets.ok = False
+                return self.model
+
+            self.model.rets.ok = ok
+            return self.model
 
 #########################################
 # {
@@ -395,7 +434,7 @@ class MT5CopyLastRatesService(ServiceOrientedArchitecture):
             super().__init__(model,BasicApp,level)
             self.model:MT5CopyLastRatesService.Model = self.model
             print(self.model)
-            account = self.model.param
+            account = self.model.para
             self.uuid = uuid.uuid4()
             self._account: MT5Account = account
             self.retry_times_on_error = 3

@@ -22,7 +22,7 @@ from .UploadToFTP import UploadToFTP
 from .TaskDAGRunner import TaskDAGRunner
 from .SmartModelConverter import SmartModelConverter
 
-from .MT5Book import MT5CopyLastRatesService, BookCloseService, BookSendService, MT5AccountInfo# BookService, 
+from .MT5Book import BookSplitService, MT5CopyLastRatesService, BookCloseService, BookSendService, MT5AccountInfo# BookService, 
 from .MT5RatesDownloader import MT5RatesDownloader
 
 ACTION_REGISTRY = {
