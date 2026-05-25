@@ -29,9 +29,10 @@ steam numpy images by iceoryx2.
             height: int = Field(default=720, description="Image height")
             channels: int = Field(default=3, description="Number of image channels")
             FPS: float = Field(default=30.0, description="Frames per second")
+            debug: bool = Field(default=False, description="Debug mode")
 
         class Returness(BaseModel):
-            ok:int = 0
+            pass
 
         class Logger(ServiceOrientedArchitecture.Model.Logger):
             pass
@@ -71,11 +72,16 @@ steam numpy images by iceoryx2.
             self.period_s = 1.0 / self.model.args.FPS
             self.next_t = time.perf_counter()
             H,W,C = self.pub.height,self.pub.width,self.pub.channels
-            # print(f"publisher ready topic={self.model.args.topic} size={H}x{W}x{C} fps={self.FPS}")
+            self.HWC = H,W,C
+            if self.model.args.debug:
+                self.image = np.random.randint(0, 256, size=(H,W,C), dtype=np.uint8)
 
         def tick(self) -> None:
             self.frame_id += 1
-            image = np.empty((self.pub.height, self.pub.width, self.pub.channels), dtype=np.uint8)
+            if self.model.args.debug:
+                image = self.image
+            else:
+                image = np.empty(self.HWC, dtype=np.uint8)
             image[:, :, 0] = self.frame_id % 256
             image[:, :, 1] = np.arange(self.pub.width, dtype=np.uint8)[None, :]
             image[:, :, 2] = np.arange(self.pub.height, dtype=np.uint8)[:, None]
@@ -91,13 +97,13 @@ steam numpy images by iceoryx2.
                 time.sleep(sleep_s)
                 
         def __call__(self, *args, **kwargs):
-            while True:
-                if self.frame_id % max(1, int(self.FPS)) == 0:
-                    self.log_and_send(f"sent frame={self.frame_id} fps={self.fps_meter.value:.1f} copy_ms={self.copy_ms:.3f}")
-                    with self.listen_stop_flag() as stop_flag:
+            with self.listen_stop_flag() as stop_flag:
+                while True:
+                    if self.frame_id % max(1, int(self.FPS)) == 0:
+                        self.log_and_send(f"sent frame={self.frame_id} fps={self.fps_meter.value:.1f} copy_ms={self.copy_ms:.3f}")
                         if stop_flag.is_set():
                             return self.to_stop()
-                self.tick()
+                    self.tick()
 
         def to_stop(self):
             return self.model

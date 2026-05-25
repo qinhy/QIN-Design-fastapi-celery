@@ -248,15 +248,19 @@
         // if (!val) val = selectedTaskId.value;
         // taskMeta.value = await api.checkTaskMeta(val);
         // taskMeta.value.result = JSON.parse(taskMeta.value.result);
-        console.log(data);
         if (typeof data === "string" || data instanceof String) {
           taskMeta.value = await api.getTaskMeta(data);
           taskMeta.value.result = JSON.parse(taskMeta.value.result);
         }
         else {
           taskMeta.value = {...data};
-          // eval(decode_func.value);
-          // taskMeta.value.result = decode_func(taskMeta.value.result);
+          eval(decode_func.value);
+          try {            
+            taskMeta.value.result = decode_func(taskMeta.value.result);
+          } catch (error) {            
+            console.log(JSON.parse(taskMeta.value.result))
+            taskMeta.value.result = JSON.parse(taskMeta.value.result);
+          }
           if(typeof taskMeta.value.result === "string" || taskMeta.value.result instanceof String){
             taskMeta.value.result = JSON.parse(taskMeta.value.result);
           }

@@ -17,6 +17,9 @@ from .mini.Fibonacci import Fibonacci
 # from .SimpleWebRequest import SimpleWebRequest
 # from .UploadToFTP import UploadToFTP
 from .iceoryx2.NumpyImageSteam import NumpyImageSteam
+from .iceoryx2.OpenCVImshowSteam import OpenCVImshowSteam
+from .iceoryx2.OpenCVVideoSteam import OpenCVVideoSteam
+
 
 # for advanced users
 from .mini.TaskDAGRunner import TaskDAGRunner
@@ -43,6 +46,8 @@ ACTION_REGISTRY = {
     # 'AddNumbers': AddNumbers,
     # 'FSSpecShell': FSSpecShell,
     'NumpyImageSteam': NumpyImageSteam,
+    'OpenCVImshowSteam': OpenCVImshowSteam,
+    'OpenCVVideoSteam': OpenCVVideoSteam,
 }
 SmartModelConverter.Action.ACTION_REGISTRY = ACTION_REGISTRY
 TaskDAGRunner.Action.ACTION_REGISTRY = ACTION_REGISTRY
