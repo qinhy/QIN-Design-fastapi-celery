@@ -1,25 +1,25 @@
-from .Fibonacci import Fibonacci
-from .AddNumbers import AddNumbers
-from .AdjustImage import AdjustImage
-from .BinaryRepresentation import BinaryRepresentation
-from .BrowseWebLink import BrowseWebLink
-from .ChatGPTService import ChatGPTService, DeepseekService
-from .CollatzSequence import CollatzSequence
-from .Downloader import Downloader
-from .EnhanceImage import EnhanceImage
-from .FSSpecShell import FSSpecShell
-from .GrayscaleImage import GrayscaleImage
-from .HttpRequestTask import HttpRequestTask
-from .ImagePadding import ImagePadding
-from .ImageTiler import ImageTiler
-from .PalindromeChecker import PalindromeChecker
-from .PrimeNumberChecker import PrimeNumberChecker
-from .SimpleWebRequest import SimpleWebRequest
-from .UploadToFTP import UploadToFTP
+from .mini.Fibonacci import Fibonacci
+from .mini.AddNumbers import AddNumbers
+from .mini.AdjustImage import AdjustImage
+from .mini.BinaryRepresentation import BinaryRepresentation
+from .mini.BrowseWebLink import BrowseWebLink
+from .mini.ChatGPTService import ChatGPTService, DeepseekService
+from .mini.CollatzSequence import CollatzSequence
+from .mini.Downloader import Downloader
+from .mini.EnhanceImage import EnhanceImage
+from .mini.FSSpecShell import FSSpecShell
+from .mini.GrayscaleImage import GrayscaleImage
+from .mini.HttpRequestTask import HttpRequestTask
+from .mini.ImagePadding import ImagePadding
+from .mini.ImageTiler import ImageTiler
+from .mini.PalindromeChecker import PalindromeChecker
+from .mini.PrimeNumberChecker import PrimeNumberChecker
+from .mini.SimpleWebRequest import SimpleWebRequest
+from .mini.UploadToFTP import UploadToFTP
 
 # for advanced users
-from .TaskDAGRunner import TaskDAGRunner
-from .SmartModelConverter import SmartModelConverter
+from .mini.TaskDAGRunner import TaskDAGRunner
+from .mini.SmartModelConverter import SmartModelConverter
 
 ACTION_REGISTRY = {
     'Fibonacci': Fibonacci,
