@@ -286,7 +286,7 @@ def build_my_app(dependencies=[],ACTION_REGISTRY=ACTION_REGISTRY):
                     ACTION_REGISTRY=ACTION_REGISTRY)
 
     ## add original api
-    from CustomTask import Fibonacci
+    from CustomTask.mini import Fibonacci
     def my_fibo(n:int=0,mode:Literal['fast','slow']='fast'):
         m = Fibonacci.Model()
         m.para = Fibonacci.Model.Parameter(mode=mode)
@@ -295,7 +295,7 @@ def build_my_app(dependencies=[],ACTION_REGISTRY=ACTION_REGISTRY):
 
     my_app.add_web_api(my_fibo,'get','/myapi/fibonacci/').reload_routes()
 
-    from CustomTask import TaskDAGRunner
+    from CustomTask.mini import TaskDAGRunner
     def my_mermaid_editor():
         return HTMLResponse(content=TaskDAGRunner.MermaidEditorHtml)
 
