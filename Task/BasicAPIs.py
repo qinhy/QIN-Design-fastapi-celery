@@ -676,7 +676,7 @@ class BasicCeleryTask:
     def api_task_stop(self,task_id: str):
         self.api_ok()
         self.BasicApp.send_data_to_task(task_id,{'status': 'REVOKED'})
-        self.BasicApp.set_task_status(task_id,'{}','REVOKED')
+        # self.BasicApp.set_task_status(task_id,'{}','REVOKED')
 
     def api_listen_data_of_task(self, task_id: str,
                                       request: Request):
