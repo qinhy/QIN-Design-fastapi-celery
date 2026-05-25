@@ -1,4 +1,4 @@
-# from .Fibonacci import Fibonacci
+from .mini.Fibonacci import Fibonacci
 # from .AddNumbers import AddNumbers
 # from .AdjustImage import AdjustImage
 # from .BinaryRepresentation import BinaryRepresentation
@@ -23,7 +23,7 @@ from .mini.TaskDAGRunner import TaskDAGRunner
 from .mini.SmartModelConverter import SmartModelConverter
 
 ACTION_REGISTRY = {
-    # 'Fibonacci': Fibonacci,
+    'Fibonacci': Fibonacci,
     # 'AdjustImage':AdjustImage,
     # 'GrayscaleImage':GrayscaleImage,
     # 'ImagePadding':ImagePadding,
