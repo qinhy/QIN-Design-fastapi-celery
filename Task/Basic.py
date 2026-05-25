@@ -1,5 +1,6 @@
 # Standard library imports
 import base64
+from collections import deque
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
@@ -1030,63 +1031,98 @@ class ServiceOrientedArchitecture:
             pass
 
         class Logger(BaseModel):
+            class BoundedMemoryLogHandler(logging.Handler):
+                """
+                Keeps only the latest max_chars characters of formatted log output.
+                Older log lines are dropped when the limit is exceeded.
+                """
+
+                def __init__(self, max_chars: int = 100_000):
+                    super().__init__()
+                    self.max_chars = max_chars
+                    self._lines = deque()
+                    self._size = 0
+
+                def emit(self, record: logging.LogRecord):
+                    try:
+                        msg = self.format(record) + "\n"
+                        self._lines.append(msg)
+                        self._size += len(msg)
+
+                        while self._size > self.max_chars and self._lines:
+                            removed = self._lines.popleft()
+                            self._size -= len(removed)
+
+                    except Exception:
+                        self.handleError(record)
+
+                def get_value(self) -> str:
+                    return "".join(self._lines)
+
+                def clear(self):
+                    self._lines.clear()
+                    self._size = 0
+
             class Levels:
-                ERROR:str='ERROR'
-                WARNING:str='WARNING'
-                INFO:str='INFO'
-                DEBUG:str='DEBUG'
-                
+                ERROR: str = "ERROR"
+                WARNING: str = "WARNING"
+                INFO: str = "INFO"
+                DEBUG: str = "DEBUG"
+
                 @staticmethod
                 def all():
-                    return ['ERROR','WARNING','INFO','DEBUG']
-            name: str  = "service" # Logger name
-            level: str = "INFO"  # Default log level
-            logs:str = ''
+                    return ["ERROR", "WARNING", "INFO", "DEBUG"]
 
-            _log_buffer: io.StringIO = PrivateAttr()
+            name: str = "service"
+            level: str = "INFO"
+            logs: str = ""
+
+            max_log_chars: int = 100_000  # memory limit for in-memory logs
+
+            _memory_handler: BoundedMemoryLogHandler = PrivateAttr()
             _logger: logging.Logger = PrivateAttr()
-            
-            def init(self, name: str = None,
-                    action_obj: 'ServiceOrientedArchitecture.Action' = None):
-                
+
+            def init(self, name: str = None, action_obj=None):
                 if name is None:
                     name = self.name
+
                 self.name = name
 
-                # Create a StringIO buffer for in-memory logging
-                self._log_buffer = io.StringIO()
-
-                # Get or create logger
                 self._logger = logging.getLogger(name)
                 self._logger.setLevel(getattr(logging, self.level.upper(), logging.INFO))
 
-                # 💥 Remove existing handlers to prevent double logging
-                if self._logger.hasHandlers():
-                    self._logger.handlers.clear()
+                # Clear only this logger's handlers
+                self._logger.handlers.clear()
 
-                # Formatter for log messages
+                # Prevent duplicate logs through parent/root logger
+                self._logger.propagate = False
+
                 formatter = logging.Formatter(
-                    # '%(asctime)s [%(name)s:%(levelname)s] %(message)s')
-                    '[%(asctime)s %(levelname)s] %(message)s')
+                    "[%(asctime)s %(levelname)s] %(message)s"
+                )
 
-                # In-Memory Handler
-                memory_handler = logging.StreamHandler(self._log_buffer)
-                memory_handler.setFormatter(formatter)
-                self._logger.addHandler(memory_handler)
+                # Bounded in-memory handler
+                self._memory_handler = ServiceOrientedArchitecture.Model.Logger.BoundedMemoryLogHandler(
+                    max_chars=self.max_log_chars
+                )
+                self._memory_handler.setFormatter(formatter)
+                self._logger.addHandler(self._memory_handler)
 
-                # Console Handler (Optional, remove if not needed)
+                # Optional console handler
                 console_handler = logging.StreamHandler()
                 console_handler.setFormatter(formatter)
                 self._logger.addHandler(console_handler)
 
                 return self
 
-
             def log(self, level: str, message: str):
-                """Logs a message at the specified level."""
                 log_method = getattr(self._logger, level.lower(), None)
+
                 if callable(log_method):
                     log_method(message)
+
+                    # Optional: keep self.logs updated,
+                    # but it is another copy of the in-memory logs.
                     self.save_logs()
                 else:
                     self._logger.error(f"Invalid log level: {level}")
@@ -1104,23 +1140,15 @@ class ServiceOrientedArchitecture:
                 self.log("DEBUG", message)
 
             def get_logs(self) -> str:
-                """Returns all logged messages stored in memory."""
-                return self._log_buffer.getvalue()
+                return self._memory_handler.get_value()
 
             def save_logs(self) -> str:
-                """Saves logs to the `logs` attribute."""
                 self.logs = self.get_logs()
                 return self.logs
 
             def clear_logs(self):
-                """Clears the in-memory log buffer and resets the logger state."""
-                self._log_buffer.truncate(0)
-                self._log_buffer.seek(0)
+                self._memory_handler.clear()
                 self.logs = ""
-                
-                # Remove handlers to prevent duplicate logs
-                for handler in self._logger.handlers[:]:
-                    self._logger.removeHandler(handler)
 
         version:Version
         para: Parameter = Parameter()
