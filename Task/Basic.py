@@ -1262,7 +1262,7 @@ class ServiceOrientedArchitecture:
                 # Function to check if the task should be stopped, running in a separate thread
                 def check_task_status(data:dict):
                     if data.get('status',None) == celery.states.REVOKED:
-                        self.set_status(celery.states.REVOKED)
+                        # self.set_status(celery.states.REVOKED)
                         stop_flag.set()
                 self.listen_data_of_task(check_task_status,True)
                 
